@@ -257,8 +257,16 @@ async function aiRead(kind, dataUrl) {
       fb.appCheck = ac.initializeAppCheck(app, { provider: new ac.ReCaptchaEnterpriseProvider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true });
     }
     const m = await import(FBV + 'firebase-ai.js'); fb.aiMod = m; fb.ai = m.getAI(app, { backend: new m.GoogleAIBackend() }); }
-  const model = fb.aiMod.getGenerativeModel(fb.ai, { model: S.config.aiModel || 'gemini-3.5-flash', generationConfig: { responseMimeType: 'application/json' } });
-  const r = await model.generateContent([AI_PROMPT[kind], { inlineData: { data: dataUrl.split(',')[1], mimeType: 'image/jpeg' } }]);
+  const parts = [AI_PROMPT[kind], { inlineData: { data: dataUrl.split(',')[1], mimeType: 'image/jpeg' } }];
+  const models = [S.config.aiModel || 'gemini-3.5-flash', 'gemini-3.5-flash-lite'].filter((m, i, a) => a.indexOf(m) === i);
+  let r, lastErr;
+  for (const name of models) {
+    try {
+      r = await fb.aiMod.getGenerativeModel(fb.ai, { model: name, generationConfig: { responseMimeType: 'application/json' } }).generateContent(parts);
+      break;
+    } catch (e) { lastErr = e; if (!/\[(429|500|503)|high demand|overloaded/i.test(e.message)) throw e; }
+  }
+  if (!r) throw new Error('AI ไม่ว่างชั่วคราว ลองใหม่อีกครั้ง หรือกรอกเองได้เลย');
   const txt = r.response.text().replace(/^```json|```$/g, '').trim();
   return JSON.parse(txt);
 }

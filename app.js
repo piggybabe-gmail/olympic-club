@@ -3,7 +3,7 @@ import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN, RECAPTCHA_SITE_KEY } from '.
 import { FOODS, FOOD, MEALS, TH_M } from './foods.js?v=20260929a';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20260929e';
+const VER = '20260929f';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -172,7 +172,42 @@ function renderConsent() {
     <button class="btn gold block" data-act="consent">ยินยอมและเริ่มใช้งาน</button>
     <button class="btn ghost" data-act="logout">ไม่ยินยอม / ออกจากระบบ</button></section>`);
 }
+/* ============ LINE (ผ่าน Apps Script relay ยืนยันตัวตนด้วย Firebase ID token) ============ */
+const line = { info: null, busy: false };
+function lineOn() { return !!(S.config.lineUrl && S.config.lineOn !== false); }
+async function relay(oc, extra = {}) {
+  if (!S.config.lineUrl) throw new Error('เจ้าของระบบยังไม่ได้ตั้งค่า LINE');
+  const idToken = await auth.currentUser.getIdToken();
+  const r = await fetch(S.config.lineUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ oc, idToken, ...extra }) });
+  return r.json();
+}
+async function lineInfo(force) {
+  if (!S.config.lineUrl) return null;
+  if (line.info && !force) return line.info;
+  try { line.info = await relay('info'); } catch (e) { line.info = { ok: false, error: 'เชื่อมต่อระบบ LINE ไม่ได้' }; }
+  return line.info;
+}
+async function lineLink() {
+  toast('กำลังเปิด LINE…', 6000);
+  const r = await relay('start', { back: location.origin + location.pathname });
+  if (!r.ok) return toast(r.error || 'เปิด LINE ไม่สำเร็จ');
+  location.href = r.url;
+}
+function lineCardHtml() {
+  if (!S.config.lineUrl) return '';
+  const i = line.info; const L = i?.link;
+  const what = S.me.role === 'member' ? 'ผลการเทรนหลังโค้ชบันทึก' : S.me.role === 'trainer' ? `สรุปลูกค้าของคุณทุกวันเวลา ${esc(S.config.digestTime || '21:00')}` : 'แจ้งเตือนของระบบ และสรุปรายวัน (ถ้าเปิดไว้)';
+  return `<section class="card"><div class="between"><b>LINE ของฉัน</b>${!i ? '<span class="tag grey">กำลังตรวจ…</span>' : L ? `<span class="tag blue">เชื่อมแล้ว · ${esc(L.name || '')}</span>` : '<span class="tag alert">ยังไม่เชื่อม</span>'}</div>
+    <span class="small muted">เชื่อมครั้งเดียว แล้วจะได้รับ ${what} เป็นแชต 1:1 จาก LINE OA</span>
+    ${i && !i.ok ? `<div class="warn">${esc(i.error || 'เชื่อมต่อไม่ได้')}</div>` : ''}
+    ${L && L.friend === false ? '<div class="warn">ยังไม่ได้เพิ่มเพื่อน LINE OA ต้องเพิ่มเพื่อนก่อนถึงจะได้รับข้อความ กด “เชื่อมใหม่” แล้วเลือกเพิ่มเพื่อน</div>' : ''}
+    <div class="row"><button class="btn ${L ? '' : 'gold'}" data-act="lineLink">${L ? 'เชื่อมใหม่' : 'เชื่อม LINE'}</button>
+    ${L ? `<button class="btn" data-act="lineTest">ส่งทดสอบถึงฉัน</button>${isStaff() ? '<button class="btn" data-act="lineDigestTest">ส่งสรุปวันนี้ถึงฉัน</button>' : ''}<button class="btn ghost danger" data-act="lineUnlink">ยกเลิกการเชื่อม</button>` : ''}</div></section>`;
+}
+async function refreshLineCard() { await lineInfo(true); if (['more', 'system'].includes(ui.tab) && !viewingClient()) render(); }
 function startApp() {
+  const qp = new URLSearchParams(location.search);
+  if (qp.has('line')) { const v = qp.get('line'); history.replaceState(null, '', location.pathname); setTimeout(() => toast(v === 'linked' ? 'เชื่อม LINE แล้ว ✅' : v === 'cancel' ? 'ยกเลิกการเชื่อม LINE' : 'เชื่อม LINE ไม่สำเร็จ ลองใหม่อีกครั้ง', 3500), 300); line.info = null; }
   if (S.me.role === 'member') { S.view = S.me.pid; ui.tab = 'today'; }
   else ui.tab = TABS[S.me.role][0][0];
   render();
@@ -560,6 +595,7 @@ async function renderCoach(pid) {
 
 /* ---------- เพิ่มเติม ---------- */
 async function renderMore() {
+  if (S.config.lineUrl && !line.info) lineInfo().then(() => { if (ui.tab === 'more') render(); });
   const me = S.me; const staff = isStaff() && !viewingClient();
   let membersHtml = '';
   if (staff) {
@@ -569,6 +605,7 @@ async function renderMore() {
   }
   setMain(`<h1>เพิ่มเติม</h1>
     <section class="card"><b>${esc(me.name)}</b><span class="small muted">${me.role === 'owner' ? 'เจ้าของระบบ' : me.role === 'trainer' ? (isHead() ? 'หัวหน้าเทรนเนอร์ · ผู้ดูแลฝ่ายงาน' : 'เทรนเนอร์ · ผู้ดูแลฝ่ายงาน') : 'สมาชิก'}${me.person?.username ? ' · @' + esc(me.person.username) : ''}</span></section>
+    ${lineCardHtml()}
     ${membersHtml}
     <a class="btn" href="manual.html">คู่มือการใช้งาน</a>
     <button class="btn danger" data-act="logout">ออกจากระบบ</button>
@@ -684,7 +721,10 @@ async function saveLog() {
   logForm(); const L = ui.log; const min = num(L.min) || 0; const kcal = num(L.kcal) ?? Math.round(5 * L.weight * (min / 60));
   const moves = L.moves.map(m => ({ name: m.name, sets: m.sets.map(x => ({ r: num(x.r) || 0, kg: num(x.kg) || 0 })) })).filter(m => m.sets.length);
   const ref = L.sid ? D('sessions', L.sid) : fb.doc(C('sessions'));
-  const data = { trainerPid: S.me.pid, trainerName: S.me.name, memberPid: L.memberPid, memberName: L.memberName, date: L.date, time: L.time, type: L.type, status: 'logged', moves, min, kcal: Math.round(kcal), note: L.note.trim(), ph: L.ph, loggedAt: fb.serverTimestamp(), notifyAfter: Date.now() + (S.config.workoutDelayMin || 60) * 60000, notified: false };
+  const prev = L.sid ? await get(ref) : null;
+  // แก้ผลก่อนถึงเวลาส่ง: ใช้เวลาส่งเดิม (ระบบส่งฉบับล่าสุด) · ส่งไปแล้ว: ไม่ส่งซ้ำ
+  const keepNotify = prev && prev.status === 'logged' && prev.notifyAfter;
+  const data = { trainerPid: S.me.pid, trainerName: S.me.name, memberPid: L.memberPid, memberName: L.memberName, date: L.date, time: L.time, type: L.type, status: 'logged', moves, min, kcal: Math.round(kcal), note: L.note.trim(), ph: L.ph, loggedAt: fb.serverTimestamp(), notifyAfter: keepNotify ? prev.notifyAfter : Date.now() + (S.config.workoutDelayMin || 60) * 60000, notified: keepNotify ? !!prev.notified : false };
   const b = fb.writeBatch(db);
   b.set(ref, data, { merge: true });
   b.set(D('people', L.memberPid, 'activities', 's_' + ref.id), { date: L.date, type: 'coach', name: `เทรนกับ ${S.me.name} · ${L.type}`, min, kcal: Math.round(kcal), source: 'coach', sid: ref.id, ph: L.ph, t: Date.now(), byUid: auth.currentUser.uid });
@@ -712,12 +752,12 @@ async function renderSummary() {
   const ms = (await myMembers()).filter(m => m.active); const ds = ui.sumDate; const st = await clientStats(ms, ds);
   const txt = digestText(ms, st, ds); ui.digest = txt;
   setMain(`${dateNav(ds, 'sumNav')}
-    <section class="card dark"><b class="xs gold">สรุปประจำวัน · ${thDate(ds)}</b><b style="font-size:16px">ลูกค้าของคุณ ${ms.length} คน</b><span class="xs muted">หน้านี้คือข้อความที่จะส่งเข้า LINE ตอน ${esc(S.config.digestTime || '21:00')} เมื่อเปิดใช้ LINE แล้ว</span></section>
+    <section class="card dark"><b class="xs gold">สรุปประจำวัน · ${thDate(ds)}</b><b style="font-size:16px">ลูกค้าของคุณ ${ms.length} คน</b><span class="xs muted">${lineOn() ? `ระบบส่งข้อความนี้เข้า LINE ของคุณทุกวันเวลา ${esc(S.config.digestTime || '21:00')} แก้ข้อมูลก่อนเวลานั้นได้ (เชื่อม LINE ที่แท็บเพิ่มเติม)` : `หน้านี้คือข้อความที่จะส่งเข้า LINE ตอน ${esc(S.config.digestTime || '21:00')} เมื่อเปิดใช้ LINE แล้ว`}</span></section>
     <div class="list">${ms.map(m => { const s = st[m.id]; const goal = num(m.targets?.kcal); const diff = goal ? s.tot.k - goal : 0;
       return `<div class="li" style="flex-direction:column;align-items:stretch;gap:4px"><div class="between"><b>${esc(m.name)}</b><b class="small ${!s.tot.k ? 'muted' : diff > 0 ? 'alert' : ''}">${s.tot.k ? n0(s.tot.k) + (goal ? ' / ' + n0(goal) : '') + ' kcal' + (diff > 0 ? ' (+' + n0(diff) + ')' : '') : 'ยังไม่บันทึกอาหาร'}</b></div>
         ${s.tot.k ? `<span class="small">P ${n0(s.tot.p)} · C ${n0(s.tot.c)} · F ${n0(s.tot.f)} g</span><span class="small muted">${MEALS.filter(x => s.tot.byMeal[x] != null || x !== 'ว่าง').map(x => `${x} ${s.tot.byMeal[x] != null ? n0(s.tot.byMeal[x]) : 'ยังไม่บันทึก'}`).join(' · ')}</span>` : ''}
         <span class="small blue">${s.acts.length ? 'กิจกรรม: ' + s.acts.map(a => esc(a.name) + ' ' + n0(a.kcal)).join(' · ') + ' = เผาผลาญ ' + n0(s.burn) + ' kcal' : 'กิจกรรม: ยังไม่มี'}</span></div>`; }).join('')}</div>
-    <button class="btn gold block" data-act="copyDigest">คัดลอกข้อความสรุป</button><p class="xs muted center" style="margin:0">ระหว่างที่ยังไม่เปิด LINE อัตโนมัติ คัดลอกไปวางใน LINE เองได้</p>`);
+    <button class="btn gold block" data-act="copyDigest">คัดลอกข้อความสรุป</button><p class="xs muted center" style="margin:0">${lineOn() ? 'ส่งให้คนอื่นเพิ่มได้ด้วยการคัดลอกไปวางใน LINE' : 'ระหว่างที่ยังไม่เปิด LINE อัตโนมัติ คัดลอกไปวางใน LINE เองได้'}</p>`);
 }
 
 /* ---------- เจ้าของ ---------- */
@@ -759,17 +799,32 @@ async function renderTrainers() {
     ${ms.length ? `<div class="list">${ms.sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')).map(m => `<div class="li"><div class="grow"><b>${esc(m.name)}</b><div class="xs muted">@${esc(m.username)} · โค้ช ${esc(m.trainerName || '—')} ${m.active ? '' : '· <span class="alert">ปิดบัญชี</span>'}</div></div><button class="btn sm ghost" data-act="manage" data-id="${m.id}">จัดการ</button></div>`).join('')}</div>` : ''}</section>`);
 }
 async function renderSystem() {
-  const c = S.config; const ms = await myMembers(); const consent = ms.filter(m => m.consentAt).length;
+  if (S.config.lineUrl && !line.info) lineInfo().then(() => { if (ui.tab === 'system') render(); });
+  const c = S.config; const [ms, trs] = await Promise.all([myMembers(), trainers()]); trs.forEach(t => S.cache.set('p:' + t.id, t)); const consent = ms.filter(m => m.consentAt).length;
   setMain(`<h1>ระบบ</h1><p class="small muted" style="margin:0">เฉพาะเจ้าของระบบเท่านั้นที่เห็นหน้านี้</p>
     <section class="card"><label class="f">ชื่อแอป<input class="in" id="cfName" value="${esc(c.name || 'The Olympic Club by PT-Palm')}"></label>
       <label class="row small" style="min-height:44px"><input type="checkbox" id="cfAi" ${c.aiOn !== false ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> เปิดให้ AI อ่านรูป (ใบ InBody, หน้าจอนาฬิกา)</label>
       <label class="f">รุ่น AI<input class="in" id="cfModel" value="${esc(c.aiModel || 'gemini-3.5-flash')}"></label>
       <div class="grid2"><label class="f">เวลาส่งสรุปรายวัน<input class="in" type="time" id="cfTime" value="${esc(c.digestTime || '21:00')}"></label><label class="f">หน่วงส่งผลเทรน (นาที)<input class="in" id="cfDelay" inputmode="numeric" value="${esc(c.workoutDelayMin || 60)}"></label></div>
       <button class="btn pri" data-act="saveConfig">บันทึกการตั้งค่า</button></section>
-    <section class="card"><b>แจ้งเตือน LINE</b><div class="card dark" style="flex-direction:row;align-items:center"><span style="width:10px;height:10px;border-radius:5px;background:#F0C24B"></span><span class="small">ตอนนี้: แจ้งเตือนในแอปเท่านั้น</span></div>
-      <p class="small muted" style="margin:0">การส่ง LINE อัตโนมัติ (สรุปรายวัน ${esc(c.digestTime || '21:00')} และผลเทรนหลังบันทึก ${esc(c.workoutDelayMin || 60)} นาที) ต้องอัปเกรดโปรเจกต์ Firebase เป็นแพ็กเกจ Blaze ก่อน จากนั้นจะเชื่อม OA ของระบบหรือของ PT-Palm ได้ที่นี่ รหัส OA จะเก็บแบบใส่ได้อย่างเดียว อ่านกลับไม่ได้</p>
-      <button class="btn" disabled>เชื่อม LINE OA (รอ Blaze)</button></section>
+    ${lineAdminHtml(c)}
+    ${lineCardHtml()}
     <section class="card"><div class="between"><span class="small muted">ความยินยอม PDPA</span><b>${consent} / ${ms.length} คน</b></div></section>`);
+}
+
+function lineAdminHtml(c) {
+  const i = line.info; const on = lineOn();
+  const names = {}; S.cache.forEach((v, k) => { if (k.startsWith('p:') && v) names[k.slice(2)] = v.name; }); names.owner = 'เจ้าของระบบ';
+  const links = i?.links ? Object.entries(i.links) : [];
+  return `<section class="card"><div class="between"><b>แจ้งเตือน LINE</b><span class="tag ${on ? 'gold' : 'grey'}">${on ? 'เปิดอยู่' : c.lineUrl ? 'ปิดอยู่' : 'ยังไม่ตั้งค่า'}</span></div>
+    <p class="small muted" style="margin:0">ส่งผ่าน LINE OA ด้วย Apps Script (ไม่ต้องใช้แพ็กเกจ Blaze): <b>สรุปรายวัน ${esc(c.digestTime || '21:00')}</b> ถึงเทรนเนอร์แต่ละคน (เฉพาะลูกค้าของตัวเอง) และ <b>ผลเทรนถึงลูกค้า</b> หลังโค้ชบันทึก ${esc(c.workoutDelayMin || 60)} นาที ไม่บันทึกก็ไม่ส่ง · ทุกคนต้องกด “เชื่อม LINE” ที่แท็บเพิ่มเติมของตัวเอง 1 ครั้ง</p>
+    <label class="f">ลิงก์ระบบ LINE (Apps Script Web App)<input class="in" id="lnUrl" value="${esc(c.lineUrl || '')}" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="none" spellcheck="false"></label>
+    <label class="row small" style="min-height:44px"><input type="checkbox" id="lnOn" ${c.lineOn !== false ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> เปิดการส่งอัตโนมัติ</label>
+    <label class="row small" style="min-height:44px"><input type="checkbox" id="lnOwner" ${c.digestToOwner ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> ส่งสรุปรายวันของลูกค้าทุกคนให้เจ้าของระบบด้วย</label>
+    <div class="row"><button class="btn pri" data-act="saveLine">บันทึก</button>${c.lineUrl ? '<button class="btn" data-act="lineRefresh">ตรวจสถานะ</button>' : ''}</div>
+    ${c.lineUrl ? (!i ? '<span class="small muted">กำลังตรวจ…</span>' : !i.ok ? `<div class="warn">${esc(i.error || 'เชื่อมต่อไม่ได้')}</div>` : `<div class="small">LINE OA ${i.hasToken ? '✅' : '❌'} · LINE Login ${i.hasLogin ? '✅' : '❌'} · ตัวตั้งเวลา ${i.ticking ? '✅ ทำงานทุก 10 นาที' : '❌ ยังไม่ได้ Run ocSetup'}${i.lastDigest ? ` · ส่งสรุปล่าสุด ${thDate(i.lastDigest)}` : ''}</div>
+      <b class="small">เชื่อม LINE แล้ว ${links.length} คน</b>${links.length ? `<div class="list">${links.map(([k, L]) => `<div class="li"><div class="grow"><b>${esc(names[k] || L.appName || k)}</b><div class="xs muted">LINE: ${esc(L.name || '')}${L.friend === false ? ' · <span class="alert">ยังไม่เพิ่มเพื่อน OA</span>' : ''}</div></div><button class="btn sm ghost" data-act="lineUnlink" data-k="${esc(k)}">ยกเลิก</button></div>`).join('')}</div>` : ''}`) : ''}
+  </section>`;
 }
 
 /* ---------- บัญชีผู้ใช้ ---------- */
@@ -995,6 +1050,16 @@ const ACTS = {
     if (on) (await trainers()).filter(x => x.canManageTrainers && x.id !== t.id).forEach(x => b.update(D('people', x.id), { canManageTrainers: false }));
     b.update(D('people', t.id), { canManageTrainers: on });
     await b.commit(); S.cache.clear(); closeSheet(); toast(on ? t.name + ' เป็นหัวหน้าเทรนเนอร์แล้ว' : 'ถอนสิทธิ์แล้ว'); render();
+  },
+  lineLink: () => lineLink(),
+  lineTest: async () => { const r = await relay('test'); toast(r.ok ? 'ส่งแล้ว เปิด LINE ดูได้เลย' : (r.error || 'ส่งไม่สำเร็จ')); },
+  lineDigestTest: async () => { toast('กำลังส่ง…', 8000); const r = await relay('digestTest'); toast(r.ok ? `ส่งสรุป ${r.n} คนเข้า LINE แล้ว` : (r.error || 'ส่งไม่สำเร็จ')); },
+  lineUnlink: async el => { if (!confirm('ยกเลิกการเชื่อม LINE? จะไม่ได้รับแจ้งเตือนอีก')) return; const r = await relay('unlink', el.dataset.k ? { k: el.dataset.k } : {}); toast(r.ok ? 'ยกเลิกแล้ว' : (r.error || 'ไม่สำเร็จ')); await refreshLineCard(); },
+  lineRefresh: async () => { await refreshLineCard(); toast('ตรวจแล้ว'); },
+  saveLine: async () => {
+    const c = { lineUrl: $('#lnUrl').value.trim(), lineOn: $('#lnOn').checked, digestToOwner: $('#lnOwner').checked };
+    if (c.lineUrl && !/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(c.lineUrl)) return toast('ลิงก์ต้องเป็น https://script.google.com/macros/s/…/exec');
+    await fb.setDoc(D('config', 'app'), c, { merge: true }); Object.assign(S.config, c); line.info = null; toast('บันทึกแล้ว'); await refreshLineCard();
   },
   saveConfig: async () => {
     const c = { name: $('#cfName').value.trim() || 'The Olympic Club by PT-Palm', aiOn: $('#cfAi').checked, aiModel: $('#cfModel').value.trim() || 'gemini-3.5-flash', digestTime: $('#cfTime').value || '21:00', workoutDelayMin: num($('#cfDelay').value) || 60 };

@@ -1,0 +1,932 @@
+// The Olympic Club by PT-Plam — แอปติดตามอาหารและการเทรน (ลูกค้า / เทรนเนอร์ / เจ้าของระบบ)
+import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN } from './firebase-config.js';
+import { FOODS, FOOD, MEALS, TH_M } from './foods.js?v=20260929a';
+
+const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
+const VER = '20260929a';
+const $ = (s, r = document) => r.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
+const r1 = x => Math.round((Number(x) || 0) * 10) / 10;
+const num = x => { const v = parseFloat(String(x ?? '').replace(/,/g, '')); return Number.isFinite(v) ? v : null; };
+const TH_D = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
+const TH_DL = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
+
+/* ============ วันที่ (เวลาไทย) ============ */
+const todayStr = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' });
+const nowHM = () => new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit' });
+function addDays(ds, n) { const d = new Date(ds + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); }
+const dowOf = ds => new Date(ds + 'T12:00:00Z').getUTCDay();
+function thDate(ds, full) { const d = new Date(ds + 'T12:00:00Z'); return (full ? TH_DL : TH_D)[d.getUTCDay()] + (full ? ' ' : '. ') + d.getUTCDate() + ' ' + TH_M[d.getUTCMonth()]; }
+const weekStart = ds => addDays(ds, -((dowOf(ds) + 6) % 7));
+
+/* ============ ค่าคงที่ ============ */
+const ACT = {
+  swim: ['ว่ายน้ำ', 7], coach: ['เทรนกับโค้ช', 5], class: ['เข้าคลาส', 7], walk: ['เดิน / วิ่ง', 5],
+  bike: ['ปั่นจักรยาน', 6], yoga: ['โยคะ / พิลาทิส', 3], weights: ['เวทเทรนนิ่งเอง', 5], other: ['อื่นๆ', 5]
+};
+const SESSION_TYPES = ['Push', 'Pull', 'Legs', 'Full body', 'คาร์ดิโอ'];
+const MOVES = ['Lat Pulldown', 'Seated Cable Row', 'Face Pull', 'Dumbbell Curl', 'Bench Press', 'Chest Press', 'Shoulder Press',
+  'Lateral Raise', 'Triceps Pushdown', 'Squat', 'Leg Press', 'Romanian Deadlift', 'Hip Thrust', 'Leg Curl', 'Leg Extension', 'Plank'];
+const P = {
+  plate: 'M4 12a8 8 0 1 0 16 0a8 8 0 1 0 -16 0 M8.5 12a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0',
+  dumb: 'M3 10v4 M6.5 7v10 M17.5 7v10 M21 10v4 M6.5 12h11',
+  chart: 'M4 20V11 M10 20V5 M16 20v-7 M21 20H3',
+  cal: 'M4 6h16v14H4z M4 10h16 M8 3v4 M16 3v4',
+  more: 'M5 12h.01 M12 12h.01 M19 12h.01',
+  users: 'M9 11a4 4 0 1 0 0-8a4 4 0 1 0 0 8 M2 21v-1a7 7 0 0 1 14 0v1 M16 3.5a4 4 0 0 1 0 7.5 M22 21v-1a6 6 0 0 0-4-5.6',
+  chat: 'M4 5h16v11H9l-5 4z',
+  grid: 'M4 4h7v7H4z M13 4h7v7h-7z M4 13h7v7H4z M13 13h7v7h-7z',
+  person: 'M12 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8 M5 21a7 7 0 0 1 14 0',
+  sliders: 'M4 7h10 M18 7h2 M16 5v4 M4 17h4 M12 17h8 M10 15v4',
+  cam: 'M4 7h3l2-3h6l2 3h3v13H4z M12 17a4 4 0 1 0 0-8a4 4 0 1 0 0 8',
+  clip: 'M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7',
+  trash: 'M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13',
+  spark: 'M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z'
+};
+const svg = (k, s = 20) => `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${P[k]}"/></svg>`;
+const TABS = {
+  member: [['today', 'วันนี้', 'plate'], ['exercise', 'ออกกำลัง', 'dumb'], ['body', 'ร่างกาย', 'chart'], ['coach', 'โค้ช', 'cal'], ['more', 'เพิ่มเติม', 'more']],
+  trainer: [['clients', 'ลูกค้า', 'users'], ['schedule', 'ตารางงาน', 'cal'], ['log', 'บันทึกเทรน', 'dumb'], ['summary', 'สรุปวันนี้', 'chat'], ['more', 'เพิ่มเติม', 'more']],
+  owner: [['overview', 'ภาพรวม', 'grid'], ['clients', 'ลูกค้า', 'users'], ['trainers', 'เทรนเนอร์', 'person'], ['system', 'ระบบ', 'sliders'], ['more', 'เพิ่มเติม', 'more']]
+};
+const CONSENT_TEXT = [
+  'แอปนี้เก็บข้อมูลอาหาร การออกกำลังกาย น้ำหนัก และผลวัดร่างกายของคุณ เพื่อใช้ติดตามผลกับโค้ช',
+  'ผู้ที่เห็นข้อมูลของคุณ: ตัวคุณเอง โค้ชที่ดูแลคุณ และเจ้าของระบบ (ผู้ดูแลแอป) ลูกค้าคนอื่นมองไม่เห็นข้อมูลของคุณ',
+  'รูปที่แนบเป็นหลักฐานจะเก็บไว้กับรายการนั้น ถ้ากดให้ AI อ่านรูป รูปจะถูกส่งให้ AI ของ Google อ่านตัวเลขเท่านั้น',
+  'ขอลบข้อมูลหรือเลิกใช้งานได้ตลอดเวลา โดยแจ้งโค้ชหรือเจ้าของระบบ'
+];
+
+/* ============ สถานะ ============ */
+let fb = null, app = null, auth = null, db = null, auth2 = null;
+const S = { me: null, config: {}, view: null, cache: new Map(), photoCache: new Map() };
+const ui = { tab: null, date: todayStr(), exDate: todayStr(), schedDate: todayStr(), log: null, wkSel: 0, wkMove: null, filter: 'all', sumDate: todayStr() };
+let sheet = null; // ข้อมูลของหน้าต่างที่เปิดอยู่
+
+/* ============ UI พื้นฐาน ============ */
+function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), ms); }
+function setMain(html) { $('#main').innerHTML = html; }
+function isStaff() { return S.me && (S.me.role === 'owner' || S.me.role === 'trainer'); }
+function viewingClient() { return isStaff() && !!S.view; }
+function roleTabs() { return (S.me.role === 'member' || viewingClient()) ? TABS.member : TABS[S.me.role]; }
+function renderTabs() {
+  const bar = $('#tabbar'); const tabs = roleTabs();
+  bar.hidden = false;
+  bar.innerHTML = `<div class="in">${tabs.map(([k, l, ic]) => `<button class="tab" data-act="tab" data-v="${k}" ${ui.tab === k ? 'aria-current="page"' : ''}>${svg(ic, 24)}<span>${l}</span></button>`).join('')}</div>`;
+  const v = $('#viewing');
+  if (viewingClient()) { v.hidden = false; v.innerHTML = `<span>กำลังดูข้อมูลของ <b>${esc(S.cache.get('p:' + S.view)?.name || '')}</b></span><button class="btn sm ghost" style="color:#fff;border-color:#C9D3DF;background:transparent" data-act="exitClient">‹ กลับ</button>`; }
+  else v.hidden = true;
+}
+function openSheet(title, body, ctx = {}) {
+  sheet = { ...ctx, title };
+  $('#sheetRoot').innerHTML = `<div class="sheet-bg" data-act="sheetBg"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="head"><h2>${esc(title)}</h2><button class="iconbtn" data-act="closeSheet" aria-label="ปิด" style="font-size:24px">×</button></div><div id="sheetBody" style="display:flex;flex-direction:column;gap:12px">${body}</div></div></div>`;
+}
+function refreshSheet(body) { const b = $('#sheetBody'); if (b) b.innerHTML = body; }
+function closeSheet() { sheet = null; $('#sheetRoot').innerHTML = ''; }
+
+/* ============ Firebase ============ */
+async function boot() {
+  try {
+    const [appM, authM, fsM] = await Promise.all([import(FBV + 'firebase-app.js'), import(FBV + 'firebase-auth.js'), import(FBV + 'firebase-firestore.js')]);
+    fb = { ...appM, ...authM, ...fsM };
+    app = fb.initializeApp(firebaseConfig);
+    auth = fb.getAuth(app);
+    try { db = fb.initializeFirestore(app, { localCache: fb.persistentLocalCache({ tabManager: fb.persistentMultipleTabManager() }) }); } catch (e) { db = fb.getFirestore(app); }
+    try { await fb.getRedirectResult(auth); } catch (e) { /* ไม่มี redirect ค้าง */ }
+    fb.onAuthStateChanged(auth, u => handleUser(u).catch(err => { console.error(err); setMain(`<section class="card"><h2>เปิดข้อมูลไม่สำเร็จ</h2><p class="small muted">${esc(err.message)}</p><button class="btn" data-act="logout">ออกจากระบบ</button></section>`); }));
+  } catch (e) { console.error(e); setMain('<section class="card"><h2>โหลดไม่สำเร็จ</h2><p class="small">ตรวจสอบอินเทอร์เน็ตแล้วรีเฟรชหน้านี้</p></section>'); }
+}
+const D = (...p) => fb.doc(db, ...p);
+const C = (...p) => fb.collection(db, ...p);
+async function get(ref) { const s = await fb.getDoc(ref); return s.exists() ? { id: s.id, ...s.data() } : null; }
+async function list(q) { const s = await fb.getDocs(q); return s.docs.map(d => ({ id: d.id, ...d.data() })); }
+function secondaryAuth() {
+  if (!auth2) { const a2 = fb.initializeApp(firebaseConfig, 'creator'); auth2 = fb.initializeAuth(a2, { persistence: fb.inMemoryPersistence }); }
+  return auth2;
+}
+
+/* ============ เข้าสู่ระบบ ============ */
+function renderLogin(msg = '') {
+  $('#tabbar').hidden = true; $('#viewing').hidden = true;
+  setMain(`<section class="card login">
+    <h1>เข้าสู่ระบบ</h1>
+    <p class="small muted">ใช้ชื่อผู้ใช้และรหัสผ่านที่โค้ชหรือเจ้าของระบบให้ไว้</p>
+    ${msg ? `<div class="warn">${esc(msg)}</div>` : ''}
+    <label class="f">ชื่อผู้ใช้<input class="in" id="lgUser" autocomplete="username" autocapitalize="none" spellcheck="false"></label>
+    <label class="f">รหัสผ่าน<input class="in" id="lgPass" type="password" autocomplete="current-password"></label>
+    <button class="btn pri block" data-act="login">เข้าสู่ระบบ</button>
+    <div class="hr"></div>
+    <button class="btn ghost" data-act="ownerLogin">เจ้าของระบบ: เข้าด้วย Google</button>
+    <a class="small center" href="manual.html">คู่มือการใช้งาน</a>
+  </section>`);
+}
+async function doLogin() {
+  const u = ($('#lgUser').value || '').trim().toLowerCase(); const pw = $('#lgPass').value || '';
+  if (!u || !pw) return toast('กรอกชื่อผู้ใช้และรหัสผ่าน');
+  try {
+    const lg = await get(D('logins', u));
+    if (!lg) return renderLogin('ไม่พบชื่อผู้ใช้นี้ ตรวจตัวสะกดอีกครั้ง');
+    await fb.signInWithEmailAndPassword(auth, lg.email, pw);
+  } catch (e) {
+    const c = e.code || '';
+    renderLogin(c.includes('invalid-credential') || c.includes('wrong-password') ? 'รหัสผ่านไม่ถูกต้อง' : c.includes('too-many') ? 'ลองผิดหลายครั้ง รอสักครู่แล้วลองใหม่' : 'เข้าสู่ระบบไม่สำเร็จ (' + c + ')');
+  }
+}
+async function ownerLogin() {
+  const pr = new fb.GoogleAuthProvider(); pr.setCustomParameters({ prompt: 'select_account' });
+  try { await fb.signInWithPopup(auth, pr); }
+  catch (e) { if (String(e.code).includes('popup')) await fb.signInWithRedirect(auth, pr); else toast('เข้าด้วย Google ไม่สำเร็จ (' + e.code + ')'); }
+}
+async function handleUser(u) {
+  S.cache.clear(); S.view = null; ui.log = null; closeSheet();
+  if (!u) { S.me = null; return renderLogin(); }
+  if ((u.email || '').toLowerCase() === OWNER_EMAIL && u.emailVerified) {
+    S.me = { role: 'owner', name: 'เจ้าของระบบ', pid: null, uid: u.uid };
+    S.config = (await get(D('config', 'app'))) || {};
+    if (!S.config.createdAt) { S.config = { name: 'The Olympic Club by PT-Plam', aiOn: true, aiModel: 'gemini-3.5-flash', digestTime: '21:00', workoutDelayMin: 60, createdAt: fb.serverTimestamp() }; await fb.setDoc(D('config', 'app'), S.config, { merge: true }); }
+  } else {
+    const acc = await get(D('accounts', u.uid));
+    if (!acc) { S.me = null; return renderLogin('บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน ติดต่อโค้ชหรือเจ้าของระบบ'); }
+    const person = await get(D('people', acc.pid));
+    if (!person || person.active !== true) { await fb.signOut(auth); return renderLogin('บัญชีนี้ถูกปิดการใช้งาน ติดต่อโค้ชหรือเจ้าของระบบ'); }
+    S.me = { role: acc.role, pid: acc.pid, name: person.name, uid: u.uid, person };
+    S.cache.set('p:' + acc.pid, person);
+    S.config = (await get(D('config', 'app'))) || {};
+    if (acc.role === 'member' && !person.consentAt) return renderConsent();
+  }
+  startApp();
+}
+function renderConsent() {
+  $('#tabbar').hidden = true;
+  setMain(`<section class="card"><h1>ก่อนเริ่มใช้งาน</h1>
+    ${CONSENT_TEXT.map(t => `<p class="small" style="margin:0">• ${esc(t)}</p>`).join('')}
+    <button class="btn gold block" data-act="consent">ยินยอมและเริ่มใช้งาน</button>
+    <button class="btn ghost" data-act="logout">ไม่ยินยอม / ออกจากระบบ</button></section>`);
+}
+function startApp() {
+  if (S.me.role === 'member') { S.view = S.me.pid; ui.tab = 'today'; }
+  else ui.tab = TABS[S.me.role][0][0];
+  render();
+}
+async function logout() { await fb.signOut(auth); }
+
+/* ============ ข้อมูล ============ */
+async function person(pid, fresh) {
+  const k = 'p:' + pid;
+  if (!fresh && S.cache.has(k)) return S.cache.get(k);
+  const p = await get(D('people', pid)); S.cache.set(k, p); return p;
+}
+async function dayDoc(pid, ds) { return (await get(D('people', pid, 'days', ds))) || { meals: {}, water: 0 }; }
+async function actsRange(pid, a, b) {
+  const rows = await list(fb.query(C('people', pid, 'activities'), fb.where('date', '>=', a), fb.where('date', '<=', b)));
+  return rows.sort((x, y) => (x.date + (x.t || '')).localeCompare(y.date + (y.t || '')));
+}
+async function bodyRows(pid) { return (await list(C('people', pid, 'body'))).sort((a, b) => (a.date + (a.t || '')).localeCompare(b.date + (b.t || ''))); }
+async function sessionsFor(pid) {
+  let q;
+  if (S.me.role === 'trainer') q = fb.query(C('sessions'), fb.where('trainerPid', '==', S.me.pid), fb.where('memberPid', '==', pid));
+  else q = fb.query(C('sessions'), fb.where('memberPid', '==', pid));
+  return (await list(q)).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+}
+async function myMembers() {
+  const q = S.me.role === 'owner' ? fb.query(C('people'), fb.where('role', '==', 'member')) : fb.query(C('people'), fb.where('trainerPid', '==', S.me.pid));
+  const rows = (await list(q)).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th'));
+  rows.forEach(r => S.cache.set('p:' + r.id, r));
+  return rows;
+}
+async function trainers() { return (await list(fb.query(C('people'), fb.where('role', '==', 'trainer')))).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')); }
+function mealItems(day) { const out = []; for (const m of MEALS) (day.meals?.[m] || []).forEach((it, i) => out.push({ ...it, meal: m, i })); return out; }
+function dayTotals(day) {
+  const t = { k: 0, p: 0, c: 0, f: 0, byMeal: {} };
+  for (const m of MEALS) {
+    const items = day.meals?.[m] || []; let mk = 0;
+    for (const it of items) { t.k += +it.k || 0; t.p += +it.p || 0; t.c += +it.c || 0; t.f += +it.f || 0; mk += +it.k || 0; }
+    if (items.length) t.byMeal[m] = mk;
+  }
+  return t;
+}
+const burnOf = acts => acts.reduce((a, x) => a + (+x.kcal || 0), 0);
+function latestWeight(rows) { for (let i = rows.length - 1; i >= 0; i--) if (num(rows[i].weight)) return num(rows[i].weight); return null; }
+function foodCalc(f, q) { const x = f.u === 'g' ? q / 100 : q; return { k: Math.round(f.k * x), p: r1(f.p * x), c: r1(f.c * x), f: r1(f.f * x) }; }
+
+/* ============ รูปภาพ ============ */
+function readFile(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file); }); }
+async function compress(file) {
+  const src = await readFile(file);
+  const im = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+  let max = 1400, q = 0.82, out = src;
+  for (let k = 0; k < 7; k++) {
+    const sc = Math.min(1, max / Math.max(im.naturalWidth, im.naturalHeight));
+    const c = document.createElement('canvas'); c.width = Math.round(im.naturalWidth * sc); c.height = Math.round(im.naturalHeight * sc);
+    c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+    out = c.toDataURL('image/jpeg', q);
+    if (out.length < 380000) break;
+    max = Math.round(max * 0.8); q = Math.max(0.5, q - 0.08);
+  }
+  return out;
+}
+async function savePhoto(pid, dataUrl) {
+  const ref = await fb.addDoc(C('photos'), { pid, data: dataUrl, byUid: auth.currentUser.uid, at: fb.serverTimestamp() });
+  S.photoCache.set(ref.id, dataUrl); return ref.id;
+}
+async function photoData(id) {
+  if (S.photoCache.has(id)) return S.photoCache.get(id);
+  const p = await get(D('photos', id)); const d = p?.data || ''; S.photoCache.set(id, d); return d;
+}
+async function fillThumbs(root = document) {
+  for (const img of root.querySelectorAll('img[data-photo]')) { if (img.src) continue; try { img.src = await photoData(img.dataset.photo); } catch (e) { } }
+}
+const clipTag = ph => (ph && ph.length) ? ` <span class="clip">${svg('clip', 13)} ${ph.length} รูป</span>` : '';
+function thumbsHtml(ids, editable) {
+  return (ids || []).map((id, i) => `<div class="thumb"><button type="button" style="border:none;padding:0;width:100%;height:100%;background:none" data-act="viewPhoto" data-id="${id}" aria-label="ดูรูป ${i + 1}"><img data-photo="${id}" alt=""></button>${editable ? `<button type="button" class="x" data-act="rmPhoto" data-i="${i}" aria-label="ลบรูป ${i + 1}">×</button>` : ''}</div>`).join('');
+}
+function photoPicker(label = 'แนบรูป') {
+  return `<div class="thumbs" id="thumbs">${thumbsHtml(sheet?.ph, true)}<label class="addthumb">${svg('cam', 22)}${label}<input type="file" accept="image/*" multiple hidden data-act="pickPhoto"></label></div>`;
+}
+
+/* ============ AI อ่านรูป ============ */
+const AI_PROMPT = {
+  watch: 'This is a screenshot from a fitness watch, fitness app or gym machine. Read only what is visible. Reply JSON: {"activity": one of "swim","walk","bike","class","weights","yoga","other" or null, "minutes": number or null, "kcal": number or null (active/total calories burned), "note": short English text or null}. Use null when not clearly visible. Never guess.',
+  inbody: 'This is a body composition result sheet (e.g. InBody). Read only what is printed. Reply JSON: {"date": "YYYY-MM-DD" or null, "weight": kg, "smm": skeletal muscle mass kg, "fatKg": body fat mass kg, "fatPct": percent body fat, "bmr": kcal, "visceral": visceral fat level, "water": total body water kg}. Every value is a number or null. Never guess.'
+};
+async function aiRead(kind, dataUrl) {
+  if (S.config.aiOn === false) throw new Error('เจ้าของระบบปิดการใช้ AI ไว้');
+  if (!fb.aiMod) { const m = await import(FBV + 'firebase-ai.js'); fb.aiMod = m; fb.ai = m.getAI(app, { backend: new m.GoogleAIBackend() }); }
+  const model = fb.aiMod.getGenerativeModel(fb.ai, { model: S.config.aiModel || 'gemini-3.5-flash', generationConfig: { responseMimeType: 'application/json' } });
+  const r = await model.generateContent([AI_PROMPT[kind], { inlineData: { data: dataUrl.split(',')[1], mimeType: 'image/jpeg' } }]);
+  const txt = r.response.text().replace(/^```json|```$/g, '').trim();
+  return JSON.parse(txt);
+}
+
+/* ============ วาดหน้า ============ */
+async function render() {
+  if (!S.me) return;
+  renderTabs();
+  const t = ui.tab; const pid = S.view;
+  try {
+    if (S.me.role === 'member' || viewingClient()) {
+      if (t === 'today') return await renderToday(pid);
+      if (t === 'exercise') return await renderExercise(pid);
+      if (t === 'workouts') return await renderWorkouts(pid);
+      if (t === 'body') return await renderBody(pid);
+      if (t === 'coach') return await renderCoach(pid);
+      return await renderMore();
+    }
+    if (t === 'clients') return await renderClients();
+    if (t === 'schedule') return await renderSchedule();
+    if (t === 'log') return await renderLog();
+    if (t === 'summary') return await renderSummary();
+    if (t === 'overview') return await renderOverview();
+    if (t === 'trainers') return await renderTrainers();
+    if (t === 'system') return await renderSystem();
+    return await renderMore();
+  } catch (e) {
+    console.error(e);
+    setMain(`<section class="card"><h2>เปิดหน้านี้ไม่สำเร็จ</h2><p class="small muted">${esc(e.message || e)}</p><button class="btn" data-act="reload">ลองใหม่</button></section>`);
+  }
+}
+function dateNav(ds, act) {
+  const isToday = ds === todayStr();
+  return `<div class="between" style="align-items:center"><button class="iconbtn" data-act="${act}" data-d="-1" aria-label="วันก่อนหน้า" style="font-size:22px">‹</button>
+    <div class="center"><b>${thDate(ds, true)}</b>${isToday ? '' : `<br><button class="btn sm ghost" data-act="${act}" data-d="0">กลับไปวันนี้</button>`}</div>
+    <button class="iconbtn" data-act="${act}" data-d="1" aria-label="วันถัดไป" style="font-size:22px">›</button></div>`;
+}
+
+/* ---------- ลูกค้า: วันนี้ ---------- */
+async function renderToday(pid) {
+  const [p, day, acts] = await Promise.all([person(pid, true), dayDoc(pid, ui.date), actsRange(pid, ui.date, ui.date)]);
+  const t = p?.targets || {}; const tot = dayTotals(day); const burn = burnOf(acts);
+  const addBurn = t.addBurn !== false; const goal = num(t.kcal);
+  const remain = goal != null ? goal - tot.k + (addBurn ? burn : 0) : null;
+  const pct = goal ? Math.min(100, Math.round(tot.k / (goal + (addBurn ? burn : 0)) * 100)) : 0;
+  const macro = (label, v, tg, color) => `<div class="stat"><span>${label}</span><b style="font-size:16px">${r1(v)}<span class="xs muted" style="font-weight:400"> ${tg ? '/ ' + tg + ' g' : 'g'}</span></b><div class="bar"><i style="width:${tg ? Math.min(100, Math.round(v / tg * 100)) : 0}%;background:${color}"></i></div></div>`;
+  const water = +day.water || 0; const wGoal = num(t.water) || 2500;
+  const mealRows = MEALS.map(m => {
+    const items = day.meals?.[m] || []; const mk = items.reduce((a, x) => a + (+x.k || 0), 0);
+    return `<div class="li" style="align-items:flex-start;flex-direction:column;gap:6px">
+      <div class="between" style="width:100%"><b class="goldt small">${m}</b><span class="small"><b>${items.length ? n0(mk) + ' kcal' : ''}</b></span></div>
+      ${items.map((it, i) => `<div class="between" style="width:100%;align-items:center"><span class="small grow">${esc(it.n)}${it.q ? ` <span class="muted">· ${esc(it.qs || it.q)}</span>` : ''}${clipTag(it.ph)}</span><span class="small">${n0(it.k)}</span><button class="iconbtn" style="width:36px;height:36px" data-act="rmFood" data-m="${m}" data-i="${i}" aria-label="ลบ ${esc(it.n)}">×</button></div>`).join('')}
+      <button class="btn sm ghost" data-act="addFood" data-m="${m}">+ เพิ่ม${m}</button></div>`;
+  }).join('');
+  setMain(`
+    ${dateNav(ui.date, 'dayNav')}
+    <section class="card dark" aria-label="สรุปพลังงาน">
+      ${goal != null ? `<div class="between"><div><div class="small muted">เหลือกินได้อีก</div><span class="big ${remain < 0 ? '' : 'gold'}" style="${remain < 0 ? 'color:#F59E6B' : ''}">${n0(remain)}</span> <span class="muted">kcal</span></div><div class="xs muted" style="text-align:right">กินไปแล้ว ${pct}%<br>ของงบวันนี้</div></div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+      <div class="grid3"><div><div class="xs muted">เป้าหมาย</div><b>${n0(goal)}</b></div><div><div class="xs muted">− กินไป</div><b style="color:#F0D48E">${n0(tot.k)}</b></div><div><div class="xs muted">${addBurn ? '+ เผาผลาญ' : 'เผาผลาญ (ไม่นับคืน)'}</div><b style="color:#A9CBEE">${n0(burn)}</b></div></div>`
+      : `<div><div class="small muted">กินไปแล้ว</div><span class="big gold">${n0(tot.k)}</span> <span class="muted">kcal</span></div><div class="small muted">เผาผลาญ ${n0(burn)} kcal · โค้ชยังไม่ได้ตั้งเป้าหมาย</div>`}
+      ${isStaff() ? `<button class="btn sm gold" data-act="editTargets">ตั้งเป้าหมาย</button>` : ''}
+    </section>
+    <section class="grid3" aria-label="สารอาหาร">${macro('โปรตีน', tot.p, num(t.p), '#1D3A5C')}${macro('คาร์บ', tot.c, num(t.c), '#B8862B')}${macro('ไขมัน', tot.f, num(t.f), '#7A6A58')}</section>
+    <section class="card" aria-label="น้ำ"><div class="row"><div class="grow" style="flex:1"><b>น้ำ ${r1(water / 1000)}</b> <span class="muted">/ ${r1(wGoal / 1000)} ลิตร</span><div class="bar" style="margin-top:6px"><i style="width:${Math.min(100, Math.round(water / wGoal * 100))}%"></i></div></div><button class="btn sm ghost" data-act="water" data-v="-250" aria-label="ลดน้ำ 250 มล.">−</button><button class="btn sm" data-act="water" data-v="250">+250 มล.</button></div></section>
+    <section aria-label="มื้ออาหาร" style="display:flex;flex-direction:column;gap:8px"><h2>มื้ออาหาร</h2><div class="list">${mealRows}</div></section>
+    ${day.coachNote ? `<section class="card sand"><b class="xs" style="color:#5E440D">โน้ตจากโค้ช ${esc(p?.trainerName || '')}</b><span>${esc(day.coachNote)}</span></section>` : ''}
+    ${isStaff() ? `<section class="card"><label class="f">โน้ตถึงลูกค้าสำหรับวันนี้<textarea class="in" id="coachNote">${esc(day.coachNote || '')}</textarea></label><button class="btn sm pri" data-act="saveCoachNote">บันทึกโน้ต</button></section>` : ''}
+  `);
+  fillThumbs();
+}
+async function mutateDay(pid, ds, fn) {
+  const ref = D('people', pid, 'days', ds);
+  await fb.runTransaction(db, async tx => {
+    const s = await tx.get(ref); const d = s.exists() ? s.data() : { meals: {}, water: 0 };
+    d.meals = d.meals || {}; fn(d); d.updatedAt = fb.serverTimestamp(); d.date = ds;
+    tx.set(ref, d);
+  });
+}
+
+/* ---------- เพิ่มอาหาร ---------- */
+function foodSheetBody() {
+  const s = sheet;
+  if (s.mode === 'manual') return `
+    <div class="chips"><button class="chip" data-act="foodMode" data-v="db" aria-pressed="false">ค้นจากคลังอาหาร</button><button class="chip" aria-pressed="true">กรอกเอง</button></div>
+    <label class="f">ชื่ออาหาร<input class="in" id="mfName" value="${esc(s.mf.n || '')}"></label>
+    <div class="grid2"><label class="f">แคลอรี (kcal)<input class="in" id="mfK" inputmode="decimal" value="${esc(s.mf.k ?? '')}"></label><label class="f">โปรตีน (g)<input class="in" id="mfP" inputmode="decimal" value="${esc(s.mf.p ?? '')}"></label>
+    <label class="f">คาร์บ (g)<input class="in" id="mfC" inputmode="decimal" value="${esc(s.mf.c ?? '')}"></label><label class="f">ไขมัน (g)<input class="in" id="mfF" inputmode="decimal" value="${esc(s.mf.f ?? '')}"></label></div>
+    <p class="xs muted" style="margin:0">ดูค่าจากฉลากโภชนาการ ถ้าฉลากบอกต่อหน่วยบริโภค ให้คูณจำนวนที่กินจริง</p>
+    ${mealSel()}${photoPicker('รูปจาน/ฉลาก')}
+    <button class="btn pri block" data-act="saveFood">บันทึก</button>`;
+  const q = (s.q || '').trim().toLowerCase();
+  const res = q ? FOODS.filter(f => f.n.toLowerCase().includes(q) || (f.cat || '').includes(q)).slice(0, 40) : [];
+  const f = s.pick ? FOOD[s.pick] : null;
+  let pickHtml = '';
+  if (f) {
+    const qty = num(s.qty) ?? f.d; const v = foodCalc(f, qty);
+    pickHtml = `<section class="card gold-edge"><b>${esc(f.n)}</b>
+      <label class="f">${f.u === 'g' ? 'น้ำหนัก (กรัม)' : 'จำนวน (' + esc(f.un || 'หน่วย') + ')'}<input class="in" id="fQty" inputmode="decimal" value="${esc(s.qty ?? f.d)}"></label>
+      <div class="small">≈ <b>${n0(v.k)} kcal</b> · P ${v.p} · C ${v.c} · F ${v.f} g</div></section>`;
+  }
+  return `<div class="chips"><button class="chip" aria-pressed="true">ค้นจากคลังอาหาร</button><button class="chip" data-act="foodMode" data-v="manual" aria-pressed="false">กรอกเอง</button></div>
+    <label class="f">ค้นหาอาหาร<input class="in" id="fSearch" value="${esc(s.q || '')}" placeholder="เช่น ไข่ ปลา ข้าว อกไก่" autocomplete="off"></label>
+    ${res.length ? `<div class="foodres">${res.map(x => `<button type="button" data-act="pickFood" data-id="${x.id}">${esc(x.n)} <span class="xs muted">· ${x.d} ${x.u === 'g' ? 'g' : esc(x.un || '')} · ${n0(foodCalc(x, x.d).k)} kcal</span></button>`).join('')}</div>` : (q ? '<p class="small muted" style="margin:0">ไม่พบในคลัง ลองคำอื่น หรือกด “กรอกเอง”</p>' : '')}
+    ${pickHtml}${mealSel()}${photoPicker('รูปจาน')}
+    <button class="btn pri block" data-act="saveFood" ${f ? '' : 'disabled'}>บันทึก</button>`;
+}
+function mealSel() { return `<label class="f">มื้อ<select class="in" id="fMeal">${MEALS.map(m => `<option ${m === sheet.meal ? 'selected' : ''}>${m}</option>`).join('')}</select></label>`; }
+async function saveFood() {
+  const s = sheet; const meal = $('#fMeal').value; let item;
+  if (s.mode === 'manual') {
+    const n = $('#mfName').value.trim(); const k = num($('#mfK').value);
+    if (!n || k == null) return toast('กรอกชื่ออาหารและแคลอรี');
+    item = { n, k: Math.round(k), p: r1(num($('#mfP').value) || 0), c: r1(num($('#mfC').value) || 0), f: r1(num($('#mfF').value) || 0), src: 'manual' };
+  } else {
+    const f = FOOD[s.pick]; const qty = num($('#fQty').value) ?? f.d; const v = foodCalc(f, qty);
+    item = { id: f.id, n: f.n, q: qty, qs: qty + ' ' + (f.u === 'g' ? 'g' : (f.un || '')), ...v };
+  }
+  if (s.ph?.length) item.ph = s.ph;
+  item.t = Date.now(); item.by = S.me.role;
+  await mutateDay(S.view, ui.date, d => { (d.meals[meal] = d.meals[meal] || []).push(item); });
+  closeSheet(); toast('บันทึกแล้ว'); render();
+}
+
+/* ---------- ลูกค้า: ออกกำลังกาย ---------- */
+async function renderExercise(pid) {
+  const ws = weekStart(ui.exDate); const we = addDays(ws, 6);
+  const [acts, sess] = await Promise.all([actsRange(pid, ws, we), sessionsFor(pid)]);
+  const days = [...Array(7)].map((_, i) => addDays(ws, i));
+  const planned = sess.filter(s => s.status === 'planned');
+  const dayActs = acts.filter(a => a.date === ui.exDate);
+  const burn = burnOf(dayActs); const mins = dayActs.reduce((a, x) => a + (+x.min || 0), 0);
+  const next = planned.filter(s => (s.date + s.time) >= (todayStr() + nowHM())).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0];
+  setMain(`
+    <div class="between"><h1>ออกกำลังกาย</h1><div class="row"><button class="iconbtn" data-act="exWeek" data-d="-7" aria-label="สัปดาห์ก่อน">‹</button><button class="iconbtn" data-act="exWeek" data-d="7" aria-label="สัปดาห์ถัดไป">›</button></div></div>
+    <nav class="week" aria-label="เลือกวัน">${days.map(d => { const has = acts.some(a => a.date === d); const ap = planned.some(s => s.date === d);
+      return `<button class="day ${ap ? 'appt' : ''}" data-act="exDay" data-v="${d}" aria-pressed="${d === ui.exDate}"><small>${TH_D[dowOf(d)]}</small><b>${+d.slice(8)}</b><em>${ap ? 'นัด' : has ? 'ทำแล้ว' : ''}</em></button>`; }).join('')}</nav>
+    <section class="card"><div class="small muted">เผาผลาญ${thDate(ui.exDate, true)}</div><div><span class="big blue">${n0(burn)}</span> <span class="muted">kcal</span></div><div class="small muted">${dayActs.length} กิจกรรม · ${n0(mins)} นาที · นำไปคำนวณในหน้าแรกให้อัตโนมัติ</div></section>
+    <section style="display:flex;flex-direction:column;gap:8px"><h2>กิจกรรม</h2>
+      ${dayActs.length ? `<div class="list">${dayActs.map(a => `<div class="li"><div class="grow"><b>${esc(a.name || ACT[a.type]?.[0] || 'กิจกรรม')}</b><div class="small muted">${n0(a.min)} นาที · ${a.source === 'coach' ? 'บันทึกโดยโค้ช' : 'บันทึกเอง'}${clipTag(a.ph)}</div>
+        ${a.ph?.length ? `<div class="thumbs" style="margin-top:6px">${thumbsHtml(a.ph)}</div>` : ''}${a.source === 'coach' ? `<button class="btn sm ghost" style="margin-top:6px" data-act="tab" data-v="workouts">ดูผลการเทรน</button>` : ''}</div>
+        <b class="blue">${n0(a.kcal)}</b>${(a.source !== 'coach' || isStaff()) ? `<button class="iconbtn" data-act="rmAct" data-id="${a.id}" aria-label="ลบกิจกรรม">${svg('trash', 18)}</button>` : ''}</div>`).join('')}</div>` : '<p class="small muted" style="margin:0">ยังไม่มีกิจกรรมในวันนี้</p>'}
+    </section>
+    ${next ? `<section class="card dark"><div class="between"><div><div class="xs muted">นัดเทรนถัดไป</div><b>${thDate(next.date)} · ${esc(next.time)} · ${esc(next.type)}</b></div><span class="tag gold">${esc(next.trainerName || 'โค้ช')}</span></div></section>` : ''}
+    <button class="btn gold block" data-act="addAct">+ เพิ่มกิจกรรม</button>
+    <button class="btn ghost" data-act="tab" data-v="workouts">ผลการเทรนกับโค้ชทั้งหมด</button>
+  `);
+  fillThumbs();
+}
+async function openAddAct() {
+  const rows = await bodyRows(S.view); const p = await person(S.view);
+  sheet = null;
+  openSheet('เพิ่มกิจกรรม', '', { kind: 'act', type: 'swim', date: ui.exDate, min: 30, kcal: '', mode: 'manual', name: '', ph: [], lastImg: null, weight: latestWeight(rows) || num(p?.weight) || 65 });
+  refreshSheet(actSheetBody());
+}
+function actSheetBody() {
+  const s = sheet; const met = ACT[s.type][1]; const est = Math.round(met * s.weight * ((num(s.min) || 0) / 60));
+  const named = { class: ['ชื่อคลาส', 'เช่น Body Combat, Zumba'], other: ['ชื่อกิจกรรม', 'เช่น แบดมินตัน, ปีนผา'] }[s.type];
+  return `<label class="f">วันที่<input class="in" type="date" id="aDate" value="${s.date}"></label>
+    <div><div class="small" style="font-weight:600;margin-bottom:8px">ประเภทกิจกรรม</div><div class="chipgrid">${Object.entries(ACT).filter(([k]) => k !== 'coach').map(([k, v]) => `<button type="button" class="chip" data-act="actType" data-v="${k}" aria-pressed="${s.type === k}">${v[0]}</button>`).join('')}</div></div>
+    ${named ? `<label class="f">${named[0]}<input class="in" id="aName" value="${esc(s.name)}" placeholder="${named[1]}"></label>` : ''}
+    <label class="f">ระยะเวลา (นาที)<input class="in" id="aMin" inputmode="numeric" value="${esc(s.min)}"></label>
+    <div><div class="small" style="font-weight:600;margin-bottom:8px">แคลอรีที่เผาผลาญ</div>
+      <div class="chips"><button type="button" class="chip" data-act="actMode" data-v="manual" aria-pressed="${s.mode === 'manual'}">กรอกเอง</button><button type="button" class="chip" data-act="actMode" data-v="auto" aria-pressed="${s.mode === 'auto'}">ให้แอปประมาณ</button></div>
+      ${s.mode === 'manual' ? `<label class="f" style="margin-top:8px">ดูตัวเลขจากนาฬิกา หรือหน้าจอเครื่องในคลาส<input class="in" id="aKcal" inputmode="numeric" value="${esc(s.kcal)}" placeholder="kcal"></label>`
+      : `<div class="card" style="margin-top:8px"><b class="blue" style="font-size:20px">≈ ${n0(est)} kcal</b><span class="xs muted">ประมาณจากประเภทกิจกรรม × เวลา × น้ำหนักตัวล่าสุด (${r1(s.weight)} kg)</span></div>`}</div>
+    <div><div class="small" style="font-weight:600;margin-bottom:8px">รูปหลักฐาน <span class="muted" style="font-weight:400">(ไม่บังคับ)</span></div>${photoPicker()}
+      <p class="xs muted" style="margin:6px 0 0">รูปหน้าจอนาฬิกา แอปออกกำลังกาย หรือหน้าจอเครื่องในคลาส</p>
+      ${s.lastImg ? `<button class="btn gold block" style="margin-top:8px" data-act="aiWatch">${svg('spark', 18)} ${s.aiMsg || 'ให้ AI อ่านเวลาและแคลจากรูป'}</button>` : ''}</div>
+    <button class="btn pri block" data-act="saveAct">บันทึกกิจกรรม</button>`;
+}
+function readActForm() {
+  const s = sheet; s.date = $('#aDate')?.value || s.date; s.min = $('#aMin')?.value ?? s.min;
+  if ($('#aKcal')) s.kcal = $('#aKcal').value; if ($('#aName')) s.name = $('#aName').value;
+}
+async function saveAct() {
+  readActForm(); const s = sheet;
+  const min = num(s.min) || 0; const est = Math.round(ACT[s.type][1] * s.weight * (min / 60));
+  const kcal = s.mode === 'manual' ? num(s.kcal) : est;
+  if (kcal == null) return toast('กรอกแคลอรี หรือเลือก “ให้แอปประมาณ”');
+  const name = (s.type === 'class' || s.type === 'other') && s.name.trim() ? `${ACT[s.type][0]} · ${s.name.trim()}` : ACT[s.type][0];
+  await fb.addDoc(C('people', S.view, 'activities'), { date: s.date, type: s.type, name, min, kcal: Math.round(kcal), source: isStaff() ? 'staff' : 'self', ph: s.ph || [], t: Date.now(), byUid: auth.currentUser.uid });
+  ui.exDate = s.date; closeSheet(); toast('บันทึกกิจกรรมแล้ว'); render();
+}
+
+/* ---------- ลูกค้า: ผลการเทรนกับโค้ช ---------- */
+async function renderWorkouts(pid) {
+  const logged = (await sessionsFor(pid)).filter(s => s.status === 'logged').sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
+  if (!logged.length) return setMain(`<button class="btn sm ghost" data-act="tab" data-v="exercise">‹ ออกกำลังกาย</button><section class="card"><h1>ผลการเทรนกับโค้ช</h1><p class="small muted">ยังไม่มีครั้งที่โค้ชบันทึกผล ผลจะขึ้นที่นี่เมื่อโค้ชบันทึกแล้ว</p></section>`);
+  const sel = logged[Math.min(ui.wkSel, logged.length - 1)];
+  const chrono = [...logged].reverse();
+  const topKg = (s, name) => Math.max(0, ...((s.moves || []).filter(m => m.name === name).flatMap(m => m.sets.map(x => +x.kg || 0))));
+  const moves = (sel.moves || []).map(m => {
+    const top = Math.max(0, ...m.sets.map(x => +x.kg || 0));
+    const before = chrono.filter(s => (s.date + s.time) < (sel.date + sel.time)).map(s => topKg(s, m.name));
+    const pr = top > 0 && before.length && top > Math.max(0, ...before);
+    return `<section class="card"><div class="between"><b>${esc(m.name)}</b>${pr ? `<span class="tag gold">สถิติใหม่ ${r1(top)} kg</span>` : ''}</div>
+      <div class="sets xs muted" style="grid-template-columns:64px 1fr 1fr"><span>เซ็ต</span><span>ครั้ง</span><span>น้ำหนัก</span></div>
+      ${m.sets.map((x, i) => `<div class="sets" style="grid-template-columns:64px 1fr 1fr"><span class="muted small">เซ็ต ${i + 1}</span><b>${esc(x.r)} ครั้ง</b><b>${esc(x.kg)} kg</b></div>`).join('')}</section>`;
+  }).join('');
+  const allMoves = [...new Set(chrono.flatMap(s => (s.moves || []).map(m => m.name)))];
+  const mv = allMoves.includes(ui.wkMove) ? ui.wkMove : (sel.moves?.[0]?.name || allMoves[0]);
+  const pts = chrono.map(s => ({ d: s.date, v: topKg(s, mv) })).filter(x => x.v > 0).slice(-8);
+  setMain(`<button class="btn sm ghost" data-act="tab" data-v="exercise">‹ ออกกำลังกาย</button>
+    <h1>ผลการเทรนกับโค้ช</h1><p class="small muted" style="margin:0">แสดงเฉพาะครั้งที่โค้ชบันทึกผลแล้ว</p>
+    <nav class="chips">${logged.slice(0, 8).map((s, i) => `<button class="chip" data-act="wkSel" data-v="${i}" aria-pressed="${s.id === sel.id}">${thDate(s.date)} · ${esc(s.type)}</button>`).join('')}</nav>
+    <div class="small muted">${n0(sel.min)} นาที · เผาผลาญ ${n0(sel.kcal)} kcal · โค้ช ${esc(sel.trainerName || '')}</div>
+    ${moves || '<p class="small muted">ครั้งนี้โค้ชไม่ได้ใส่รายละเอียดท่า</p>'}
+    ${sel.note ? `<section class="card sand"><b class="xs" style="color:#5E440D">โน้ตจากโค้ช</b><span>${esc(sel.note)}</span></section>` : ''}
+    ${sel.ph?.length ? `<div class="thumbs">${thumbsHtml(sel.ph)}</div>` : ''}
+    ${mv ? `<section class="card dark"><div class="between"><b>พัฒนาการ</b><select class="in" style="max-width:60%;min-height:40px" data-act="wkMove" aria-label="เลือกท่า">${allMoves.map(m => `<option ${m === mv ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div>
+      <span class="xs muted">น้ำหนักสูงสุดในแต่ละครั้งที่โค้ชบันทึก</span>${lineChart(pts, '#F0C24B', true)}</section>` : ''}`);
+  fillThumbs();
+}
+function lineChart(pts, color, dark) {
+  if (!pts.length) return '<p class="small muted" style="margin:0">ยังไม่มีข้อมูลพอทำกราฟ</p>';
+  const W = 320, H = 130, pad = 18; const vs = pts.map(p => p.v); const lo = Math.min(...vs), hi = Math.max(...vs); const span = hi - lo || 1;
+  const x = i => pts.length === 1 ? W / 2 : pad + i * (W - 2 * pad) / (pts.length - 1); const y = v => H - pad - (v - lo) / span * (H - 2 * pad);
+  const grid = dark ? '#33475E' : '#EFEAE0'; const txt = dark ? '#C9D3DF' : '#5E6470';
+  return `<svg class="chart" viewBox="0 0 ${W} ${H + 18}" role="img" aria-label="กราฟ ${pts.map(p => thDate(p.d) + ' ' + r1(p.v)).join(', ')}">
+    <path d="M0 ${pad}H${W} M0 ${H / 2}H${W} M0 ${H - pad}H${W}" stroke="${grid}"/>
+    <polyline points="${pts.map((p, i) => x(i) + ',' + y(p.v)).join(' ')}" fill="none" stroke="${color}" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+    ${pts.map((p, i) => `<circle cx="${x(i)}" cy="${y(p.v)}" r="${i === pts.length - 1 ? 5.5 : 4}" fill="${color}"/><text x="${x(i)}" y="${H + 12}" fill="${txt}" font-size="10" text-anchor="middle">${r1(p.v)}</text>`).join('')}</svg>`;
+}
+
+/* ---------- ลูกค้า: ร่างกาย ---------- */
+async function renderBody(pid) {
+  const rows = await bodyRows(pid);
+  const w = rows.filter(r => num(r.weight)).slice(-12).map(r => ({ d: r.date, v: num(r.weight) }));
+  const scans = rows.filter(r => num(r.smm) || num(r.fatPct)); const last = scans[scans.length - 1]; const prev = scans[scans.length - 2];
+  const delta = (k, unit) => (last && prev && num(last[k]) != null && num(prev[k]) != null) ? `<span class="xs blue">${num(last[k]) - num(prev[k]) >= 0 ? '+' : ''}${r1(num(last[k]) - num(prev[k]))}${unit}</span>` : '';
+  const cell = (label, k, unit) => `<div><div class="xs muted">${label}</div><b style="font-size:18px">${last && num(last[k]) != null ? r1(last[k]) + unit : '—'}</b><br>${delta(k, unit)}</div>`;
+  setMain(`<h1>ร่างกาย</h1>
+    <section class="card"><div class="between"><b>น้ำหนัก</b>${w.length > 1 ? `<span class="small blue"><b>${w[w.length - 1].v - w[0].v >= 0 ? '+' : ''}${r1(w[w.length - 1].v - w[0].v)} kg</b></span>` : ''}</div>${lineChart(w, '#1D3A5C')}</section>
+    <section class="card"><div class="between"><b>ผลสแกนล่าสุด</b><span class="xs muted">${last ? thDate(last.date) : ''}</span></div>
+      ${last ? `<div class="grid3">${cell('น้ำหนัก', 'weight', ' kg')}${cell('กล้ามเนื้อ SMM', 'smm', ' kg')}${cell('ไขมัน', 'fatPct', '%')}</div>${last.ph?.length ? `<div class="thumbs">${thumbsHtml(last.ph)}</div>` : ''}` : '<p class="small muted" style="margin:0">ยังไม่มีผลสแกน กด “เพิ่มผลสแกน” แล้วแนบใบ InBody ได้เลย</p>'}</section>
+    <div class="grid2"><button class="btn pri" data-act="addBody" data-v="weight">บันทึกน้ำหนัก</button><button class="btn" data-act="addBody" data-v="scan">เพิ่มผลสแกน</button></div>
+    ${rows.length ? `<section style="display:flex;flex-direction:column;gap:8px"><h2>ประวัติ</h2><div class="list">${[...rows].reverse().slice(0, 20).map(r => `<div class="li"><div class="grow"><b class="small">${thDate(r.date)}</b><div class="xs muted">${[['weight', 'น้ำหนัก', 'kg'], ['smm', 'SMM', 'kg'], ['fatPct', 'ไขมัน', '%'], ['waist', 'เอว', 'cm'], ['hip', 'สะโพก', 'cm'], ['arm', 'แขน', 'cm']].filter(([k]) => num(r[k]) != null).map(([k, l, u]) => `${l} ${r1(r[k])} ${u}`).join(' · ')}${clipTag(r.ph)}</div></div><button class="iconbtn" data-act="rmBody" data-id="${r.id}" aria-label="ลบรายการ">${svg('trash', 18)}</button></div>`).join('')}</div></section>` : ''}`);
+  fillThumbs();
+}
+const BODY_FIELDS = [['weight', 'น้ำหนัก (kg)'], ['smm', 'กล้ามเนื้อ SMM (kg)'], ['fatKg', 'ไขมัน (kg)'], ['fatPct', 'ไขมัน (%)'], ['bmr', 'BMR (kcal)'], ['visceral', 'ไขมันช่องท้อง (ระดับ)'], ['water', 'น้ำในร่างกาย (kg)'], ['waist', 'รอบเอว (cm)'], ['hip', 'รอบสะโพก (cm)'], ['arm', 'รอบแขน (cm)']];
+function bodySheetBody() {
+  const s = sheet; const fields = s.mode === 'weight' ? BODY_FIELDS.slice(0, 1) : BODY_FIELDS;
+  return `<label class="f">วันที่วัด<input class="in" type="date" id="bDate" value="${esc(s.v.date)}"></label>
+    ${s.mode === 'scan' ? `<div><div class="small" style="font-weight:600;margin-bottom:8px">ใบผลสแกน <span class="muted" style="font-weight:400">(ไม่บังคับ)</span></div>${photoPicker('แนบใบ InBody')}
+      ${s.lastImg ? `<button class="btn gold block" style="margin-top:8px" data-act="aiInbody">${svg('spark', 18)} ${s.aiMsg || 'ให้ AI กรอกให้'}</button>` : ''}</div>` : ''}
+    <div class="grid2">${fields.map(([k, l]) => `<label class="f">${l}<input class="in" inputmode="decimal" data-bf="${k}" value="${esc(s.v[k] ?? '')}" style="${s.aiKeys?.includes(k) ? 'border-color:#E0A526;border-width:2px' : ''}"></label>`).join('')}</div>
+    ${s.aiKeys?.length ? '<p class="xs goldt" style="margin:0">ช่องกรอบทองคือค่าที่ AI อ่าน ตรวจกับใบผลอีกครั้งก่อนบันทึก</p>' : ''}
+    ${s.mode === 'weight' ? photoPicker('รูปตาชั่ง') : ''}
+    <button class="btn pri block" data-act="saveBody">บันทึก</button>`;
+}
+function readBodyForm() { const s = sheet; s.v.date = $('#bDate')?.value || s.v.date; document.querySelectorAll('[data-bf]').forEach(el => { s.v[el.dataset.bf] = el.value; }); }
+async function saveBody() {
+  readBodyForm(); const s = sheet; const rec = { date: s.v.date, t: Date.now(), ph: s.ph || [] };
+  let any = false; for (const [k] of BODY_FIELDS) { const v = num(s.v[k]); if (v != null) { rec[k] = v; any = true; } }
+  if (!any) return toast('กรอกอย่างน้อย 1 ค่า');
+  await fb.addDoc(C('people', S.view, 'body'), rec); closeSheet(); toast('บันทึกแล้ว'); render();
+}
+
+/* ---------- ลูกค้า: โค้ช ---------- */
+async function renderCoach(pid) {
+  const [p, sess] = await Promise.all([person(pid, true), sessionsFor(pid)]);
+  const t = p?.targets || {}; const now = todayStr() + nowHM();
+  const upcoming = sess.filter(s => s.status === 'planned' && (s.date + s.time) >= now).slice(0, 6);
+  const notes = sess.filter(s => s.status === 'logged' && s.note).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)).slice(0, 3);
+  setMain(`<h1>โค้ชของฉัน</h1>
+    <section class="card dark"><div class="row"><div style="width:52px;height:52px;border-radius:26px;background:#E0A526;color:#14202E;display:flex;align-items:center;justify-content:center;font-family:'Noto Serif Thai',serif;font-size:20px;font-weight:700">${esc((p?.trainerName || 'P').slice(0, 1))}</div>
+      <div class="grow" style="flex:1"><b style="font-size:17px">${esc(p?.trainerName || 'ยังไม่มีโค้ช')}</b><div class="small muted">เทรนเนอร์ส่วนตัว · The Olympic Club</div></div></div></section>
+    <section class="card"><div class="between"><b>เป้าหมายที่โค้ชตั้ง</b>${isStaff() ? '<button class="btn sm" data-act="editTargets">แก้เป้าหมาย</button>' : ''}</div>
+      ${t.kcal ? `<div class="grid4"><div><div class="xs muted">พลังงาน</div><b>${n0(t.kcal)}</b></div><div><div class="xs muted">โปรตีน</div><b>${t.p ? n0(t.p) + ' g' : '—'}</b></div><div><div class="xs muted">คาร์บ</div><b>${t.c ? n0(t.c) + ' g' : '—'}</b></div><div><div class="xs muted">ไขมัน</div><b>${t.f ? n0(t.f) + ' g' : '—'}</b></div></div>
+      <div class="small muted">นับแคลที่เผาผลาญคืนให้: ${t.addBurn === false ? 'ปิด' : 'เปิด'}</div>` : '<p class="small muted" style="margin:0">โค้ชยังไม่ได้ตั้งเป้าหมาย</p>'}</section>
+    <section style="display:flex;flex-direction:column;gap:8px"><h2>นัดเทรนที่จะถึง</h2>${upcoming.length ? `<div class="list">${upcoming.map(s => `<div class="li"><div class="grow"><b>${thDate(s.date, true)} · ${esc(s.time)}</b><div class="small muted">${esc(s.type)} · กับ ${esc(s.trainerName || 'โค้ช')}</div></div></div>`).join('')}</div>` : '<p class="small muted" style="margin:0">ยังไม่มีนัด</p>'}</section>
+    ${notes.length ? `<section style="display:flex;flex-direction:column;gap:8px"><h2>ความเห็นล่าสุดจากโค้ช</h2>${notes.map(s => `<div class="card sand"><b class="xs" style="color:#5E440D">${thDate(s.date)} · หลังเทรน ${esc(s.type)}</b><span>${esc(s.note)}</span></div>`).join('')}</section>` : ''}
+    <div class="card" style="border:1px solid var(--line);flex-direction:row;justify-content:space-between"><span class="small muted">แจ้งเตือนทาง LINE</span><b class="small muted">${S.config.lineOn ? 'เปิดอยู่' : 'ยังไม่เปิด'}</b></div>`);
+}
+
+/* ---------- เพิ่มเติม ---------- */
+async function renderMore() {
+  const me = S.me; const staff = isStaff() && !viewingClient();
+  let membersHtml = '';
+  if (staff) {
+    const ms = await myMembers();
+    membersHtml = `<section style="display:flex;flex-direction:column;gap:8px"><div class="between"><h2>บัญชีลูกค้า (${ms.length})</h2><button class="btn sm gold" data-act="newAccount" data-v="member">+ สร้างบัญชีลูกค้า</button></div>
+      ${ms.length ? `<div class="list">${ms.map(m => `<div class="li"><div class="grow"><b>${esc(m.name)}</b><div class="xs muted">@${esc(m.username)} ${m.active ? '' : '· <span class="alert">ปิดบัญชี</span>'} ${m.consentAt ? '· ยินยอมแล้ว' : '· ยังไม่ยินยอม'}</div></div><button class="btn sm ghost" data-act="manage" data-id="${m.id}">จัดการ</button></div>`).join('')}</div>` : '<p class="small muted" style="margin:0">ยังไม่มีลูกค้า กด “สร้างบัญชีลูกค้า”</p>'}</section>`;
+  }
+  setMain(`<h1>เพิ่มเติม</h1>
+    <section class="card"><b>${esc(me.name)}</b><span class="small muted">${me.role === 'owner' ? 'เจ้าของระบบ' : me.role === 'trainer' ? 'เทรนเนอร์ · ผู้ดูแลฝ่ายงาน' : 'สมาชิก'}${me.person?.username ? ' · @' + esc(me.person.username) : ''}</span></section>
+    ${membersHtml}
+    <a class="btn" href="manual.html">คู่มือการใช้งาน</a>
+    <button class="btn danger" data-act="logout">ออกจากระบบ</button>
+    <p class="xs muted center">เวอร์ชัน ${VER}</p>`);
+}
+
+/* ---------- เทรนเนอร์ / เจ้าของ: ลูกค้า ---------- */
+async function clientStats(ms, ds) {
+  const out = {};
+  await Promise.all(ms.map(async m => {
+    const [day, acts] = await Promise.all([dayDoc(m.id, ds), actsRange(m.id, ds, ds)]);
+    out[m.id] = { day, acts, tot: dayTotals(day), burn: burnOf(acts) };
+  }));
+  return out;
+}
+async function renderClients() {
+  const ms = (await myMembers()).filter(m => m.active);
+  const ds = todayStr();
+  const [st, sess] = await Promise.all([clientStats(ms, ds), S.me.role === 'trainer' ? list(fb.query(C('sessions'), fb.where('trainerPid', '==', S.me.pid), fb.where('date', '==', ds))) : Promise.resolve([])]);
+  const rows = ms.map(m => {
+    const s = st[m.id]; const goal = num(m.targets?.kcal); const logged = s.tot.k > 0; const over = goal && s.tot.k > goal + (m.targets?.addBurn === false ? 0 : s.burn);
+    const appt = sess.filter(x => x.memberPid === m.id && x.status === 'planned').map(x => x.time).sort()[0];
+    const badge = appt ? ['gold', 'นัด ' + appt] : over ? ['alert', 'เกินเป้า ' + n0(s.tot.k - goal - (m.targets?.addBurn === false ? 0 : s.burn))] : !logged ? ['grey', 'ยังไม่บันทึกวันนี้'] : ['blue', 'ตามแผน'];
+    return { m, s, goal, logged, over, appt, badge };
+  });
+  const f = ui.filter;
+  const shown = rows.filter(r => f === 'all' || (f === 'care' && (!r.logged || r.over)) || (f === 'appt' && r.appt));
+  setMain(`<h1>ลูกค้า${S.me.role === 'owner' ? 'ทั้งหมด' : 'ของฉัน'}</h1><div class="small muted">${thDate(ds, true)} · ${ms.length} คน</div>
+    <section class="grid3"><div class="stat dark"><b>${rows.filter(r => r.appt).length}</b><span>นัดเทรนวันนี้</span></div><div class="stat"><b>${rows.filter(r => !r.logged).length}</b><span>ยังไม่บันทึกอาหาร</span></div><div class="stat"><b class="alert">${rows.filter(r => r.over).length}</b><span>กินเกินเป้า</span></div></section>
+    <div class="chips">${[['all', 'ทั้งหมด'], ['care', 'ต้องดูแล'], ['appt', 'นัดวันนี้']].map(([k, l]) => `<button class="chip" data-act="filter" data-v="${k}" aria-pressed="${f === k}">${l}</button>`).join('')}</div>
+    ${shown.length ? `<div class="list">${shown.map(r => `<button class="li" style="width:100%;border:none;border-bottom:1px solid var(--soft);background:#fff;text-align:left;cursor:pointer;flex-direction:column;align-items:stretch;gap:6px" data-act="openClient" data-id="${r.m.id}">
+      <div class="between"><b>${esc(r.m.name)}</b><span class="tag ${r.badge[0]}">${esc(r.badge[1])}</span></div>
+      <div class="bar"><i style="width:${r.goal ? Math.min(100, Math.round(r.s.tot.k / r.goal * 100)) : 0}%;background:${r.over ? '#C2410C' : '#1D3A5C'}"></i></div>
+      <span class="xs muted">กิน ${n0(r.s.tot.k)} / ${r.goal ? n0(r.goal) : '—'} kcal · เผาผลาญ ${n0(r.s.burn)}${S.me.role === 'owner' ? ' · โค้ช ' + esc(r.m.trainerName || '—') : ''}</span></button>`).join('')}</div>` : '<p class="small muted">ไม่มีลูกค้าในกลุ่มนี้</p>'}
+    ${ms.length ? '' : `<button class="btn gold" data-act="newAccount" data-v="member">+ สร้างบัญชีลูกค้า</button>`}`);
+}
+async function openClient(pid) { await person(pid, true); S.view = pid; ui.tab = 'today'; ui.date = todayStr(); ui.exDate = todayStr(); ui.wkSel = 0; render(); }
+
+/* ---------- เทรนเนอร์: ตารางงาน ---------- */
+async function trainerSessions() { return (await list(fb.query(C('sessions'), fb.where('trainerPid', '==', S.me.pid)))); }
+async function renderSchedule() {
+  const ws = weekStart(ui.schedDate); const days = [...Array(7)].map((_, i) => addDays(ws, i));
+  const all = (await trainerSessions()).filter(s => s.status !== 'cancelled');
+  const day = all.filter(s => s.date === ui.schedDate).sort((a, b) => a.time.localeCompare(b.time));
+  const now = todayStr() + nowHM();
+  const nextId = day.filter(s => s.status === 'planned' && (s.date + s.time) >= now)[0]?.id;
+  const logged = day.filter(s => s.status === 'logged').length;
+  setMain(`<div class="between"><h1>ตารางงานของฉัน</h1><div class="row"><button class="iconbtn" data-act="schedWeek" data-d="-7" aria-label="สัปดาห์ก่อน">‹</button><button class="iconbtn" data-act="schedWeek" data-d="7" aria-label="สัปดาห์ถัดไป">›</button></div></div>
+    <nav class="week" aria-label="เลือกวัน">${days.map(d => { const c = all.filter(s => s.date === d).length; return `<button class="day" data-act="schedDay" data-v="${d}" aria-pressed="${d === ui.schedDate}"><small>${TH_D[dowOf(d)]}</small><b>${+d.slice(8)}</b><em>${c ? c + ' นัด' : ''}</em></button>`; }).join('')}</nav>
+    <section class="grid3"><div class="stat dark"><b>${day.length}</b><span>นัด${ui.schedDate === todayStr() ? 'วันนี้' : 'วันนั้น'}</span></div><div class="stat"><b>${logged}</b><span>บันทึกแล้ว</span></div><div class="stat"><b class="alert">${day.length - logged}</b><span>ยังไม่บันทึก</span></div></section>
+    ${day.length ? day.map(s => { const nx = s.id === nextId; const done = s.status === 'logged';
+      return `<div class="card ${nx ? 'dark' : ''}" style="flex-direction:row;align-items:center;gap:12px"><div style="width:58px"><b style="font-size:18px">${esc(s.time)}</b><br><span class="xs" style="font-weight:700;color:${nx ? '#F0C24B' : done ? '#1D3A5C' : '#5E6470'}">${nx ? 'ถัดไป' : done ? 'เสร็จแล้ว' : 'รอเทรน'}</span></div>
+        <div style="flex:1;min-width:0"><b>${esc(s.memberName)}</b><div class="small ${nx ? 'muted' : 'muted'}">${esc(s.type)} · ${done ? 'บันทึกแล้ว' : 'รอเทรน'}${s.repeat ? ' · ทุกสัปดาห์' : ''}</div></div>
+        <div style="display:flex;flex-direction:column;gap:6px">${done ? `<button class="btn sm ghost" data-act="logSession" data-id="${s.id}">แก้ผล</button>` : `<button class="btn sm ${nx ? 'gold' : 'pri'}" data-act="logSession" data-id="${s.id}">บันทึกผล</button><button class="btn sm ghost" ${nx ? 'style="color:#fff;border-color:#C9D3DF;background:transparent"' : ''} data-act="cancelSession" data-id="${s.id}">ยกเลิกนัด</button>`}</div></div>`; }).join('') : '<p class="small muted">ไม่มีนัดในวันนี้</p>'}
+    <button class="btn gold block" data-act="newSession">+ เพิ่มนัดเทรน</button>`);
+}
+async function openNewSession() {
+  const ms = (await myMembers()).filter(m => m.active);
+  if (!ms.length) return toast('สร้างบัญชีลูกค้าก่อน แล้วค่อยเพิ่มนัด');
+  openSheet('เพิ่มนัดเทรน', `<label class="f">ลูกค้า<select class="in" id="nsMember">${ms.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></label>
+    <div class="grid2"><label class="f">วันที่<input class="in" type="date" id="nsDate" value="${ui.schedDate}"></label><label class="f">เวลา<input class="in" type="time" id="nsTime" value="18:00"></label></div>
+    <label class="f">ประเภท<select class="in" id="nsType">${SESSION_TYPES.map(t => `<option>${t}</option>`).join('')}</select></label>
+    <label class="row small" style="min-height:44px"><input type="checkbox" id="nsRepeat" style="width:22px;height:22px;accent-color:#14202E"> ทำซ้ำทุกสัปดาห์ วันและเวลาเดิม (8 สัปดาห์)</label>
+    <button class="btn pri block" data-act="saveSession">บันทึกนัด</button><p class="xs muted" style="margin:0">ลูกค้าจะเห็นนัดนี้ในแท็บออกกำลังกายและแท็บโค้ช</p>`, { kind: 'session', ms });
+}
+async function saveSession() {
+  const mid = $('#nsMember').value; const m = sheet.ms.find(x => x.id === mid); const date = $('#nsDate').value; const time = $('#nsTime').value || '18:00'; const type = $('#nsType').value; const rep = $('#nsRepeat').checked;
+  if (!date) return toast('เลือกวันที่');
+  const b = fb.writeBatch(db); const grp = rep ? 'g' + Date.now().toString(36) : null;
+  for (let i = 0; i < (rep ? 8 : 1); i++) b.set(fb.doc(C('sessions')), { trainerPid: S.me.pid, trainerName: S.me.name, memberPid: mid, memberName: m.name, date: addDays(date, 7 * i), time, type, status: 'planned', repeat: rep, group: grp, moves: [], createdAt: fb.serverTimestamp() });
+  await b.commit(); ui.schedDate = date; closeSheet(); toast(rep ? 'เพิ่มนัด 8 สัปดาห์แล้ว' : 'เพิ่มนัดแล้ว'); render();
+}
+
+/* ---------- เทรนเนอร์: บันทึกการเทรน ---------- */
+async function renderLog() {
+  if (!ui.log) {
+    const ds = todayStr(); const all = await trainerSessions();
+    const pending = all.filter(s => s.status === 'planned' && s.date <= ds).sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time)).slice(0, 12);
+    const ms = (await myMembers()).filter(m => m.active);
+    return setMain(`<h1>บันทึกการเทรน</h1><p class="small muted" style="margin:0">เลือกนัดที่เทรนแล้ว หรือบันทึกนอกตาราง ลูกค้าเห็นผลในแอปทันที</p>
+      <section style="display:flex;flex-direction:column;gap:8px"><h2>นัดที่ยังไม่บันทึกผล</h2>${pending.length ? `<div class="list">${pending.map(s => `<div class="li"><div class="grow"><b>${esc(s.memberName)}</b><div class="small muted">${thDate(s.date)} · ${esc(s.time)} · ${esc(s.type)}</div></div><button class="btn sm gold" data-act="logSession" data-id="${s.id}">บันทึกผล</button></div>`).join('')}</div>` : '<p class="small muted" style="margin:0">ไม่มีนัดค้าง</p>'}</section>
+      ${ms.length ? `<section class="card"><b>บันทึกนอกตาราง</b><label class="f">ลูกค้า<select class="in" id="lgMember">${ms.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></label><div class="grid2"><label class="f">วันที่<input class="in" type="date" id="lgDate" value="${ds}"></label><label class="f">เวลา<input class="in" type="time" id="lgTime" value="${nowHM()}"></label></div><button class="btn pri" data-act="logAdhoc">เริ่มบันทึก</button></section>` : ''}`);
+  }
+  const L = ui.log; let vol = 0, sets = 0;
+  L.moves.forEach(m => m.sets.forEach(x => { vol += (+x.r || 0) * (+x.kg || 0); sets++; }));
+  setMain(`<div class="between"><h1>บันทึกการเทรน</h1><button class="btn sm ghost" data-act="logCancel">ยกเลิก</button></div>
+    <section class="card"><b>${esc(L.memberName)}</b><span class="small muted">${thDate(L.date, true)} · ${esc(L.time)}</span></section>
+    <div class="chips">${SESSION_TYPES.map(t => `<button class="chip" data-act="logType" data-v="${t}" aria-pressed="${L.type === t}">${t}</button>`).join('')}</div>
+    <div class="between"><h2>ท่าที่เล่น</h2><span class="small muted">${L.moves.length} ท่า · ${sets} เซ็ต · ${n0(vol)} kg</span></div>
+    ${L.moves.map((m, mi) => { const top = Math.max(0, ...m.sets.map(x => +x.kg || 0)); const v = m.sets.reduce((a, x) => a + (+x.r || 0) * (+x.kg || 0), 0);
+      return `<section class="card"><div class="between" style="align-items:center"><div><b>${mi + 1}. ${esc(m.name)}</b><div class="xs muted">${m.sets.length} เซ็ต · หนักสุด ${r1(top)} kg · Volume ${n0(v)} kg</div></div><button class="iconbtn" data-act="logRmMove" data-i="${mi}" aria-label="ลบท่า ${esc(m.name)}">${svg('trash', 18)}</button></div>
+        <div class="sets xs muted"><span>เซ็ต</span><span>ครั้ง</span><span>น้ำหนัก (kg)</span><span></span></div>
+        ${m.sets.map((x, si) => `<div class="sets"><b class="small">เซ็ต ${si + 1}</b><input inputmode="numeric" data-set="r" data-mi="${mi}" data-si="${si}" value="${esc(x.r)}" aria-label="${esc(m.name)} เซ็ต ${si + 1} ครั้ง"><input inputmode="decimal" data-set="kg" data-mi="${mi}" data-si="${si}" value="${esc(x.kg)}" aria-label="${esc(m.name)} เซ็ต ${si + 1} น้ำหนัก"><button class="iconbtn" style="width:36px" data-act="logRmSet" data-mi="${mi}" data-si="${si}" aria-label="ลบเซ็ต ${si + 1}">×</button></div>`).join('')}
+        <button class="btn sm ghost" style="border-style:dashed" data-act="logAddSet" data-i="${mi}">+ เพิ่มเซ็ต (ก๊อปค่าเซ็ตล่าสุด)</button></section>`; }).join('')}
+    ${L.picking ? `<section class="card gold-edge"><b>เลือกท่าจากคลัง</b><div class="chips">${MOVES.map(m => `<button class="chip" data-act="logPick" data-v="${esc(m)}">${esc(m)}</button>`).join('')}</div>
+      <div class="row"><input class="in" id="logCustom" placeholder="หรือพิมพ์ชื่อท่าเอง" style="flex:1"><button class="btn pri" data-act="logCustom">เพิ่ม</button></div></section>` : ''}
+    <button class="btn" data-act="logPicking">${L.picking ? 'ปิดรายการท่า' : '+ เพิ่มท่า'}</button>
+    <div class="grid2"><label class="f">ระยะเวลา (นาที)<input class="in" id="lgMin" inputmode="numeric" value="${esc(L.min)}"></label><label class="f">เผาผลาญ kcal<input class="in" id="lgKcal" inputmode="numeric" value="${esc(L.kcal)}" placeholder="${n0(L.est)}"></label></div>
+    <div><div class="small" style="font-weight:600;margin-bottom:8px">รูป / วิดีโอท่า <span class="muted" style="font-weight:400">(ไม่บังคับ · รูปเท่านั้นในรอบนี้)</span></div><div class="thumbs" id="logThumbs">${thumbsHtml(L.ph, true)}<label class="addthumb">${svg('cam', 22)}แนบรูป<input type="file" accept="image/*" multiple hidden data-act="pickLogPhoto"></label></div></div>
+    <label class="f">โน้ตถึงลูกค้า<textarea class="in" id="lgNote">${esc(L.note)}</textarea></label>
+    <button class="btn gold block" data-act="logSave">บันทึกผลการเทรน</button>
+    <p class="xs muted center" style="margin:0">ลูกค้าเห็นในแอปทันที ส่วน LINE จะส่งหลังบันทึก ${S.config.workoutDelayMin || 60} นาที (เมื่อเปิดใช้ LINE แล้ว)</p>`);
+  fillThumbs();
+}
+function logForm() { const L = ui.log; if (!L) return; L.min = $('#lgMin')?.value ?? L.min; L.kcal = $('#lgKcal')?.value ?? L.kcal; L.note = $('#lgNote')?.value ?? L.note; }
+async function startLog(s) {
+  const m = await person(s.memberPid); const rows = await bodyRows(s.memberPid).catch(() => []);
+  const w = latestWeight(rows) || 65;
+  ui.log = { sid: s.id || null, memberPid: s.memberPid, memberName: s.memberName || m?.name || '', date: s.date, time: s.time, type: s.type || 'Full body', moves: (s.moves || []).map(x => ({ name: x.name, sets: x.sets.map(y => ({ ...y })) })), min: s.min ?? 60, kcal: s.kcal ?? '', note: s.note || '', ph: [...(s.ph || [])], picking: false, weight: w, est: Math.round(5 * w) };
+  ui.tab = 'log'; render();
+}
+async function saveLog() {
+  logForm(); const L = ui.log; const min = num(L.min) || 0; const kcal = num(L.kcal) ?? Math.round(5 * L.weight * (min / 60));
+  const moves = L.moves.map(m => ({ name: m.name, sets: m.sets.map(x => ({ r: num(x.r) || 0, kg: num(x.kg) || 0 })) })).filter(m => m.sets.length);
+  const ref = L.sid ? D('sessions', L.sid) : fb.doc(C('sessions'));
+  const data = { trainerPid: S.me.pid, trainerName: S.me.name, memberPid: L.memberPid, memberName: L.memberName, date: L.date, time: L.time, type: L.type, status: 'logged', moves, min, kcal: Math.round(kcal), note: L.note.trim(), ph: L.ph, loggedAt: fb.serverTimestamp(), notifyAfter: Date.now() + (S.config.workoutDelayMin || 60) * 60000, notified: false };
+  const b = fb.writeBatch(db);
+  b.set(ref, data, { merge: true });
+  b.set(D('people', L.memberPid, 'activities', 's_' + ref.id), { date: L.date, type: 'coach', name: `เทรนกับ ${S.me.name} · ${L.type}`, min, kcal: Math.round(kcal), source: 'coach', sid: ref.id, ph: L.ph, t: Date.now(), byUid: auth.currentUser.uid });
+  await b.commit(); ui.log = null; toast('บันทึกผลการเทรนแล้ว'); ui.tab = 'schedule'; render();
+}
+
+/* ---------- เทรนเนอร์: สรุปวันนี้ ---------- */
+function digestText(ms, st, ds) {
+  const lines = [`สรุปประจำวัน · ${thDate(ds)}`, `ลูกค้าของคุณ ${ms.length} คน`, ''];
+  for (const m of ms) {
+    const s = st[m.id]; const goal = num(m.targets?.kcal);
+    if (!s.tot.k) lines.push(`${m.name} — ยังไม่บันทึกอาหาร`);
+    else {
+      const diff = goal ? s.tot.k - goal : 0;
+      lines.push(`${m.name} — ${n0(s.tot.k)}${goal ? ' / ' + n0(goal) : ''} kcal${diff > 0 ? ` (+${n0(diff)})` : ''}`);
+      lines.push(`P ${n0(s.tot.p)} · C ${n0(s.tot.c)} · F ${n0(s.tot.f)} g`);
+      lines.push(MEALS.filter(x => s.tot.byMeal[x] != null || x !== 'ว่าง').map(x => `${x} ${s.tot.byMeal[x] != null ? n0(s.tot.byMeal[x]) : 'ยังไม่บันทึก'}`).join(' · '));
+    }
+    lines.push(s.acts.length ? `กิจกรรม: ${s.acts.map(a => `${a.name} ${n0(a.kcal)}`).join(' · ')} = เผาผลาญ ${n0(s.burn)} kcal` : 'กิจกรรม: ยังไม่มี');
+    lines.push('');
+  }
+  return lines.join('\n').trim();
+}
+async function renderSummary() {
+  const ms = (await myMembers()).filter(m => m.active); const ds = ui.sumDate; const st = await clientStats(ms, ds);
+  const txt = digestText(ms, st, ds); ui.digest = txt;
+  setMain(`${dateNav(ds, 'sumNav')}
+    <section class="card dark"><b class="xs gold">สรุปประจำวัน · ${thDate(ds)}</b><b style="font-size:16px">ลูกค้าของคุณ ${ms.length} คน</b><span class="xs muted">หน้านี้คือข้อความที่จะส่งเข้า LINE ตอน ${esc(S.config.digestTime || '21:00')} เมื่อเปิดใช้ LINE แล้ว</span></section>
+    <div class="list">${ms.map(m => { const s = st[m.id]; const goal = num(m.targets?.kcal); const diff = goal ? s.tot.k - goal : 0;
+      return `<div class="li" style="flex-direction:column;align-items:stretch;gap:4px"><div class="between"><b>${esc(m.name)}</b><b class="small ${!s.tot.k ? 'muted' : diff > 0 ? 'alert' : ''}">${s.tot.k ? n0(s.tot.k) + (goal ? ' / ' + n0(goal) : '') + ' kcal' + (diff > 0 ? ' (+' + n0(diff) + ')' : '') : 'ยังไม่บันทึกอาหาร'}</b></div>
+        ${s.tot.k ? `<span class="small">P ${n0(s.tot.p)} · C ${n0(s.tot.c)} · F ${n0(s.tot.f)} g</span><span class="small muted">${MEALS.filter(x => s.tot.byMeal[x] != null || x !== 'ว่าง').map(x => `${x} ${s.tot.byMeal[x] != null ? n0(s.tot.byMeal[x]) : 'ยังไม่บันทึก'}`).join(' · ')}</span>` : ''}
+        <span class="small blue">${s.acts.length ? 'กิจกรรม: ' + s.acts.map(a => esc(a.name) + ' ' + n0(a.kcal)).join(' · ') + ' = เผาผลาญ ' + n0(s.burn) + ' kcal' : 'กิจกรรม: ยังไม่มี'}</span></div>`; }).join('')}</div>
+    <button class="btn gold block" data-act="copyDigest">คัดลอกข้อความสรุป</button><p class="xs muted center" style="margin:0">ระหว่างที่ยังไม่เปิด LINE อัตโนมัติ คัดลอกไปวางใน LINE เองได้</p>`);
+}
+
+/* ---------- เจ้าของ ---------- */
+async function renderOverview() {
+  const [tr, ms] = await Promise.all([trainers(), myMembers()]);
+  const act = ms.filter(m => m.active); const st = await clientStats(act, todayStr());
+  const loggedToday = act.filter(m => st[m.id].tot.k > 0).length;
+  setMain(`<h1>ภาพรวมระบบ</h1><section class="grid3"><div class="stat dark"><b>${tr.filter(t => t.active).length}</b><span>เทรนเนอร์</span></div><div class="stat"><b>${act.length}</b><span>ลูกค้า</span></div><div class="stat"><b>${loggedToday}/${act.length}</b><span>บันทึกวันนี้</span></div></section>
+    <section style="display:flex;flex-direction:column;gap:8px"><h2>เทรนเนอร์</h2>${tr.length ? `<div class="list">${tr.map(t => `<div class="li"><div class="grow"><b>${esc(t.name)}</b><div class="xs muted">ลูกค้า ${ms.filter(m => m.trainerPid === t.id).length} คน · ${t.active ? 'ใช้งานอยู่' : 'ปิดบัญชี'}</div></div></div>`).join('')}</div>` : '<p class="small muted" style="margin:0">ยังไม่มีเทรนเนอร์ ไปที่แท็บ “เทรนเนอร์” เพื่อสร้างบัญชี PT-Plam</p>'}</section>`);
+}
+async function renderTrainers() {
+  const tr = await trainers(); const ms = await myMembers();
+  setMain(`<div class="between"><h1>เทรนเนอร์</h1><button class="btn sm gold" data-act="newAccount" data-v="trainer">+ สร้างบัญชีเทรนเนอร์</button></div>
+    <p class="small muted" style="margin:0">เทรนเนอร์เป็นผู้ดูแลฝ่ายงาน: สร้างบัญชีลูกค้า ตั้งรหัสใหม่ ตั้งเป้า จัดตาราง และบันทึกผลเทรนได้ แต่แก้การตั้งค่าแอปและเรื่องลับไม่ได้</p>
+    ${tr.length ? `<div class="list">${tr.map(t => `<div class="li"><div class="grow"><b>${esc(t.name)}</b><div class="xs muted">@${esc(t.username)} · ลูกค้า ${ms.filter(m => m.trainerPid === t.id).length} คน ${t.active ? '' : '· <span class="alert">ปิดบัญชี</span>'}</div></div><button class="btn sm ghost" data-act="manage" data-id="${t.id}">จัดการ</button></div>`).join('')}</div>` : ''}
+    <section style="display:flex;flex-direction:column;gap:8px"><div class="between"><h2>ลูกค้าทั้งหมด (${ms.length})</h2><button class="btn sm" data-act="newAccount" data-v="member">+ ลูกค้า</button></div>
+    ${ms.length ? `<div class="list">${ms.map(m => `<div class="li"><div class="grow"><b>${esc(m.name)}</b><div class="xs muted">@${esc(m.username)} · โค้ช ${esc(m.trainerName || '—')} ${m.active ? '' : '· <span class="alert">ปิดบัญชี</span>'}</div></div><button class="btn sm ghost" data-act="manage" data-id="${m.id}">จัดการ</button></div>`).join('')}</div>` : ''}</section>`);
+}
+async function renderSystem() {
+  const c = S.config; const ms = await myMembers(); const consent = ms.filter(m => m.consentAt).length;
+  setMain(`<h1>ระบบ</h1><p class="small muted" style="margin:0">เฉพาะเจ้าของระบบเท่านั้นที่เห็นหน้านี้</p>
+    <section class="card"><label class="f">ชื่อแอป<input class="in" id="cfName" value="${esc(c.name || 'The Olympic Club by PT-Plam')}"></label>
+      <label class="row small" style="min-height:44px"><input type="checkbox" id="cfAi" ${c.aiOn !== false ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> เปิดให้ AI อ่านรูป (ใบ InBody, หน้าจอนาฬิกา)</label>
+      <label class="f">รุ่น AI<input class="in" id="cfModel" value="${esc(c.aiModel || 'gemini-3.5-flash')}"></label>
+      <div class="grid2"><label class="f">เวลาส่งสรุปรายวัน<input class="in" type="time" id="cfTime" value="${esc(c.digestTime || '21:00')}"></label><label class="f">หน่วงส่งผลเทรน (นาที)<input class="in" id="cfDelay" inputmode="numeric" value="${esc(c.workoutDelayMin || 60)}"></label></div>
+      <button class="btn pri" data-act="saveConfig">บันทึกการตั้งค่า</button></section>
+    <section class="card"><b>แจ้งเตือน LINE</b><div class="card dark" style="flex-direction:row;align-items:center"><span style="width:10px;height:10px;border-radius:5px;background:#F0C24B"></span><span class="small">ตอนนี้: แจ้งเตือนในแอปเท่านั้น</span></div>
+      <p class="small muted" style="margin:0">การส่ง LINE อัตโนมัติ (สรุปรายวัน ${esc(c.digestTime || '21:00')} และผลเทรนหลังบันทึก ${esc(c.workoutDelayMin || 60)} นาที) ต้องอัปเกรดโปรเจกต์ Firebase เป็นแพ็กเกจ Blaze ก่อน จากนั้นจะเชื่อม OA ของระบบหรือของ PT-Plam ได้ที่นี่ รหัส OA จะเก็บแบบใส่ได้อย่างเดียว อ่านกลับไม่ได้</p>
+      <button class="btn" disabled>เชื่อม LINE OA (รอ Blaze)</button></section>
+    <section class="card"><div class="between"><span class="small muted">ความยินยอม PDPA</span><b>${consent} / ${ms.length} คน</b></div></section>`);
+}
+
+/* ---------- บัญชีผู้ใช้ ---------- */
+function genPw() { const a = 'abcdefghjkmnpqrstuvwxyz23456789'; let s = ''; for (let i = 0; i < 8; i++) s += a[Math.floor(Math.random() * a.length)]; return s; }
+async function openNewAccount(role) {
+  const tr = S.me.role === 'owner' ? (await trainers()).filter(t => t.active) : [];
+  if (role === 'member' && S.me.role === 'owner' && !tr.length) return toast('สร้างบัญชีเทรนเนอร์ก่อน แล้วค่อยสร้างลูกค้า');
+  openSheet(role === 'trainer' ? 'สร้างบัญชีเทรนเนอร์' : 'สร้างบัญชีลูกค้า', `
+    <label class="f">ชื่อที่แสดง<input class="in" id="naName" placeholder="${role === 'trainer' ? 'เช่น PT-Plam' : 'เช่น คุณเอ'}"></label>
+    <label class="f">ชื่อผู้ใช้ (ภาษาอังกฤษ ตัวเลข . _ -)<input class="in" id="naUser" autocapitalize="none" spellcheck="false" placeholder="เช่น ${role === 'trainer' ? 'ptplam' : 'member.a'}"></label>
+    <label class="f">รหัสผ่าน<div class="row"><input class="in" id="naPw" value="${genPw()}" style="flex:1"><button class="btn sm" data-act="regenPw">สุ่มใหม่</button></div></label>
+    ${role === 'member' && tr.length ? `<label class="f">โค้ชที่ดูแล<select class="in" id="naTrainer">${tr.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label>` : ''}
+    ${role === 'member' ? `<div class="grid2"><label class="f">เป้าพลังงาน (kcal)<input class="in" id="naKcal" inputmode="numeric"></label><label class="f">น้ำหนักตั้งต้น (kg)<input class="in" id="naW" inputmode="decimal"></label></div>` : ''}
+    <button class="btn pri block" data-act="createAccount" data-v="${role}">สร้างบัญชี</button>`, { kind: 'newacc', role, tr });
+}
+async function createAuthUser(username, pw, suffix) {
+  const a2 = secondaryAuth(); let email = `${username}${suffix ? '.' + suffix : ''}@${LOGIN_DOMAIN}`;
+  try { const c = await fb.createUserWithEmailAndPassword(a2, email, pw); return { uid: c.user.uid, email }; }
+  catch (e) {
+    if (String(e.code).includes('email-already-in-use')) { email = `${username}.${Date.now().toString(36)}@${LOGIN_DOMAIN}`; const c = await fb.createUserWithEmailAndPassword(a2, email, pw); return { uid: c.user.uid, email }; }
+    throw e;
+  } finally { try { await fb.signOut(a2); } catch (e) { } }
+}
+async function createAccount(role) {
+  const name = $('#naName').value.trim(); const username = $('#naUser').value.trim().toLowerCase(); const pw = $('#naPw').value.trim();
+  if (!name) return toast('ใส่ชื่อที่แสดง');
+  if (!/^[a-z0-9._-]{3,30}$/.test(username)) return toast('ชื่อผู้ใช้ใช้ a-z 0-9 . _ - ยาว 3–30 ตัว');
+  if (pw.length < 6) return toast('รหัสผ่านอย่างน้อย 6 ตัว');
+  if (await get(D('logins', username))) return toast('ชื่อผู้ใช้นี้มีคนใช้แล้ว');
+  const btn = document.querySelector('[data-act=createAccount]'); if (btn) { btn.disabled = true; btn.textContent = 'กำลังสร้าง…'; }
+  try {
+    let trainerPid = null, trainerName = null;
+    if (role === 'member') {
+      if (S.me.role === 'trainer') { trainerPid = S.me.pid; trainerName = S.me.name; }
+      else { trainerPid = $('#naTrainer').value; trainerName = sheet.tr.find(t => t.id === trainerPid)?.name || ''; }
+    }
+    const pref = fb.doc(C('people'));
+    const pdata = { role, name, username, active: true, trainerPid, trainerName, createdAt: fb.serverTimestamp(), createdBy: S.me.role };
+    if (role === 'member') { const k = num($('#naKcal').value); const w = num($('#naW').value); pdata.targets = k ? { kcal: k, addBurn: true } : {}; if (w) pdata.weight = w; }
+    await fb.setDoc(pref, pdata);
+    const { uid, email } = await createAuthUser(username, pw);
+    await fb.setDoc(D('accounts', uid), { pid: pref.id, role, username, at: fb.serverTimestamp() });
+    await fb.setDoc(D('logins', username), { email, pid: pref.id, role });
+    await fb.updateDoc(pref, { authUid: uid });
+    if (role === 'member' && pdata.weight) await fb.addDoc(C('people', pref.id, 'body'), { date: todayStr(), weight: pdata.weight, t: Date.now(), ph: [] });
+    showCredentials(name, username, pw, true);
+  } catch (e) { console.error(e); toast('สร้างบัญชีไม่สำเร็จ: ' + (e.code || e.message)); if (btn) { btn.disabled = false; btn.textContent = 'สร้างบัญชี'; } }
+}
+function appUrl() { return location.origin + location.pathname.replace(/[^/]*$/, ''); }
+function showCredentials(name, username, pw, isNew) {
+  const txt = `${S.config.name || 'The Olympic Club by PT-Plam'}\nเข้าใช้ที่: ${appUrl()}\nชื่อผู้ใช้: ${username}\nรหัสผ่าน: ${pw}`;
+  sheet = { ...(sheet || {}), cred: txt };
+  openSheet(isNew ? 'สร้างบัญชีแล้ว' : 'ตั้งรหัสใหม่แล้ว', `<p class="small" style="margin:0">ส่งข้อความนี้ให้ <b>${esc(name)}</b> ทาง LINE รหัสผ่านจะแสดงครั้งเดียว</p>
+    <textarea class="in" readonly style="min-height:120px">${esc(txt)}</textarea><button class="btn gold block" data-act="copyCred">คัดลอกข้อความ</button>`, { cred: txt });
+  render();
+}
+async function openManage(pid) {
+  const p = await person(pid, true); const tr = S.me.role === 'owner' && p.role === 'member' ? (await trainers()).filter(t => t.active) : [];
+  openSheet('จัดการบัญชี', `<section class="card"><b>${esc(p.name)}</b><span class="small muted">@${esc(p.username)} · ${p.role === 'trainer' ? 'เทรนเนอร์' : 'ลูกค้า'} · ${p.active ? 'ใช้งานอยู่' : 'ปิดบัญชี'}</span></section>
+    ${p.role === 'member' ? `<button class="btn" data-act="openClient" data-id="${pid}">เปิดดูข้อมูลของลูกค้า</button>` : ''}
+    ${tr.length ? `<label class="f">ย้ายโค้ชที่ดูแล<select class="in" id="mgTrainer">${tr.map(t => `<option value="${t.id}" ${t.id === p.trainerPid ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label><button class="btn" data-act="moveTrainer" data-id="${pid}">บันทึกการย้าย</button>` : ''}
+    <button class="btn" data-act="resetPw" data-id="${pid}">ตั้งรหัสผ่านใหม่</button>
+    <button class="btn ${p.active ? 'danger' : 'pri'}" data-act="toggleActive" data-id="${pid}">${p.active ? 'ปิดบัญชี (เข้าใช้ไม่ได้)' : 'เปิดบัญชีอีกครั้ง'}</button>
+    ${S.me.role === 'owner' ? '<p class="xs muted" style="margin:0">การลบข้อมูลถาวรทำได้ที่ Firebase Console โดยเจ้าของระบบเท่านั้น</p>' : '<p class="xs muted" style="margin:0">การลบข้อมูลถาวรทำได้เฉพาะเจ้าของระบบ</p>'}`, { kind: 'manage', pid });
+}
+async function resetPw(pid) {
+  const p = await person(pid, true); const pw = genPw();
+  if (!confirm(`ตั้งรหัสผ่านใหม่ให้ ${p.name}? รหัสเดิมจะใช้ไม่ได้ทันที`)) return;
+  const { uid, email } = await createAuthUser(p.username, pw, Date.now().toString(36));
+  await fb.setDoc(D('accounts', uid), { pid, role: p.role, username: p.username, at: fb.serverTimestamp() });
+  await fb.setDoc(D('logins', p.username), { email, pid, role: p.role });
+  if (p.authUid) { try { await fb.deleteDoc(D('accounts', p.authUid)); } catch (e) { console.warn(e); } }
+  await fb.updateDoc(D('people', pid), { authUid: uid });
+  S.cache.delete('p:' + pid); showCredentials(p.name, p.username, pw, false);
+}
+
+/* ============ การตอบสนองปุ่ม ============ */
+async function onClick(e) {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const a = el.dataset.act;
+  if (a === 'sheetBg') { if (e.target === el) closeSheet(); return; }
+  if (el.tagName === 'INPUT' || el.tagName === 'SELECT') return;
+  e.preventDefault();
+  try { await (ACTS[a] ? ACTS[a](el) : null); } catch (err) { console.error(err); toast('ทำรายการไม่สำเร็จ: ' + (err.code || err.message)); }
+}
+const ACTS = {
+  login: doLogin, ownerLogin, logout, reload: () => render(), closeSheet,
+  consent: async () => { await fb.updateDoc(D('people', S.me.pid), { consentAt: fb.serverTimestamp() }); S.me.person.consentAt = true; startApp(); },
+  tab: el => { if (el.dataset.v === 'log' && S.me.role === 'trainer' && !viewingClient()) ui.log = ui.log; ui.tab = el.dataset.v; window.scrollTo(0, 0); render(); },
+  exitClient: () => { S.view = null; ui.tab = 'clients'; render(); },
+  dayNav: el => { const d = +el.dataset.d; ui.date = d === 0 ? todayStr() : addDays(ui.date, d); render(); },
+  sumNav: el => { const d = +el.dataset.d; ui.sumDate = d === 0 ? todayStr() : addDays(ui.sumDate, d); render(); },
+  exWeek: el => { ui.exDate = addDays(ui.exDate, +el.dataset.d); render(); },
+  exDay: el => { ui.exDate = el.dataset.v; render(); },
+  schedWeek: el => { ui.schedDate = addDays(ui.schedDate, +el.dataset.d); render(); },
+  schedDay: el => { ui.schedDate = el.dataset.v; render(); },
+  filter: el => { ui.filter = el.dataset.v; render(); },
+  openClient: el => { closeSheet(); return openClient(el.dataset.id); },
+  water: async el => { const v = +el.dataset.v; await mutateDay(S.view, ui.date, d => { d.water = Math.max(0, (+d.water || 0) + v); }); render(); },
+  rmFood: async el => { if (!confirm('ลบรายการนี้?')) return; const m = el.dataset.m, i = +el.dataset.i; await mutateDay(S.view, ui.date, d => { (d.meals[m] || []).splice(i, 1); }); render(); },
+  addFood: el => { openSheet('เพิ่มอาหาร', '', { kind: 'food', meal: el.dataset.m, mode: 'db', q: '', pick: null, qty: null, mf: {}, ph: [] }); refreshSheet(foodSheetBody()); },
+  foodMode: el => { sheet.mode = el.dataset.v; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); },
+  pickFood: el => { sheet.pick = el.dataset.id; sheet.qty = null; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); $('#fQty')?.focus(); },
+  saveFood,
+  saveCoachNote: async () => { const v = $('#coachNote').value.trim(); await mutateDay(S.view, ui.date, d => { d.coachNote = v; }); toast('บันทึกโน้ตแล้ว'); render(); },
+  editTargets: async () => {
+    const p = await person(S.view, true); const t = p.targets || {};
+    openSheet('เป้าหมายของ ' + p.name, `<div class="grid2"><label class="f">พลังงาน (kcal)<input class="in" id="tK" inputmode="numeric" value="${esc(t.kcal ?? '')}"></label><label class="f">น้ำ (มล.)<input class="in" id="tW" inputmode="numeric" value="${esc(t.water ?? 2500)}"></label>
+      <label class="f">โปรตีน (g)<input class="in" id="tP" inputmode="numeric" value="${esc(t.p ?? '')}"></label><label class="f">คาร์บ (g)<input class="in" id="tC" inputmode="numeric" value="${esc(t.c ?? '')}"></label><label class="f">ไขมัน (g)<input class="in" id="tF" inputmode="numeric" value="${esc(t.f ?? '')}"></label></div>
+      <label class="row small" style="min-height:44px"><input type="checkbox" id="tB" ${t.addBurn !== false ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> นับแคลที่เผาผลาญคืนให้ลูกค้า</label>
+      <button class="btn pri block" data-act="saveTargets">บันทึกเป้าหมาย</button>`, { kind: 'targets' });
+  },
+  saveTargets: async () => {
+    const t = { kcal: num($('#tK').value), water: num($('#tW').value), p: num($('#tP').value), c: num($('#tC').value), f: num($('#tF').value), addBurn: $('#tB').checked };
+    Object.keys(t).forEach(k => t[k] == null && delete t[k]);
+    await fb.updateDoc(D('people', S.view), { targets: t }); S.cache.delete('p:' + S.view); closeSheet(); toast('บันทึกเป้าหมายแล้ว'); render();
+  },
+  addAct: openAddAct,
+  actType: el => { readActForm(); sheet.type = el.dataset.v; refreshSheet(actSheetBody()); fillThumbs($('#sheetBody')); },
+  actMode: el => { readActForm(); sheet.mode = el.dataset.v; refreshSheet(actSheetBody()); fillThumbs($('#sheetBody')); },
+  saveAct,
+  aiWatch: async el => {
+    readActForm(); el.disabled = true; el.textContent = 'AI กำลังอ่านรูป…';
+    try {
+      const r = await aiRead('watch', sheet.lastImg);
+      if (r.activity && ACT[r.activity]) sheet.type = r.activity;
+      if (num(r.minutes)) sheet.min = Math.round(num(r.minutes));
+      if (num(r.kcal)) { sheet.kcal = Math.round(num(r.kcal)); sheet.mode = 'manual'; }
+      sheet.aiMsg = (num(r.minutes) || num(r.kcal)) ? `AI กรอกให้แล้ว ${num(r.minutes) ? Math.round(num(r.minutes)) + ' นาที' : ''} ${num(r.kcal) ? '· ' + Math.round(num(r.kcal)) + ' kcal' : ''} ตรวจก่อนบันทึก` : 'AI อ่านตัวเลขจากรูปนี้ไม่ได้ กรอกเองได้เลย';
+    } catch (err) { console.error(err); sheet.aiMsg = 'AI อ่านไม่สำเร็จ (' + (err.message || err).toString().slice(0, 60) + ')'; }
+    refreshSheet(actSheetBody()); fillThumbs($('#sheetBody'));
+  },
+  rmAct: async el => { if (!confirm('ลบกิจกรรมนี้?')) return; await fb.deleteDoc(D('people', S.view, 'activities', el.dataset.id)); render(); },
+  wkSel: el => { ui.wkSel = +el.dataset.v; render(); },
+  addBody: el => { openSheet(el.dataset.v === 'scan' ? 'เพิ่มผลสแกน' : 'บันทึกน้ำหนัก', '', { kind: 'body', mode: el.dataset.v, v: { date: todayStr() }, ph: [], lastImg: null }); refreshSheet(bodySheetBody()); },
+  aiInbody: async el => {
+    readBodyForm(); el.disabled = true; el.textContent = 'AI กำลังอ่านใบผล…';
+    try {
+      const r = await aiRead('inbody', sheet.lastImg); const keys = [];
+      for (const [k] of BODY_FIELDS) if (num(r[k]) != null) { sheet.v[k] = num(r[k]); keys.push(k); }
+      if (r.date && /^\d{4}-\d{2}-\d{2}$/.test(r.date)) sheet.v.date = r.date;
+      sheet.aiKeys = keys; sheet.aiMsg = keys.length ? `AI กรอกให้แล้ว ${keys.length} ช่อง` : 'AI อ่านตัวเลขจากรูปนี้ไม่ได้ กรอกเองได้เลย';
+    } catch (err) { console.error(err); sheet.aiMsg = 'AI อ่านไม่สำเร็จ (' + (err.message || err).toString().slice(0, 60) + ')'; }
+    refreshSheet(bodySheetBody()); fillThumbs($('#sheetBody'));
+  },
+  saveBody,
+  rmBody: async el => { if (!confirm('ลบรายการนี้?')) return; await fb.deleteDoc(D('people', S.view, 'body', el.dataset.id)); render(); },
+  rmPhoto: el => { const i = +el.dataset.i; if (sheet?.ph) { sheet.ph.splice(i, 1); $('#thumbs').outerHTML = photoPickerKeep(); fillThumbs($('#sheetBody')); } else if (ui.log) { logForm(); ui.log.ph.splice(i, 1); render(); } },
+  viewPhoto: async el => { const d = await photoData(el.dataset.id); const w = window.open(); if (w) { w.document.write(`<title>รูป</title><body style="margin:0;background:#111"><img src="${d}" style="max-width:100%;display:block;margin:auto">`); } },
+  newSession: openNewSession, saveSession,
+  cancelSession: async el => { if (!confirm('ยกเลิกนัดนี้?')) return; await fb.updateDoc(D('sessions', el.dataset.id), { status: 'cancelled', trainerPid: S.me.pid }); render(); },
+  logSession: async el => { const s = await get(D('sessions', el.dataset.id)); await startLog(s); },
+  logAdhoc: async () => { const mid = $('#lgMember').value; const m = await person(mid); await startLog({ memberPid: mid, memberName: m.name, date: $('#lgDate').value, time: $('#lgTime').value || nowHM(), type: 'Full body' }); },
+  logCancel: () => { if (confirm('ยกเลิกการบันทึกนี้?')) { ui.log = null; render(); } },
+  logType: el => { logForm(); ui.log.type = el.dataset.v; render(); },
+  logPicking: () => { logForm(); ui.log.picking = !ui.log.picking; render(); },
+  logPick: el => { logForm(); ui.log.moves.push({ name: el.dataset.v, sets: [{ r: 10, kg: 0 }] }); ui.log.picking = false; render(); },
+  logCustom: () => { logForm(); const v = $('#logCustom').value.trim(); if (!v) return; ui.log.moves.push({ name: v, sets: [{ r: 10, kg: 0 }] }); ui.log.picking = false; render(); },
+  logAddSet: el => { logForm(); const m = ui.log.moves[+el.dataset.i]; const l = m.sets[m.sets.length - 1] || { r: 10, kg: 0 }; m.sets.push({ ...l }); render(); },
+  logRmSet: el => { logForm(); ui.log.moves[+el.dataset.mi].sets.splice(+el.dataset.si, 1); render(); },
+  logRmMove: el => { logForm(); if (confirm('ลบท่านี้?')) { ui.log.moves.splice(+el.dataset.i, 1); render(); } },
+  logSave: saveLog,
+  copyDigest: async () => { try { await navigator.clipboard.writeText(ui.digest || ''); toast('คัดลอกแล้ว ไปวางใน LINE ได้เลย'); } catch (e) { toast('คัดลอกไม่ได้ ลองกดค้างที่ข้อความแทน'); } },
+  newAccount: el => openNewAccount(el.dataset.v),
+  regenPw: () => { $('#naPw').value = genPw(); },
+  createAccount: el => createAccount(el.dataset.v),
+  copyCred: async () => { try { await navigator.clipboard.writeText(sheet.cred); toast('คัดลอกแล้ว'); } catch (e) { toast('คัดลอกไม่ได้ กดค้างที่ข้อความแทน'); } },
+  manage: el => openManage(el.dataset.id),
+  resetPw: el => resetPw(el.dataset.id),
+  toggleActive: async el => { const p = await person(el.dataset.id, true); if (!confirm(p.active ? `ปิดบัญชี ${p.name}? เข้าใช้งานไม่ได้จนกว่าจะเปิดอีกครั้ง` : `เปิดบัญชี ${p.name} อีกครั้ง?`)) return; await fb.updateDoc(D('people', el.dataset.id), { active: !p.active }); S.cache.delete('p:' + el.dataset.id); closeSheet(); toast('บันทึกแล้ว'); render(); },
+  moveTrainer: async el => { const tid = $('#mgTrainer').value; const tr = await person(tid, true); await fb.updateDoc(D('people', el.dataset.id), { trainerPid: tid, trainerName: tr.name }); S.cache.delete('p:' + el.dataset.id); closeSheet(); toast('ย้ายโค้ชแล้ว'); render(); },
+  saveConfig: async () => {
+    const c = { name: $('#cfName').value.trim() || 'The Olympic Club by PT-Plam', aiOn: $('#cfAi').checked, aiModel: $('#cfModel').value.trim() || 'gemini-3.5-flash', digestTime: $('#cfTime').value || '21:00', workoutDelayMin: num($('#cfDelay').value) || 60 };
+    await fb.setDoc(D('config', 'app'), c, { merge: true }); Object.assign(S.config, c); toast('บันทึกการตั้งค่าแล้ว');
+  }
+};
+function photoPickerKeep() { return `<div class="thumbs" id="thumbs">${thumbsHtml(sheet?.ph, true)}<label class="addthumb">${svg('cam', 22)}แนบรูป<input type="file" accept="image/*" multiple hidden data-act="pickPhoto"></label></div>`; }
+async function onChange(e) {
+  const el = e.target;
+  if (el.dataset?.act === 'pickPhoto' && el.files?.length) {
+    const pid = S.view; const files = [...el.files]; toast('กำลังแนบรูป…', 8000);
+    for (const f of files) { try { const d = await compress(f); const id = await savePhoto(pid, d); sheet.ph.push(id); sheet.lastImg = d; } catch (err) { console.error(err); toast('แนบรูปไม่สำเร็จ'); } }
+    toast('แนบรูปแล้ว');
+    if (sheet.kind === 'act') { readActForm(); refreshSheet(actSheetBody()); }
+    else if (sheet.kind === 'body') { readBodyForm(); refreshSheet(bodySheetBody()); }
+    else if (sheet.kind === 'food') { $('#thumbs').outerHTML = photoPickerKeep(); }
+    fillThumbs($('#sheetBody')); return;
+  }
+  if (el.dataset?.act === 'pickLogPhoto' && el.files?.length) {
+    logForm(); toast('กำลังแนบรูป…', 8000);
+    for (const f of [...el.files]) { try { const d = await compress(f); ui.log.ph.push(await savePhoto(ui.log.memberPid, d)); } catch (err) { console.error(err); toast('แนบรูปไม่สำเร็จ'); } }
+    toast('แนบรูปแล้ว'); render(); return;
+  }
+  if (el.dataset?.act === 'wkMove') { ui.wkMove = el.value; render(); return; }
+  if (el.dataset?.set && ui.log) { const m = ui.log.moves[+el.dataset.mi]; m.sets[+el.dataset.si][el.dataset.set] = el.value; return; }
+  if (el.id === 'fQty' && sheet) { sheet.qty = el.value; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); return; }
+  if ((el.id === 'aMin') && sheet?.kind === 'act' && sheet.mode === 'auto') { readActForm(); refreshSheet(actSheetBody()); fillThumbs($('#sheetBody')); }
+}
+function onInput(e) {
+  const el = e.target;
+  if (el.id === 'fSearch' && sheet) { sheet.q = el.value; sheet.pick = null; const pos = el.selectionStart; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); const n = $('#fSearch'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) { } }
+  if (el.dataset?.set && ui.log) { const m = ui.log.moves[+el.dataset.mi]; m.sets[+el.dataset.si][el.dataset.set] = el.value; }
+}
+function onKey(e) { if (e.key === 'Enter' && (e.target.id === 'lgPass' || e.target.id === 'lgUser')) doLogin(); if (e.key === 'Escape' && sheet) closeSheet(); }
+
+export const __test = { S, ui, dayTotals, foodCalc, digestText, addDays, weekStart, thDate, lineChart, render, ACTS, onInput, onChange, setFb: (f, d, a) => { fb = f; db = d; auth = a; } };
+if (typeof window !== 'undefined' && !window.__NO_BOOT__) {
+  document.addEventListener('click', onClick); document.addEventListener('change', onChange); document.addEventListener('input', onInput); document.addEventListener('keydown', onKey);
+  boot();
+}

@@ -1,0 +1,12 @@
+{
+  "name": "The Olympic Club by PT-Plam",
+  "short_name": "Olympic Club",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#14202E",
+  "theme_color": "#14202E",
+  "icons": [
+    { "src": "img/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
+    { "src": "img/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

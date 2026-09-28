@@ -254,7 +254,7 @@ async function aiRead(kind, dataUrl) {
   if (!fb.aiMod) {
     if (!fb.appCheck && RECAPTCHA_SITE_KEY) {
       const ac = await import(FBV + 'firebase-app-check.js');
-      fb.appCheck = ac.initializeAppCheck(app, { provider: new ac.ReCaptchaV3Provider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true });
+      fb.appCheck = ac.initializeAppCheck(app, { provider: new ac.ReCaptchaEnterpriseProvider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true });
     }
     const m = await import(FBV + 'firebase-ai.js'); fb.aiMod = m; fb.ai = m.getAI(app, { backend: new m.GoogleAIBackend() }); }
   const model = fb.aiMod.getGenerativeModel(fb.ai, { model: S.config.aiModel || 'gemini-3.5-flash', generationConfig: { responseMimeType: 'application/json' } });

@@ -1,9 +1,11 @@
 rules_version = '2';
-// The Olympic Club by PT-Plam — สิทธิ์การเข้าถึงข้อมูล
-// เจ้าของระบบ  = บัญชี Google ด้านล่าง เห็นและแก้ได้ทุกอย่าง รวมถึงการตั้งค่าที่เป็นความลับ
-// เทรนเนอร์    = ผู้ดูแลฝ่ายงาน: จัดการลูกค้าของตัวเอง (สร้างบัญชี ตั้งรหัสใหม่ ปิดบัญชี เป้าหมาย ตารางเทรน ผลเทรน)
-//                แต่แก้การตั้งค่าแอป ลบข้อมูลถาวร หรือสร้างเทรนเนอร์คนอื่นไม่ได้
-// ลูกค้า       = เห็นและแก้ได้เฉพาะข้อมูลของตัวเอง
+// The Olympic Club by PT-Palm — สิทธิ์การเข้าถึงข้อมูล
+// เจ้าของระบบ       = บัญชี Google ด้านล่าง เห็นและแก้ได้ทุกอย่าง รวมถึงการตั้งค่าที่เป็นความลับ
+// หัวหน้าเทรนเนอร์  = เทรนเนอร์ที่เจ้าของให้สิทธิ์ (canManageTrainers) สร้างบัญชีเทรนเนอร์ พักงาน/เปิดใช้งาน ตั้งรหัสใหม่
+//                     ย้ายลูกค้าระหว่างเทรนเนอร์ และลบเทรนเนอร์ที่พักงานแล้ว (จัดการตัวเองหรือหัวหน้าคนอื่นไม่ได้)
+// เทรนเนอร์         = ผู้ดูแลฝ่ายงาน: จัดการลูกค้าของตัวเอง (สร้างบัญชี ตั้งรหัสใหม่ ปิดบัญชี เป้าหมาย ตารางเทรน ผลเทรน)
+//                     แต่แก้การตั้งค่าแอป ลบข้อมูลถาวร หรือสร้างเทรนเนอร์คนอื่นไม่ได้
+// ลูกค้า            = เห็นและแก้ได้เฉพาะข้อมูลของตัวเอง
 service cloud.firestore {
   match /databases/{database}/documents {
 
@@ -18,9 +20,15 @@ service cloud.firestore {
     function person(pid) { return get(/databases/$(database)/documents/people/$(pid)).data; }
     function activeSelf() { return hasAcct() && person(acct().pid).active == true; }
     function isTrainer() { return activeSelf() && acct().role == 'trainer' && person(acct().pid).role == 'trainer'; }
+    function isHead() { return isTrainer() && person(acct().pid).get('canManageTrainers', false) == true; }
     function isSelf(pid) { return activeSelf() && acct().pid == pid; }
     function isCoachOf(pid) { return isTrainer() && person(pid).trainerPid == acct().pid; }
     function canAccess(pid) { return isOwner() || isSelf(pid) || isCoachOf(pid); }
+    // เทรนเนอร์ที่หัวหน้าจัดการได้: ไม่ใช่ตัวเอง และไม่ใช่หัวหน้าเทรนเนอร์
+    function headManages(pid) {
+      return isHead() && pid != acct().pid && person(pid).role == 'trainer'
+        && person(pid).get('canManageTrainers', false) == false;
+    }
 
     // ค่าตั้งแอป: ทุกคนที่ล็อกอินอ่านได้ เจ้าของแก้ได้คนเดียว
     match /config/{id} {
@@ -39,34 +47,55 @@ service cloud.firestore {
       allow get: if true;
       allow list: if false;
       allow create: if isOwner()
-        || (isTrainer() && request.resource.data.role == 'member' && isCoachOf(request.resource.data.pid));
+        || (isTrainer() && request.resource.data.role == 'member' && isCoachOf(request.resource.data.pid))
+        || (request.resource.data.role == 'trainer' && headManages(request.resource.data.pid));
       allow update: if isOwner()
         || (isTrainer() && resource.data.role == 'member' && request.resource.data.role == 'member'
-            && request.resource.data.pid == resource.data.pid && isCoachOf(resource.data.pid));
-      allow delete: if isOwner() || (isTrainer() && resource.data.role == 'member' && isCoachOf(resource.data.pid));
+            && request.resource.data.pid == resource.data.pid && isCoachOf(resource.data.pid))
+        || (resource.data.role == 'trainer' && request.resource.data.role == 'trainer'
+            && request.resource.data.pid == resource.data.pid && headManages(resource.data.pid));
+      allow delete: if isOwner()
+        || (isTrainer() && resource.data.role == 'member' && isCoachOf(resource.data.pid))
+        || (resource.data.role == 'trainer' && headManages(resource.data.pid));
     }
 
     // บัญชีเข้าระบบ (uid) -> คนในระบบ (pid)
     match /accounts/{uid} {
       allow read: if isOwner() || (signedIn() && request.auth.uid == uid)
-        || (isTrainer() && resource.data.role == 'member' && isCoachOf(resource.data.pid));
+        || (isTrainer() && resource.data.role == 'member' && isCoachOf(resource.data.pid))
+        || (resource.data.role == 'trainer' && headManages(resource.data.pid));
       allow create: if isOwner()
-        || (isTrainer() && request.resource.data.role == 'member' && isCoachOf(request.resource.data.pid));
-      allow delete: if isOwner() || (isTrainer() && resource.data.role == 'member' && isCoachOf(resource.data.pid));
+        || (isTrainer() && request.resource.data.role == 'member' && isCoachOf(request.resource.data.pid))
+        || (request.resource.data.role == 'trainer' && headManages(request.resource.data.pid));
+      allow delete: if isOwner()
+        || (isTrainer() && resource.data.role == 'member' && isCoachOf(resource.data.pid))
+        || (resource.data.role == 'trainer' && headManages(resource.data.pid));
       allow update: if false;
     }
 
     // คนในระบบ: เทรนเนอร์และลูกค้า
     match /people/{pid} {
-      allow get: if canAccess(pid) || isSelf(pid);
-      allow list: if isOwner() || (isTrainer() && resource.data.trainerPid == acct().pid);
+      allow get: if canAccess(pid) || isHead();
+      allow list: if isOwner() || isHead() || (isTrainer() && resource.data.trainerPid == acct().pid);
       allow create: if isOwner()
-        || (isTrainer() && request.resource.data.role == 'member' && request.resource.data.trainerPid == acct().pid);
+        || (isTrainer() && request.resource.data.role == 'member' && request.resource.data.trainerPid == acct().pid)
+        // หัวหน้าสร้างเทรนเนอร์ใหม่ได้ แต่ให้สิทธิ์หัวหน้าไม่ได้ (เจ้าของเท่านั้น)
+        || (isHead() && request.resource.data.role == 'trainer' && request.resource.data.active == true
+            && request.resource.data.get('canManageTrainers', false) == false);
       allow update: if isOwner()
+        // หัวหน้า: ย้ายลูกค้าไปอยู่กับเทรนเนอร์ที่เปิดใช้งานอยู่
+        || (isHead() && resource.data.role == 'member'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trainerPid', 'trainerName'])
+            && person(request.resource.data.trainerPid).role == 'trainer'
+            && person(request.resource.data.trainerPid).active == true)
         || (isCoachOf(pid) && resource.data.role == 'member' && request.resource.data.role == 'member'
             && request.resource.data.trainerPid == resource.data.trainerPid)
-        || (isSelf(pid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['consentAt', 'lastSeen']));
-      allow delete: if isOwner();
+        || (isSelf(pid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['consentAt', 'lastSeen']))
+        // หัวหน้า: พักงาน/เปิดใช้งาน และตั้งรหัสใหม่ให้เทรนเนอร์
+        || (headManages(pid) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['active', 'authUid']));
+      // ลบเทรนเนอร์ได้เฉพาะที่พักงานแล้ว (แอปตรวจว่าย้ายลูกค้าออกหมดแล้วก่อนลบ)
+      allow delete: if (isOwner() && (resource.data.role != 'trainer' || resource.data.active == false))
+        || (headManages(pid) && resource.data.active == false);
 
       // ข้อมูลรายวัน กิจกรรม ผลวัดร่างกาย ของแต่ละคน
       match /{sub}/{doc} {
@@ -74,10 +103,11 @@ service cloud.firestore {
       }
     }
 
-    // นัดเทรนและผลการเทรน
+    // นัดเทรนและผลการเทรน (โค้ชคนปัจจุบันเห็นประวัติเทรนของลูกค้าที่ย้ายมาด้วย)
     match /sessions/{sid} {
       allow read: if isOwner()
         || (isTrainer() && resource.data.trainerPid == acct().pid)
+        || isCoachOf(resource.data.memberPid)
         || (activeSelf() && resource.data.memberPid == acct().pid);
       allow create: if isOwner()
         || (isTrainer() && request.resource.data.trainerPid == acct().pid && isCoachOf(request.resource.data.memberPid));

@@ -1,9 +1,9 @@
-// The Olympic Club by PT-Plam — แอปติดตามอาหารและการเทรน (ลูกค้า / เทรนเนอร์ / เจ้าของระบบ)
+// The Olympic Club by PT-Palm — แอปติดตามอาหารและการเทรน (ลูกค้า / เทรนเนอร์ / เจ้าของระบบ)
 import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN, RECAPTCHA_SITE_KEY } from './firebase-config.js?v=20260929b';
 import { FOODS, FOOD, MEALS, TH_M } from './foods.js?v=20260929a';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20260929a';
+const VER = '20260929e';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -67,8 +67,17 @@ let sheet = null; // ข้อมูลของหน้าต่างที�
 function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), ms); }
 function setMain(html) { $('#main').innerHTML = html; }
 function isStaff() { return S.me && (S.me.role === 'owner' || S.me.role === 'trainer'); }
+// หัวหน้าเทรนเนอร์ = เทรนเนอร์ที่เจ้าของระบบให้สิทธิ์สร้าง/พักงาน/ลบเทรนเนอร์ และย้ายลูกค้าระหว่างเทรนเนอร์
+function isHead() { return S.me?.role === 'trainer' && S.me.person?.canManageTrainers === true; }
+function canManageTeam() { return S.me?.role === 'owner' || isHead(); }
+// เทรนเนอร์คนนี้ถูกจัดการโดยผู้ใช้ปัจจุบันได้ไหม (หัวหน้าจัดการตัวเองหรือหัวหน้าคนอื่นไม่ได้)
+function canManageTrainer(t) { if (S.me?.role === 'owner') return true; return isHead() && t.role === 'trainer' && !t.canManageTrainers && t.id !== S.me.pid; }
 function viewingClient() { return isStaff() && !!S.view; }
-function roleTabs() { return (S.me.role === 'member' || viewingClient()) ? TABS.member : TABS[S.me.role]; }
+function roleTabs() {
+  if (S.me.role === 'member' || viewingClient()) return TABS.member;
+  if (isHead()) return [...TABS.trainer.slice(0, 4), ['team', 'ทีม', 'person'], TABS.trainer[4]];
+  return TABS[S.me.role];
+}
 function renderTabs() {
   const bar = $('#tabbar'); const tabs = roleTabs();
   bar.hidden = false;
@@ -143,7 +152,7 @@ async function handleUser(u) {
   if ((u.email || '').toLowerCase() === OWNER_EMAIL && u.emailVerified) {
     S.me = { role: 'owner', name: 'เจ้าของระบบ', pid: null, uid: u.uid };
     S.config = (await get(D('config', 'app'))) || {};
-    if (!S.config.createdAt) { S.config = { name: 'The Olympic Club by PT-Plam', aiOn: true, aiModel: 'gemini-3.5-flash', digestTime: '21:00', workoutDelayMin: 60, createdAt: fb.serverTimestamp() }; await fb.setDoc(D('config', 'app'), S.config, { merge: true }); }
+    if (!S.config.createdAt) { S.config = { name: 'The Olympic Club by PT-Palm', aiOn: true, aiModel: 'gemini-3.5-flash', digestTime: '21:00', workoutDelayMin: 60, createdAt: fb.serverTimestamp() }; await fb.setDoc(D('config', 'app'), S.config, { merge: true }); }
   } else {
     const acc = await get(D('accounts', u.uid));
     if (!acc) { S.me = null; return renderLogin('บัญชีนี้ยังไม่ได้รับสิทธิ์ใช้งาน ติดต่อโค้ชหรือเจ้าของระบบ'); }
@@ -184,9 +193,14 @@ async function actsRange(pid, a, b) {
 async function bodyRows(pid) { return (await list(C('people', pid, 'body'))).sort((a, b) => (a.date + (a.t || '')).localeCompare(b.date + (b.t || ''))); }
 async function sessionsFor(pid) {
   let q;
-  if (S.me.role === 'trainer') q = fb.query(C('sessions'), fb.where('trainerPid', '==', S.me.pid), fb.where('memberPid', '==', pid));
-  else q = fb.query(C('sessions'), fb.where('memberPid', '==', pid));
-  return (await list(q)).sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+  let rows;
+  try { rows = await list(fb.query(C('sessions'), fb.where('memberPid', '==', pid))); }
+  catch (e) {
+    if (S.me.role !== 'trainer') throw e;
+    // สำรอง: อ่านเฉพาะรอบที่ตัวเองเป็นโค้ช
+    rows = await list(fb.query(C('sessions'), fb.where('trainerPid', '==', S.me.pid), fb.where('memberPid', '==', pid)));
+  }
+  return rows.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 }
 async function myMembers() {
   const q = S.me.role === 'owner' ? fb.query(C('people'), fb.where('role', '==', 'member')) : fb.query(C('people'), fb.where('trainerPid', '==', S.me.pid));
@@ -291,6 +305,7 @@ async function render() {
     if (t === 'summary') return await renderSummary();
     if (t === 'overview') return await renderOverview();
     if (t === 'trainers') return await renderTrainers();
+    if (t === 'team' && isHead()) return await renderTeam();
     if (t === 'system') return await renderSystem();
     return await renderMore();
   } catch (e) {
@@ -553,7 +568,7 @@ async function renderMore() {
       ${ms.length ? `<div class="list">${ms.map(m => `<div class="li"><div class="grow"><b>${esc(m.name)}</b><div class="xs muted">@${esc(m.username)} ${m.active ? '' : '· <span class="alert">ปิดบัญชี</span>'} ${m.consentAt ? '· ยินยอมแล้ว' : '· ยังไม่ยินยอม'}</div></div><button class="btn sm ghost" data-act="manage" data-id="${m.id}">จัดการ</button></div>`).join('')}</div>` : '<p class="small muted" style="margin:0">ยังไม่มีลูกค้า กด “สร้างบัญชีลูกค้า”</p>'}</section>`;
   }
   setMain(`<h1>เพิ่มเติม</h1>
-    <section class="card"><b>${esc(me.name)}</b><span class="small muted">${me.role === 'owner' ? 'เจ้าของระบบ' : me.role === 'trainer' ? 'เทรนเนอร์ · ผู้ดูแลฝ่ายงาน' : 'สมาชิก'}${me.person?.username ? ' · @' + esc(me.person.username) : ''}</span></section>
+    <section class="card"><b>${esc(me.name)}</b><span class="small muted">${me.role === 'owner' ? 'เจ้าของระบบ' : me.role === 'trainer' ? (isHead() ? 'หัวหน้าเทรนเนอร์ · ผู้ดูแลฝ่ายงาน' : 'เทรนเนอร์ · ผู้ดูแลฝ่ายงาน') : 'สมาชิก'}${me.person?.username ? ' · @' + esc(me.person.username) : ''}</span></section>
     ${membersHtml}
     <a class="btn" href="manual.html">คู่มือการใช้งาน</a>
     <button class="btn danger" data-act="logout">ออกจากระบบ</button>
@@ -711,26 +726,48 @@ async function renderOverview() {
   const act = ms.filter(m => m.active); const st = await clientStats(act, todayStr());
   const loggedToday = act.filter(m => st[m.id].tot.k > 0).length;
   setMain(`<h1>ภาพรวมระบบ</h1><section class="grid3"><div class="stat dark"><b>${tr.filter(t => t.active).length}</b><span>เทรนเนอร์</span></div><div class="stat"><b>${act.length}</b><span>ลูกค้า</span></div><div class="stat"><b>${loggedToday}/${act.length}</b><span>บันทึกวันนี้</span></div></section>
-    <section style="display:flex;flex-direction:column;gap:8px"><h2>เทรนเนอร์</h2>${tr.length ? `<div class="list">${tr.map(t => `<div class="li"><div class="grow"><b>${esc(t.name)}</b><div class="xs muted">ลูกค้า ${ms.filter(m => m.trainerPid === t.id).length} คน · ${t.active ? 'ใช้งานอยู่' : 'ปิดบัญชี'}</div></div></div>`).join('')}</div>` : '<p class="small muted" style="margin:0">ยังไม่มีเทรนเนอร์ ไปที่แท็บ “เทรนเนอร์” เพื่อสร้างบัญชี PT-Plam</p>'}</section>`);
+    <section style="display:flex;flex-direction:column;gap:8px"><h2>เทรนเนอร์</h2>${tr.length ? `<div class="list">${tr.map(t => `<div class="li"><div class="grow"><b>${esc(t.name)}</b><div class="xs muted">ลูกค้า ${ms.filter(m => m.trainerPid === t.id).length} คน · ${t.active ? 'ใช้งานอยู่' : 'พักงาน'}${t.canManageTrainers ? ' · หัวหน้าเทรนเนอร์' : ''}</div></div></div>`).join('')}</div>` : '<p class="small muted" style="margin:0">ยังไม่มีเทรนเนอร์ ไปที่แท็บ “เทรนเนอร์” เพื่อสร้างบัญชี PT-Palm</p>'}</section>`);
+}
+function trainerTags(t, count) {
+  const tags = [];
+  if (t.canManageTrainers) tags.push('<span class="tag gold">หัวหน้าเทรนเนอร์</span>');
+  if (!t.active) tags.push('<span class="tag alert">พักงาน</span>');
+  if (!t.active && count) tags.push(`<span class="tag grey">ลูกค้าค้าง ${count} คน</span>`);
+  return tags.join(' ');
+}
+async function teamData() {
+  const [tr, ms] = await Promise.all([trainers(), list(fb.query(C('people'), fb.where('role', '==', 'member')))]);
+  ms.forEach(m => S.cache.set('p:' + m.id, m)); tr.forEach(t => S.cache.set('p:' + t.id, t));
+  return { tr, ms, count: id => ms.filter(m => m.trainerPid === id).length };
+}
+function teamListHtml(tr, count) {
+  return tr.length ? `<div class="list">${tr.map(t => `<div class="li"><div class="grow"><b>${esc(t.name)}</b>${t.id === S.me.pid ? ' <span class="xs muted">(คุณ)</span>' : ''}<div class="xs muted">@${esc(t.username)} · ลูกค้า ${count(t.id)} คน</div><div class="row" style="gap:4px;margin-top:2px">${trainerTags(t, count(t.id))}</div></div>${(canManageTrainer(t) || S.me.role === 'owner') ? `<button class="btn sm ghost" data-act="manage" data-id="${t.id}">จัดการ</button>` : ''}</div>`).join('')}</div>` : '<p class="small muted" style="margin:0">ยังไม่มีเทรนเนอร์</p>';
+}
+const TEAM_RULE = '<div class="pill-note"><b>พักงาน (Hold)</b> = เทรนเนอร์เข้าแอปไม่ได้ แต่ลูกค้ายังใช้งานได้ตามปกติ · จะ <b>ลบ</b> เทรนเนอร์ได้ต่อเมื่อพักงานแล้ว และย้ายลูกค้าออกจนหมด</div>';
+async function renderTeam() {
+  const { tr, count } = await teamData();
+  setMain(`<div class="between"><h1>ทีมเทรนเนอร์</h1><button class="btn sm gold" data-act="newAccount" data-v="trainer">+ สร้างบัญชีเทรนเนอร์</button></div>
+    <p class="small muted" style="margin:0">คุณเป็นหัวหน้าเทรนเนอร์: สร้างบัญชีเทรนเนอร์ พักงาน/เปิดใช้งาน ตั้งรหัสใหม่ ย้ายลูกค้าระหว่างเทรนเนอร์ และลบเทรนเนอร์ที่ไม่มีลูกค้าแล้ว</p>
+    ${TEAM_RULE}${teamListHtml(tr, count)}`);
 }
 async function renderTrainers() {
-  const tr = await trainers(); const ms = await myMembers();
+  const { tr, ms, count } = await teamData();
   setMain(`<div class="between"><h1>เทรนเนอร์</h1><button class="btn sm gold" data-act="newAccount" data-v="trainer">+ สร้างบัญชีเทรนเนอร์</button></div>
-    <p class="small muted" style="margin:0">เทรนเนอร์เป็นผู้ดูแลฝ่ายงาน: สร้างบัญชีลูกค้า ตั้งรหัสใหม่ ตั้งเป้า จัดตาราง และบันทึกผลเทรนได้ แต่แก้การตั้งค่าแอปและเรื่องลับไม่ได้</p>
-    ${tr.length ? `<div class="list">${tr.map(t => `<div class="li"><div class="grow"><b>${esc(t.name)}</b><div class="xs muted">@${esc(t.username)} · ลูกค้า ${ms.filter(m => m.trainerPid === t.id).length} คน ${t.active ? '' : '· <span class="alert">ปิดบัญชี</span>'}</div></div><button class="btn sm ghost" data-act="manage" data-id="${t.id}">จัดการ</button></div>`).join('')}</div>` : ''}
+    <p class="small muted" style="margin:0">เทรนเนอร์ดูแลลูกค้าของตัวเอง (สร้างบัญชีลูกค้า ตั้งเป้า จัดตาราง บันทึกผลเทรน) · กด “จัดการ” เพื่อให้สิทธิ์ <b>หัวหน้าเทรนเนอร์</b> ได้ 1 คน</p>
+    ${TEAM_RULE}${teamListHtml(tr, count)}
     <section style="display:flex;flex-direction:column;gap:8px"><div class="between"><h2>ลูกค้าทั้งหมด (${ms.length})</h2><button class="btn sm" data-act="newAccount" data-v="member">+ ลูกค้า</button></div>
-    ${ms.length ? `<div class="list">${ms.map(m => `<div class="li"><div class="grow"><b>${esc(m.name)}</b><div class="xs muted">@${esc(m.username)} · โค้ช ${esc(m.trainerName || '—')} ${m.active ? '' : '· <span class="alert">ปิดบัญชี</span>'}</div></div><button class="btn sm ghost" data-act="manage" data-id="${m.id}">จัดการ</button></div>`).join('')}</div>` : ''}</section>`);
+    ${ms.length ? `<div class="list">${ms.sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')).map(m => `<div class="li"><div class="grow"><b>${esc(m.name)}</b><div class="xs muted">@${esc(m.username)} · โค้ช ${esc(m.trainerName || '—')} ${m.active ? '' : '· <span class="alert">ปิดบัญชี</span>'}</div></div><button class="btn sm ghost" data-act="manage" data-id="${m.id}">จัดการ</button></div>`).join('')}</div>` : ''}</section>`);
 }
 async function renderSystem() {
   const c = S.config; const ms = await myMembers(); const consent = ms.filter(m => m.consentAt).length;
   setMain(`<h1>ระบบ</h1><p class="small muted" style="margin:0">เฉพาะเจ้าของระบบเท่านั้นที่เห็นหน้านี้</p>
-    <section class="card"><label class="f">ชื่อแอป<input class="in" id="cfName" value="${esc(c.name || 'The Olympic Club by PT-Plam')}"></label>
+    <section class="card"><label class="f">ชื่อแอป<input class="in" id="cfName" value="${esc(c.name || 'The Olympic Club by PT-Palm')}"></label>
       <label class="row small" style="min-height:44px"><input type="checkbox" id="cfAi" ${c.aiOn !== false ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> เปิดให้ AI อ่านรูป (ใบ InBody, หน้าจอนาฬิกา)</label>
       <label class="f">รุ่น AI<input class="in" id="cfModel" value="${esc(c.aiModel || 'gemini-3.5-flash')}"></label>
       <div class="grid2"><label class="f">เวลาส่งสรุปรายวัน<input class="in" type="time" id="cfTime" value="${esc(c.digestTime || '21:00')}"></label><label class="f">หน่วงส่งผลเทรน (นาที)<input class="in" id="cfDelay" inputmode="numeric" value="${esc(c.workoutDelayMin || 60)}"></label></div>
       <button class="btn pri" data-act="saveConfig">บันทึกการตั้งค่า</button></section>
     <section class="card"><b>แจ้งเตือน LINE</b><div class="card dark" style="flex-direction:row;align-items:center"><span style="width:10px;height:10px;border-radius:5px;background:#F0C24B"></span><span class="small">ตอนนี้: แจ้งเตือนในแอปเท่านั้น</span></div>
-      <p class="small muted" style="margin:0">การส่ง LINE อัตโนมัติ (สรุปรายวัน ${esc(c.digestTime || '21:00')} และผลเทรนหลังบันทึก ${esc(c.workoutDelayMin || 60)} นาที) ต้องอัปเกรดโปรเจกต์ Firebase เป็นแพ็กเกจ Blaze ก่อน จากนั้นจะเชื่อม OA ของระบบหรือของ PT-Plam ได้ที่นี่ รหัส OA จะเก็บแบบใส่ได้อย่างเดียว อ่านกลับไม่ได้</p>
+      <p class="small muted" style="margin:0">การส่ง LINE อัตโนมัติ (สรุปรายวัน ${esc(c.digestTime || '21:00')} และผลเทรนหลังบันทึก ${esc(c.workoutDelayMin || 60)} นาที) ต้องอัปเกรดโปรเจกต์ Firebase เป็นแพ็กเกจ Blaze ก่อน จากนั้นจะเชื่อม OA ของระบบหรือของ PT-Palm ได้ที่นี่ รหัส OA จะเก็บแบบใส่ได้อย่างเดียว อ่านกลับไม่ได้</p>
       <button class="btn" disabled>เชื่อม LINE OA (รอ Blaze)</button></section>
     <section class="card"><div class="between"><span class="small muted">ความยินยอม PDPA</span><b>${consent} / ${ms.length} คน</b></div></section>`);
 }
@@ -738,11 +775,11 @@ async function renderSystem() {
 /* ---------- บัญชีผู้ใช้ ---------- */
 function genPw() { const a = 'abcdefghjkmnpqrstuvwxyz23456789'; let s = ''; for (let i = 0; i < 8; i++) s += a[Math.floor(Math.random() * a.length)]; return s; }
 async function openNewAccount(role) {
-  const tr = S.me.role === 'owner' ? (await trainers()).filter(t => t.active) : [];
+  const tr = S.me.role === 'owner' && role === 'member' ? (await trainers()).filter(t => t.active) : [];
   if (role === 'member' && S.me.role === 'owner' && !tr.length) return toast('สร้างบัญชีเทรนเนอร์ก่อน แล้วค่อยสร้างลูกค้า');
   openSheet(role === 'trainer' ? 'สร้างบัญชีเทรนเนอร์' : 'สร้างบัญชีลูกค้า', `
-    <label class="f">ชื่อที่แสดง<input class="in" id="naName" placeholder="${role === 'trainer' ? 'เช่น PT-Plam' : 'เช่น คุณเอ'}"></label>
-    <label class="f">ชื่อผู้ใช้ (ภาษาอังกฤษ ตัวเลข . _ -)<input class="in" id="naUser" autocapitalize="none" spellcheck="false" placeholder="เช่น ${role === 'trainer' ? 'ptplam' : 'member.a'}"></label>
+    <label class="f">ชื่อที่แสดง<input class="in" id="naName" placeholder="${role === 'trainer' ? 'เช่น PT-Palm' : 'เช่น คุณเอ'}"></label>
+    <label class="f">ชื่อผู้ใช้ (ภาษาอังกฤษ ตัวเลข . _ -)<input class="in" id="naUser" autocapitalize="none" spellcheck="false" placeholder="เช่น ${role === 'trainer' ? 'ptpalm' : 'member.a'}"></label>
     <label class="f">รหัสผ่าน<div class="row"><input class="in" id="naPw" value="${genPw()}" style="flex:1"><button class="btn sm" data-act="regenPw">สุ่มใหม่</button></div></label>
     ${role === 'member' && tr.length ? `<label class="f">โค้ชที่ดูแล<select class="in" id="naTrainer">${tr.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></label>` : ''}
     ${role === 'member' ? `<div class="grid2"><label class="f">เป้าพลังงาน (kcal)<input class="in" id="naKcal" inputmode="numeric"></label><label class="f">น้ำหนักตั้งต้น (kg)<input class="in" id="naW" inputmode="decimal"></label></div>` : ''}
@@ -770,7 +807,7 @@ async function createAccount(role) {
       else { trainerPid = $('#naTrainer').value; trainerName = sheet.tr.find(t => t.id === trainerPid)?.name || ''; }
     }
     const pref = fb.doc(C('people'));
-    const pdata = { role, name, username, active: true, trainerPid, trainerName, createdAt: fb.serverTimestamp(), createdBy: S.me.role };
+    const pdata = { role, name, username, active: true, trainerPid, trainerName, createdAt: fb.serverTimestamp(), createdBy: S.me.role, createdByPid: S.me.pid || null };
     if (role === 'member') { const k = num($('#naKcal').value); const w = num($('#naW').value); pdata.targets = k ? { kcal: k, addBurn: true } : {}; if (w) pdata.weight = w; }
     await fb.setDoc(pref, pdata);
     const { uid, email } = await createAuthUser(username, pw);
@@ -783,20 +820,64 @@ async function createAccount(role) {
 }
 function appUrl() { return location.origin + location.pathname.replace(/[^/]*$/, ''); }
 function showCredentials(name, username, pw, isNew) {
-  const txt = `${S.config.name || 'The Olympic Club by PT-Plam'}\nเข้าใช้ที่: ${appUrl()}\nชื่อผู้ใช้: ${username}\nรหัสผ่าน: ${pw}`;
+  const txt = `${S.config.name || 'The Olympic Club by PT-Palm'}\nเข้าใช้ที่: ${appUrl()}\nชื่อผู้ใช้: ${username}\nรหัสผ่าน: ${pw}`;
   sheet = { ...(sheet || {}), cred: txt };
   openSheet(isNew ? 'สร้างบัญชีแล้ว' : 'ตั้งรหัสใหม่แล้ว', `<p class="small" style="margin:0">ส่งข้อความนี้ให้ <b>${esc(name)}</b> ทาง LINE รหัสผ่านจะแสดงครั้งเดียว</p>
     <textarea class="in" readonly style="min-height:120px">${esc(txt)}</textarea><button class="btn gold block" data-act="copyCred">คัดลอกข้อความ</button>`, { cred: txt });
   render();
 }
 async function openManage(pid) {
-  const p = await person(pid, true); const tr = S.me.role === 'owner' && p.role === 'member' ? (await trainers()).filter(t => t.active) : [];
-  openSheet('จัดการบัญชี', `<section class="card"><b>${esc(p.name)}</b><span class="small muted">@${esc(p.username)} · ${p.role === 'trainer' ? 'เทรนเนอร์' : 'ลูกค้า'} · ${p.active ? 'ใช้งานอยู่' : 'ปิดบัญชี'}</span></section>
-    ${p.role === 'member' ? `<button class="btn" data-act="openClient" data-id="${pid}">เปิดดูข้อมูลของลูกค้า</button>` : ''}
+  const p = await person(pid, true);
+  if (p.role === 'trainer') return openManageTrainer(p);
+  const mine = S.me.role === 'owner' || p.trainerPid === S.me.pid;
+  const tr = canManageTeam() ? (await trainers()).filter(t => t.active) : [];
+  openSheet('จัดการบัญชี', `<section class="card"><b>${esc(p.name)}</b><span class="small muted">@${esc(p.username)} · ลูกค้า · โค้ช ${esc(p.trainerName || '—')} · ${p.active ? 'ใช้งานอยู่' : 'ปิดบัญชี'}</span></section>
+    ${mine ? `<button class="btn" data-act="openClient" data-id="${pid}">เปิดดูข้อมูลของลูกค้า</button>` : ''}
     ${tr.length ? `<label class="f">ย้ายโค้ชที่ดูแล<select class="in" id="mgTrainer">${tr.map(t => `<option value="${t.id}" ${t.id === p.trainerPid ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}</select></label><button class="btn" data-act="moveTrainer" data-id="${pid}">บันทึกการย้าย</button>` : ''}
-    <button class="btn" data-act="resetPw" data-id="${pid}">ตั้งรหัสผ่านใหม่</button>
-    <button class="btn ${p.active ? 'danger' : 'pri'}" data-act="toggleActive" data-id="${pid}">${p.active ? 'ปิดบัญชี (เข้าใช้ไม่ได้)' : 'เปิดบัญชีอีกครั้ง'}</button>
-    ${S.me.role === 'owner' ? '<p class="xs muted" style="margin:0">การลบข้อมูลถาวรทำได้ที่ Firebase Console โดยเจ้าของระบบเท่านั้น</p>' : '<p class="xs muted" style="margin:0">การลบข้อมูลถาวรทำได้เฉพาะเจ้าของระบบ</p>'}`, { kind: 'manage', pid });
+    ${mine ? `<button class="btn" data-act="resetPw" data-id="${pid}">ตั้งรหัสผ่านใหม่</button>
+    <button class="btn ${p.active ? 'danger' : 'pri'}" data-act="toggleActive" data-id="${pid}">${p.active ? 'ปิดบัญชี (เข้าใช้ไม่ได้)' : 'เปิดบัญชีอีกครั้ง'}</button>` : ''}
+    <p class="xs muted" style="margin:0">การลบข้อมูลลูกค้าถาวรทำได้เฉพาะเจ้าของระบบ</p>`, { kind: 'manage', pid });
+}
+async function openManageTrainer(t) {
+  const pid = t.id; const owner = S.me.role === 'owner'; const can = canManageTrainer(t);
+  const [ms, all] = await Promise.all([list(fb.query(C('people'), fb.where('trainerPid', '==', pid))), trainers()]);
+  const dest = all.filter(x => x.active && x.id !== pid);
+  const opts = dest.map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('');
+  const canDelete = can && !t.active && ms.length === 0;
+  openSheet('จัดการเทรนเนอร์', `<section class="card"><div class="between"><b>${esc(t.name)}</b><span>${trainerTags(t, ms.length)}</span></div><span class="small muted">@${esc(t.username)} · ${t.active ? 'ใช้งานอยู่' : 'พักงาน (เข้าแอปไม่ได้)'} · ลูกค้า ${ms.length} คน</span></section>
+    ${owner ? `<section class="card sand"><b>สิทธิ์หัวหน้าเทรนเนอร์</b><span class="small">สร้างบัญชีเทรนเนอร์ พักงาน/เปิดใช้งาน ตั้งรหัสใหม่ ย้ายลูกค้า และลบเทรนเนอร์ที่ไม่มีลูกค้าแล้ว (แก้ตั้งค่าแอปไม่ได้) ให้ได้ครั้งละ 1 คน</span>
+      <button class="btn ${t.canManageTrainers ? 'danger' : 'gold'}" data-act="toggleHead" data-id="${pid}">${t.canManageTrainers ? 'ถอนสิทธิ์หัวหน้าเทรนเนอร์' : 'ให้สิทธิ์หัวหน้าเทรนเนอร์'}</button></section>` : ''}
+    ${can ? `<button class="btn ${t.active ? 'danger' : 'pri'}" data-act="toggleActive" data-id="${pid}">${t.active ? 'พักงาน (Hold) — เข้าแอปไม่ได้' : 'เปิดใช้งานอีกครั้ง'}</button>
+    <button class="btn" data-act="resetPw" data-id="${pid}">ตั้งรหัสผ่านใหม่</button>` : '<p class="small muted" style="margin:0">บัญชีนี้จัดการได้เฉพาะเจ้าของระบบ</p>'}
+    ${ms.length ? `<section class="card"><b>ลูกค้าในความดูแล (${ms.length})</b>
+      ${dest.length ? `${ms.map(m => `<div class="row"><span style="flex:1;min-width:0">${esc(m.name)}</span><select class="in" id="mv_${m.id}" style="width:auto;flex:1">${opts}</select><button class="btn sm" data-act="moveOne" data-id="${m.id}">ย้าย</button></div>`).join('')}
+      <div class="hr"></div><label class="f">ย้ายทั้งหมดไปที่<select class="in" id="mvAll">${opts}</select></label><button class="btn pri" data-act="moveAll" data-id="${pid}">ย้ายลูกค้าทั้งหมด ${ms.length} คน</button>`
+      : '<p class="small muted" style="margin:0">ยังไม่มีเทรนเนอร์คนอื่นที่เปิดใช้งาน สร้างหรือเปิดใช้งานเทรนเนอร์ก่อน แล้วค่อยย้ายลูกค้า</p>'}</section>` : ''}
+    ${can ? `<section class="card"><b>ลบเทรนเนอร์</b><span class="small muted">${canDelete ? 'พักงานแล้ว และไม่มีลูกค้าค้าง ลบได้' : !t.active ? `ยังลบไม่ได้: ย้ายลูกค้าออกอีก ${ms.length} คน` : 'ยังลบไม่ได้: ต้องพักงานก่อน และย้ายลูกค้าออกให้หมด'}</span>
+      <button class="btn danger" data-act="deleteTrainer" data-id="${pid}" ${canDelete ? '' : 'disabled'}>ลบบัญชีเทรนเนอร์</button></section>` : ''}`, { kind: 'manageTrainer', pid, ms });
+}
+async function moveMembers(ids, tid) {
+  const tr = await person(tid, true);
+  if (!tr || tr.role !== 'trainer' || !tr.active) throw new Error('เลือกเทรนเนอร์ที่เปิดใช้งานอยู่');
+  for (let i = 0; i < ids.length; i += 10) { // ทีละ 10 คน ให้อยู่ในเพดานการตรวจสิทธิ์ของ Firestore
+    const b = fb.writeBatch(db);
+    for (const id of ids.slice(i, i + 10)) b.update(D('people', id), { trainerPid: tid, trainerName: tr.name });
+    await b.commit();
+  }
+  ids.forEach(id => S.cache.delete('p:' + id));
+  return tr;
+}
+async function deleteTrainer(pid) {
+  const t = await person(pid, true);
+  const left = await list(fb.query(C('people'), fb.where('trainerPid', '==', pid)));
+  if (t.active) return toast('ต้องพักงานเทรนเนอร์ก่อน');
+  if (left.length) return toast(`ยังมีลูกค้าค้างอยู่ ${left.length} คน ย้ายออกให้หมดก่อน`);
+  if (!confirm(`ลบบัญชีเทรนเนอร์ ${t.name} ถาวร? ประวัติการเทรนที่บันทึกไว้ของลูกค้ายังอยู่ครบ`)) return;
+  const lg = await get(D('logins', t.username));
+  if (lg && lg.pid === pid) await fb.deleteDoc(D('logins', t.username));
+  if (t.authUid) { try { await fb.deleteDoc(D('accounts', t.authUid)); } catch (e) { console.warn(e); } }
+  await fb.deleteDoc(D('people', pid));
+  S.cache.delete('p:' + pid); closeSheet(); toast('ลบเทรนเนอร์แล้ว'); render();
 }
 async function resetPw(pid) {
   const p = await person(pid, true); const pw = genPw();
@@ -902,10 +983,21 @@ const ACTS = {
   copyCred: async () => { try { await navigator.clipboard.writeText(sheet.cred); toast('คัดลอกแล้ว'); } catch (e) { toast('คัดลอกไม่ได้ กดค้างที่ข้อความแทน'); } },
   manage: el => openManage(el.dataset.id),
   resetPw: el => resetPw(el.dataset.id),
-  toggleActive: async el => { const p = await person(el.dataset.id, true); if (!confirm(p.active ? `ปิดบัญชี ${p.name}? เข้าใช้งานไม่ได้จนกว่าจะเปิดอีกครั้ง` : `เปิดบัญชี ${p.name} อีกครั้ง?`)) return; await fb.updateDoc(D('people', el.dataset.id), { active: !p.active }); S.cache.delete('p:' + el.dataset.id); closeSheet(); toast('บันทึกแล้ว'); render(); },
-  moveTrainer: async el => { const tid = $('#mgTrainer').value; const tr = await person(tid, true); await fb.updateDoc(D('people', el.dataset.id), { trainerPid: tid, trainerName: tr.name }); S.cache.delete('p:' + el.dataset.id); closeSheet(); toast('ย้ายโค้ชแล้ว'); render(); },
+  toggleActive: async el => { const p = await person(el.dataset.id, true); const tr = p.role === 'trainer'; if (!confirm(p.active ? (tr ? `พักงาน ${p.name}? เข้าแอปไม่ได้จนกว่าจะเปิดอีกครั้ง ลูกค้าของ ${p.name} ยังใช้งานได้ตามปกติ` : `ปิดบัญชี ${p.name}? เข้าใช้งานไม่ได้จนกว่าจะเปิดอีกครั้ง`) : `เปิดใช้งาน ${p.name} อีกครั้ง?`)) return; await fb.updateDoc(D('people', el.dataset.id), { active: !p.active }); S.cache.delete('p:' + el.dataset.id); closeSheet(); toast('บันทึกแล้ว'); render(); },
+  moveTrainer: async el => { const tr = await moveMembers([el.dataset.id], $('#mgTrainer').value); closeSheet(); toast('ย้ายไปดูแลโดย ' + tr.name + ' แล้ว'); render(); },
+  moveOne: async el => { const tr = await moveMembers([el.dataset.id], $('#mv_' + el.dataset.id).value); toast('ย้ายไป ' + tr.name + ' แล้ว'); await openManageTrainer(await person(sheet.pid, true)); render(); },
+  moveAll: async el => { const ids = sheet.ms.map(m => m.id); const tid = $('#mvAll').value; if (!confirm(`ย้ายลูกค้าทั้งหมด ${ids.length} คน ไปอยู่กับ ${S.cache.get('p:' + tid)?.name || 'เทรนเนอร์ที่เลือก'}?`)) return; const tr = await moveMembers(ids, tid); toast(`ย้าย ${ids.length} คนไป ${tr.name} แล้ว`); await openManageTrainer(await person(el.dataset.id, true)); render(); },
+  deleteTrainer: el => deleteTrainer(el.dataset.id),
+  toggleHead: async el => {
+    const t = await person(el.dataset.id, true); const on = !t.canManageTrainers;
+    if (!confirm(on ? `ให้ ${t.name} เป็นหัวหน้าเทรนเนอร์? (ถ้ามีคนอื่นมีสิทธิ์อยู่ จะถูกถอนออก)` : `ถอนสิทธิ์หัวหน้าเทรนเนอร์ของ ${t.name}?`)) return;
+    const b = fb.writeBatch(db);
+    if (on) (await trainers()).filter(x => x.canManageTrainers && x.id !== t.id).forEach(x => b.update(D('people', x.id), { canManageTrainers: false }));
+    b.update(D('people', t.id), { canManageTrainers: on });
+    await b.commit(); S.cache.clear(); closeSheet(); toast(on ? t.name + ' เป็นหัวหน้าเทรนเนอร์แล้ว' : 'ถอนสิทธิ์แล้ว'); render();
+  },
   saveConfig: async () => {
-    const c = { name: $('#cfName').value.trim() || 'The Olympic Club by PT-Plam', aiOn: $('#cfAi').checked, aiModel: $('#cfModel').value.trim() || 'gemini-3.5-flash', digestTime: $('#cfTime').value || '21:00', workoutDelayMin: num($('#cfDelay').value) || 60 };
+    const c = { name: $('#cfName').value.trim() || 'The Olympic Club by PT-Palm', aiOn: $('#cfAi').checked, aiModel: $('#cfModel').value.trim() || 'gemini-3.5-flash', digestTime: $('#cfTime').value || '21:00', workoutDelayMin: num($('#cfDelay').value) || 60 };
     await fb.setDoc(D('config', 'app'), c, { merge: true }); Object.assign(S.config, c); toast('บันทึกการตั้งค่าแล้ว');
   }
 };

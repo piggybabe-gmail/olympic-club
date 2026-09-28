@@ -76,7 +76,7 @@ textarea.in{padding:10px 12px;min-height:72px;resize:vertical}
 .clip{color:var(--gold-text);font-weight:600;font-size:12px}
 .tabbar{position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid var(--line);display:flex;justify-content:center;padding:6px 6px calc(8px + env(safe-area-inset-bottom));z-index:20}
 .tabbar .in{display:flex;justify-content:space-around;width:100%;max-width:560px}
-.tab{width:72px;min-height:52px;display:flex;flex-direction:column;align-items:center;gap:2px;border:none;background:none;color:#6B7280;font-size:11px;font-weight:500;cursor:pointer}
+.tab{flex:1;max-width:80px;min-width:0;min-height:52px;display:flex;flex-direction:column;align-items:center;gap:2px;border:none;background:none;color:#6B7280;font-size:11px;font-weight:500;cursor:pointer}
 .tab[aria-current=page]{color:var(--ink);font-weight:700}
 .tab svg{width:24px;height:24px}
 .sheet-bg{position:fixed;inset:0;background:rgba(20,32,46,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center}

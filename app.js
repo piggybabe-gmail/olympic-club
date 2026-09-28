@@ -1,5 +1,5 @@
 // The Olympic Club by PT-Plam — แอปติดตามอาหารและการเทรน (ลูกค้า / เทรนเนอร์ / เจ้าของระบบ)
-import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN } from './firebase-config.js';
+import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN, RECAPTCHA_SITE_KEY } from './firebase-config.js?v=20260929b';
 import { FOODS, FOOD, MEALS, TH_M } from './foods.js?v=20260929a';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
@@ -251,7 +251,12 @@ const AI_PROMPT = {
 };
 async function aiRead(kind, dataUrl) {
   if (S.config.aiOn === false) throw new Error('เจ้าของระบบปิดการใช้ AI ไว้');
-  if (!fb.aiMod) { const m = await import(FBV + 'firebase-ai.js'); fb.aiMod = m; fb.ai = m.getAI(app, { backend: new m.GoogleAIBackend() }); }
+  if (!fb.aiMod) {
+    if (!fb.appCheck && RECAPTCHA_SITE_KEY) {
+      const ac = await import(FBV + 'firebase-app-check.js');
+      fb.appCheck = ac.initializeAppCheck(app, { provider: new ac.ReCaptchaV3Provider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true });
+    }
+    const m = await import(FBV + 'firebase-ai.js'); fb.aiMod = m; fb.ai = m.getAI(app, { backend: new m.GoogleAIBackend() }); }
   const model = fb.aiMod.getGenerativeModel(fb.ai, { model: S.config.aiModel || 'gemini-3.5-flash', generationConfig: { responseMimeType: 'application/json' } });
   const r = await model.generateContent([AI_PROMPT[kind], { inlineData: { data: dataUrl.split(',')[1], mimeType: 'image/jpeg' } }]);
   const txt = r.response.text().replace(/^```json|```$/g, '').trim();

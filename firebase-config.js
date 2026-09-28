@@ -9,6 +9,9 @@ export const firebaseConfig = {
   appId: "1:31143040825:web:880a03e252efa4d48efae8"
 };
 
+// คีย์เว็บไซต์ reCAPTCHA v3 สำหรับ App Check (คีย์สาธารณะ ใช้กับ AI อ่านภาพ)
+export const RECAPTCHA_SITE_KEY = '6LfSStQtAAAAAP270-sMMT-FW2caQpLBUX8RtlBS';
+
 // บัญชี Google ของเจ้าของระบบ (ต้องตรงกับ OWNER_EMAIL ใน firestore.rules)
 export const OWNER_EMAIL = 'piggybabe@gmail.com';
 

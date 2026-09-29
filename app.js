@@ -922,6 +922,11 @@ async function renderSystem() {
     <section class="card"><div class="between"><span class="small muted">ความยินยอม PDPA</span><b>${consent} / ${ms.length} คน</b></div></section>`);
 }
 
+function digestLogHtml(g) {
+  if (!g || !g.date) return '';
+  const sent = Object.values(g.sent || {}), skip = Object.values(g.skip || {});
+  return `<div class="xs muted" style="margin-top:4px">สรุปรายวัน ${esc(thDate(g.date))}${g.at ? ' · ' + esc(new Date(g.at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })) + ' น.' : ''}${sent.length ? ` · ✅ ส่งถึง ${sent.map(esc).join(', ')}` : ''}${skip.length ? ` · <span class="alert">⚠️ ${skip.map(esc).join(' · ')}</span>` : ''}</div>`;
+}
 function lineAdminHtml(c) {
   const i = line.info; const on = lineOn();
   const names = {}; S.cache.forEach((v, k) => { if (k.startsWith('p:') && v) names[k.slice(2)] = v.name; }); names.owner = 'เจ้าของระบบ';
@@ -932,7 +937,7 @@ function lineAdminHtml(c) {
     <label class="row small" style="min-height:44px"><input type="checkbox" id="lnOn" ${c.lineOn !== false ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> เปิดการส่งอัตโนมัติ</label>
     <label class="row small" style="min-height:44px"><input type="checkbox" id="lnOwner" ${c.digestToOwner ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> ส่งสรุปรายวันของลูกค้าทุกคนให้เจ้าของระบบด้วย</label>
     <div class="row"><button class="btn pri" data-act="saveLine">บันทึก</button>${c.lineUrl ? '<button class="btn" data-act="lineRefresh">ตรวจสถานะ</button>' : ''}</div>
-    ${c.lineUrl ? (!i ? '<span class="small muted">กำลังตรวจ…</span>' : !i.ok ? `<div class="warn">${esc(i.error || 'เชื่อมต่อไม่ได้')}</div>` : `<div class="small">LINE OA ${i.hasToken ? '✅' : '❌'} · LINE Login ${i.hasLogin ? '✅' : '❌'} · ตัวตั้งเวลา ${i.ticking ? '✅ ทำงานทุก 10 นาที' : '❌ ยังไม่ได้ Run ocSetup'}${i.lastDigest ? ` · ส่งสรุปล่าสุด ${thDate(i.lastDigest)}` : ''}</div>
+    ${c.lineUrl ? (!i ? '<span class="small muted">กำลังตรวจ…</span>' : !i.ok ? `<div class="warn">${esc(i.error || 'เชื่อมต่อไม่ได้')}</div>` : `<div class="small">LINE OA ${i.hasToken ? '✅' : '❌'} · LINE Login ${i.hasLogin ? '✅' : '❌'} · ตัวตั้งเวลา ${i.ticking ? '✅ ทำงานทุก 10 นาที' : '❌ ยังไม่ได้ Run ocSetup'}${i.lastDigest ? ` · ส่งสรุปล่าสุด ${thDate(i.lastDigest)}` : ''}${digestLogHtml(i.digestLog)}</div>
       <b class="small">เชื่อม LINE แล้ว ${links.length} คน</b>${links.length ? `<div class="list">${links.map(([k, L]) => `<div class="li"><div class="grow"><b>${esc(names[k] || L.appName || k)}</b><div class="xs muted">LINE: ${esc(L.name || '')}${L.friend === false ? ' · <span class="alert">ยังไม่เพิ่มเพื่อน OA</span>' : ''}</div></div><button class="btn sm ghost" data-act="lineUnlink" data-k="${esc(k)}">ยกเลิก</button></div>`).join('')}</div>` : ''}`) : ''}
   </section>`;
 }

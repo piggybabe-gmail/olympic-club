@@ -225,7 +225,7 @@ function ocApi_(b) {
     if (!me) return { ok: false, error: 'ยืนยันตัวตนไม่ผ่าน ลองออกจากระบบแล้วเข้าใหม่' };
     const L = ocLinks_();
     if (b.oc === 'info') {
-      const out = { ok: true, me: me.k, link: L[me.k] ? { name: L[me.k].name, friend: L[me.k].friend, at: L[me.k].at } : null, hasToken: !!P.getProperty('LINE_TOKEN'), hasLogin: !!P.getProperty('LOGIN_CHANNEL_ID'), ticking: ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'ocTick'; }), lastDigest: P.getProperty('OC_DIGEST_DATE') || '' };
+      const out = { ok: true, me: me.k, link: L[me.k] ? { name: L[me.k].name, friend: L[me.k].friend, at: L[me.k].at } : null, hasToken: !!P.getProperty('LINE_TOKEN'), hasLogin: !!P.getProperty('LOGIN_CHANNEL_ID'), ticking: ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'ocTick'; }), lastDigest: P.getProperty('OC_DIGEST_DATE') || '', digestLog: me.role === 'owner' ? ocDigestLog_() : me.role === 'trainer' ? (function (g) { return { date: g.date, at: g.at, mine: (g.sent || {})[me.k] ? 'ส่งแล้ว' : (g.skip || {})[me.k] || '' }; })(ocDigestLog_()) : null };
       if (me.role === 'owner') { out.links = {}; Object.keys(L).forEach(function (k) { out.links[k] = { name: L[k].name, appName: L[k].appName, friend: L[k].friend, at: L[k].at }; }); }
       return out;
     }
@@ -310,12 +310,15 @@ function ocMemberDay_(pid, ds) {
 function ocDigestText_(ms, ds, showCoach) {
   const lines = ['🏅 The Olympic Club · สรุปประจำวัน', ocThDate_(ds) + ' · ลูกค้า ' + ms.length + ' คน', ''];
   ms.forEach(function (m) {
-    const s = ocMemberDay_(m._id, ds); const goal = +(m.targets && m.targets.kcal) || 0;
+    const s = ocMemberDay_(m._id, ds); const base = +(m.targets && m.targets.kcal) || 0;
+    const addBurn = !(m.targets && m.targets.addBurn === false) ? s.burn : 0;
+    const goal = base ? base + addBurn : 0; // เป้าเดียวกับในแอป: เป้าพื้นฐาน + kcal ที่ออกกำลังกาย
     const head = m.name + (showCoach && m.trainerName ? ' (โค้ช ' + m.trainerName + ')' : '');
     if (!s.tot.k) lines.push(head + ' — ยังไม่บันทึกอาหาร');
     else {
       const diff = goal ? s.tot.k - goal : 0;
-      lines.push(head + ' — ' + n0_(s.tot.k) + (goal ? ' / ' + n0_(goal) : '') + ' kcal' + (diff > 0 ? ' (+' + n0_(diff) + ')' : ''));
+      lines.push(head + ' — กิน ' + n0_(s.tot.k) + (goal ? ' / เป้า ' + n0_(goal) : '') + ' kcal' + (diff > 0 ? ' (เกิน ' + n0_(diff) + ')' : goal ? ' (เหลือ ' + n0_(-diff) + ')' : ''));
+      if (goal && addBurn) lines.push('เป้า = ' + n0_(base) + ' + ออกกำลังกาย ' + n0_(addBurn));
       lines.push('P ' + n0_(s.tot.p) + ' · C ' + n0_(s.tot.c) + ' · F ' + n0_(s.tot.f) + ' g');
       lines.push(OC.meals.filter(function (x) { return s.tot.byMeal[x] != null || x !== 'ว่าง'; }).map(function (x) { return x + ' ' + (s.tot.byMeal[x] != null ? n0_(s.tot.byMeal[x]) : 'ยังไม่บันทึก'); }).join(' · '));
     }
@@ -349,19 +352,46 @@ function ocTick() {
       fsPatch_(s._path, { notified: true, lineSent: sent, notifiedAt: new Date().toISOString() });
     });
     // (2) สรุปรายวัน: วันละครั้ง เมื่อถึงเวลาที่ตั้งไว้ (ค่าเริ่มต้น 21:00)
+    //     จดผลรายคนใน OC_DIGEST_LOG · ถ้าส่งไม่ครบ (เช่น Firestore/LINE ขัดข้อง) รอบถัดไป (10 นาที) ส่งเฉพาะคนที่ยังไม่ได้
     const cfg = fsGet_('config/app') || {}; const ds = ocToday_();
     const hm = Utilities.formatDate(new Date(), OC.tz, 'HH:mm');
-    if (cfg.lineOn !== false && hm >= (cfg.digestTime || '21:00') && P.getProperty('OC_DIGEST_DATE') !== ds) {
-      P.setProperty('OC_DIGEST_DATE', ds);
-      const all = ocMembers_();
-      fsQuery_('', 'people', [['role', 'trainer']]).forEach(function (tr) {
-        if (tr.active !== true || !L[tr._id]) return;
-        const ms = all.filter(function (m) { return m.trainerPid === tr._id; });
-        if (ms.length) push_(L[tr._id].uid, ocDigestText_(ms, ds, false));
-      });
-      if (cfg.digestToOwner && L.owner && all.length) push_(L.owner.uid, ocDigestText_(all, ds, true));
-    }
+    if (cfg.lineOn !== false && hm >= (cfg.digestTime || '21:00') && P.getProperty('OC_DIGEST_DATE') !== ds) ocSendDigest_(cfg, ds, L);
   } finally { lock.releaseLock(); }
+}
+
+function ocDigestLog_() { try { return JSON.parse(P.getProperty('OC_DIGEST_LOG') || '{}'); } catch (e) { return {}; } }
+function ocSendDigest_(cfg, ds, L) {
+  let log = ocDigestLog_(); if (log.date !== ds) log = { date: ds, sent: {}, skip: {} };
+  log.sent = log.sent || {}; log.skip = {}; let failed = 0;
+  const all = ocMembers_();
+  fsQuery_('', 'people', [['role', 'trainer']]).forEach(function (tr) {
+    if (tr.active !== true || log.sent[tr._id]) return;
+    const ms = all.filter(function (m) { return m.trainerPid === tr._id; });
+    if (!ms.length) { log.skip[tr._id] = tr.name + ': ไม่มีลูกค้า'; return; }
+    if (!L[tr._id]) { log.skip[tr._id] = tr.name + ': ยังไม่เชื่อม LINE'; return; }
+    const code = push_(L[tr._id].uid, ocDigestText_(ms, ds, false));
+    if (code === 200) log.sent[tr._id] = tr.name + ' (' + ms.length + ' คน)';
+    else { failed++; log.skip[tr._id] = tr.name + ': ส่งไม่สำเร็จ ' + code + (L[tr._id].friend === false ? ' · ยังไม่เพิ่มเพื่อน OA' : ''); }
+  });
+  if (cfg.digestToOwner && all.length && !log.sent.owner) {
+    if (!L.owner) log.skip.owner = 'เจ้าของ: ยังไม่เชื่อม LINE';
+    else { const code = push_(L.owner.uid, ocDigestText_(all, ds, true)); if (code === 200) log.sent.owner = 'เจ้าของ (' + all.length + ' คน)'; else { failed++; log.skip.owner = 'เจ้าของ: ส่งไม่สำเร็จ ' + code; } }
+  }
+  log.at = new Date().toISOString();
+  P.setProperty('OC_DIGEST_LOG', JSON.stringify(log));
+  // ส่งครบ (หรือเหลือแต่คนที่ส่งไม่ได้เพราะยังไม่เชื่อม/ไม่มีลูกค้า) → ปิดรอบของวันนี้ · ถ้า LINE ส่งพลาด ลองใหม่รอบหน้าได้ถึง 23:50
+  if (!failed || Utilities.formatDate(new Date(), OC.tz, 'HH:mm') >= '23:50') P.setProperty('OC_DIGEST_DATE', ds);
+  return log;
+}
+
+// ทดสอบ: กด Run เพื่อดูข้อความสรุปของวันนี้ใน Execution log (ไม่ส่ง LINE)
+function ocPreviewDigest() {
+  const ds = ocToday_(); const all = ocMembers_();
+  fsQuery_('', 'people', [['role', 'trainer']]).forEach(function (tr) {
+    const ms = all.filter(function (m) { return m.trainerPid === tr._id; });
+    Logger.log('==== ถึง ' + tr.name + (tr.active === true ? '' : ' (ปิดบัญชี)') + ' · LINE ' + (ocLinks_()[tr._id] ? 'เชื่อมแล้ว' : 'ยังไม่เชื่อม') + ' ====\n' + (ms.length ? ocDigestText_(ms, ds, false) : 'ไม่มีลูกค้า'));
+  });
+  Logger.log('ตัวตั้งเวลา: ' + (ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'ocTick'; }) ? 'ทำงานอยู่' : 'ยังไม่ได้ Run ocSetup') + ' · ส่งล่าสุด: ' + (P.getProperty('OC_DIGEST_DATE') || '-') + ' · ' + (P.getProperty('OC_DIGEST_LOG') || ''));
 }
 
 // กด Run ครั้งแรก: อนุญาตสิทธิ์ + ตั้งเวลาให้ ocTick ทำงานทุก 10 นาที + ทดสอบอ่าน Firestore

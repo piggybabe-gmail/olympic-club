@@ -1,3 +1,4 @@
+import { cafeFoods } from './cafe.js?v=20260929c';
 export const MEALS=['เช้า','กลางวัน','ว่าง','เย็น'];
 export const TH_DOW=['อาทิตย์','จันทร์','อังคาร','พุธ','พฤหัสบดี','ศุกร์','เสาร์'];
 export const TH_M=['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
@@ -458,6 +459,8 @@ for(const s of QUICK.styles) for(const pr of QUICK.proteins) for(const eg of ['n
 // ค้นแบบทนคำสะกดผิด: ตัดวรรณยุกต์ ไม้หันอากาศ สระอะ ร และช่องว่าง (กระเพา = กะเพรา, กวยเตียว = ก๋วยเตี๋ยว)
 export function normTh(s){ return String(s||'').toLowerCase().replace(/[่-๎ัะร\s]/g,''); }
 
+// คาเฟ่: เครื่องดื่มทุกแบบ + เบเกอรี่ ให้ค้นเจอในคลัง
+FOODS.push(...cafeFoods());
 export const FOOD=Object.fromEntries(FOODS.map(f=>[f.id,f]));
 
 export const WORKOUT_TYPES=[['push','Push (ดัน) · อก ไหล่ หลังแขน'],['pull','Pull (ดึง) · หลัง สะบัก หน้าแขน'],['legs','Legs (ขา) + ทรงตัว'],['other','อื่น ๆ']];

@@ -1,9 +1,10 @@
 // The Olympic Club by PT-Palm — แอปติดตามอาหารและการเทรน (ลูกค้า / เทรนเนอร์ / เจ้าของระบบ)
 import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN, RECAPTCHA_SITE_KEY } from './firebase-config.js?v=20260929b';
-import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, quickCalc, noodleCalc, normTh } from './foods.js?v=20260929b';
+import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, quickCalc, noodleCalc, normTh } from './foods.js?v=20260929c';
+import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20260929g';
+const VER = '20260929h';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -411,8 +412,10 @@ function foodSheetBody() {
     <button class="btn pri block" data-act="saveFood">บันทึก</button>`;
   if (s.mode === 'quick') return quickSheetBody();
   if (s.mode === 'noodle') return noodleSheetBody();
+  if (s.mode === 'cafe') return cafeSheetBody();
   const q = (s.q || '').trim().toLowerCase(), qn = normTh(q);
-  const res = q ? FOODS.filter(f => f.n.toLowerCase().includes(q) || (f.cat || '').includes(q) || (qn && normTh(f.n).includes(qn))).slice(0, 40) : [];
+  const res = q ? FOODS.filter(f => f.n.toLowerCase().includes(q) || (f.cat || '').includes(q) || (f.al || '').toLowerCase().includes(q) || (qn && (normTh(f.n).includes(qn) || normTh(f.al).includes(qn)))).slice(0, 40) : [];
+  const hintCafe = qn && /กาแฟ|ลาเต|อเมิกา|มอคคา|คาปู|เอสเย็น|ชาเย็น|ชานม|โกโก|มทฉ|มจฉ|มัท|ชาเขียว|สมูท|คาเฟ|เบเกอ|ควซอง|คซอง|เคก|บาวนี|มฟฟิน|คุกกี|โอเลียง|นมชมพู|ขนม|latte|mocha|coffee|americano|matcha|cafe/.test(qn);
   const hintQ = qn && /กเพา|ขาว|ผด|ไขดาว|ตามสง|ราด|กวยเตยว|เสน|บหม|เยนตาโฟ|เกาเหลา|มามา|กวยจบ|วนเสน/.test(qn);
   const f = s.pick ? FOOD[s.pick] : null;
   let pickHtml = '';
@@ -420,10 +423,11 @@ function foodSheetBody() {
     const qty = num(s.qty) ?? f.d; const v = foodCalc(f, qty);
     pickHtml = `<section class="card gold-edge"><b>${esc(f.n)}</b>
       <label class="f">${f.u === 'g' ? 'น้ำหนัก (กรัม)' : 'จำนวน (' + esc(f.un || 'หน่วย') + ')'}<input class="in" id="fQty" inputmode="decimal" value="${esc(s.qty ?? f.d)}"></label>
-      <div class="small">≈ <b>${n0(v.k)} kcal</b> · P ${v.p} · C ${v.c} · F ${v.f} g</div>${f.qk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="qkFrom" data-id="${f.id}">ปรับข้าว ไข่ น้ำมัน หรือสั่งพิเศษ ›</button>` : ''}</section>`;
+      <div class="small">≈ <b>${n0(v.k)} kcal</b> · P ${v.p} · C ${v.c} · F ${v.f} g</div>${f.qk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="qkFrom" data-id="${f.id}">ปรับข้าว ไข่ น้ำมัน หรือสั่งพิเศษ ›</button>` : ''}${f.cf || f.bk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="cfFrom" data-id="${f.id}">${f.cf ? 'ปรับขนาด นม ความหวาน ท็อปปิ้ง หรือเพิ่มขนม ›' : 'เพิ่มเครื่องดื่มคู่กัน ›'}</button>` : ''}</section>`;
   }
   return `${foodModeChips()}
     <label class="f">ค้นหาอาหาร<input class="in" id="fSearch" value="${esc(s.q || '')}" placeholder="เช่น ไข่ ปลา ข้าว อกไก่" autocomplete="off"></label>
+    ${hintCafe ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="cafe">ประกอบแก้วเครื่องดื่ม + ขนม (คาเฟ่) ›</button></div>` : ''}
     ${hintQ ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="quick">ประกอบจานด่วน/ข้าวราด ›</button><button class="chip" data-act="foodMode" data-v="noodle">ประกอบชามก๋วยเตี๋ยว ›</button></div>` : ''}
     ${res.length ? `<div class="foodres">${res.map(x => `<button type="button" data-act="pickFood" data-id="${x.id}">${esc(x.n)} <span class="xs muted">· ${x.d} ${x.u === 'g' ? 'g' : esc(x.un || '')} · ${n0(foodCalc(x, x.d).k)} kcal</span></button>`).join('')}</div>` : (q ? '<p class="small muted" style="margin:0">ไม่พบในคลัง ลองคำอื่น หรือกด “กรอกเอง”</p>' : '')}
     ${pickHtml}${mealSel()}${photoPicker('รูปจาน')}
@@ -431,7 +435,7 @@ function foodSheetBody() {
 }
 function foodModeChips() {
   const m = sheet.mode || 'db';
-  return `<div class="chips">${[['db', 'ค้นจากคลัง'], ['quick', 'จานด่วน/ข้าวราด'], ['noodle', 'ก๋วยเตี๋ยว'], ['manual', 'กรอกเอง']].map(([k, l]) => `<button class="chip" data-act="foodMode" data-v="${k}" aria-pressed="${m === k}">${l}</button>`).join('')}</div>`;
+  return `<div class="chips">${[['db', 'ค้นจากคลัง'], ['quick', 'จานด่วน/ข้าวราด'], ['noodle', 'ก๋วยเตี๋ยว'], ['cafe', 'คาเฟ่/กาแฟ'], ['manual', 'กรอกเอง']].map(([k, l]) => `<button class="chip" data-act="foodMode" data-v="${k}" aria-pressed="${m === k}">${l}</button>`).join('')}</div>`;
 }
 /* ---------- จานด่วน / ก๋วยเตี๋ยว: เลือกเหมือนสั่งที่ร้าน แอปคำนวณ kcal ให้ ---------- */
 const QK_DEF = { style: 'krapao', protein: 'porkmince', size: 1, oil: 1, rice: 'white', riceG: 200, ate: 100, egg: 'fried', eggN: 1, prikpla: 0 };
@@ -478,6 +482,46 @@ function noodleSheetBody() {
     <div class="chips"><button class="chip" data-act="ndSet" data-k="kakmoo" data-v="${+st.kakmoo ? 0 : 1}" aria-pressed="${!!+st.kakmoo}">กากหมูเจียว</button><button class="chip" data-act="ndSet" data-k="garlic" data-v="${+st.garlic ? 0 : 1}" aria-pressed="${!!+st.garlic}">กระเทียมเจียวเพิ่ม</button></div>
     ${totalBox(r)}${mealSel()}${photoPicker('รูปชาม')}
     <button class="btn pri block" data-act="saveBuilt" data-v="noodle">บันทึกชามนี้</button>`;
+}
+/* ---------- คาเฟ่: กาแฟ ชา นม น้ำ + เบเกอรี่ ---------- */
+const CF_DEF = { drink: 'americano', temp: 'iced', size: 1, milk: 'whole', sweet: 0, extras: [], drank: 100, noDrink: 0, bk: {}, share: 100 };
+function cfState() { if (!sheet.cf) { sheet.cf = lsGet('oc_cafe', CF_DEF); sheet.cf.bk = {}; sheet.cf.share = 100; sheet.cf.noDrink = 0; } return sheet.cf; }
+function cfBakery(st) { return Object.entries(st.bk || {}).filter(([, n]) => n > 0).map(([k, n]) => ({ k, ...bakeryCalc(k, n, st.share) })).filter(x => x.name); }
+function cafeSheetBody() {
+  const st = cfState(), d = CAFE.drinks.find(x => x.k === st.drink) || CAFE.drinks[0], r = cafeCalc(st), bks = cfBakery(st), lb = t => `<div class="small"><b>${t}</b></div>`;
+  const on = !+st.noDrink, TL = cafeTemps(d);
+  const tot = [...(on ? [r] : []), ...bks].reduce((a, x) => ({ k: a.k + x.k, p: r1(a.p + x.p), c: r1(a.c + x.c), f: r1(a.f + x.f) }), { k: 0, p: 0, c: 0, f: 0 });
+  const drinkUi = on ? `
+    ${CAFE.groups.map(g => `<div class="xs muted">${g.n}</div><div class="chips">${CAFE.drinks.filter(x => x.g === g.k).map(x => `<button class="chip" data-act="cfSet" data-k="drink" data-v="${x.k}" aria-pressed="${st.drink === x.k}">${esc(x.n)}</button>`).join('')}</div>`).join('')}
+    ${d.fix ? '' : `${lb('2. ร้อน / เย็น / ปั่น และขนาดแก้ว')}${optChips(TL, r.temp, 'cfSet', 'temp')}${optChips(CAFE.sizes, st.size, 'cfSet', 'size')}`}
+    ${d.milk ? `${lb('3. นม')}${optChips(CAFE.milks, st.milk, 'cfSet', 'milk')}` : ''}
+    ${d.nosw ? '' : `${lb('4. ความหวาน')}${optChips(CAFE.sweets, st.sweet ?? d.sw0, 'cfSet', 'sweet')}`}
+    ${lb('5. เพิ่มท็อปปิ้ง')}<div class="chips">${CAFE.extras.map(x => `<button class="chip" data-act="cfEx" data-v="${x.k}" aria-pressed="${(st.extras || []).includes(x.k)}">${esc(x.n)} <span class="xs" style="opacity:.7">${n0(x.k2)}</span></button>`).join('')}</div>
+    <div class="xs muted">ดื่มไป</div>${optChips(CAFE.drank, st.drank, 'cfSet', 'drank')}` : '';
+  return `${foodModeChips()}
+    <p class="xs muted" style="margin:0">เลือกเหมือนสั่งที่ร้านคาเฟ่ แอปรวม kcal ให้ · ขนมแตะซ้ำเพื่อเพิ่มจำนวน (สูงสุด 3 แล้ววนกลับเป็น 0)</p>
+    ${lb('1. เครื่องดื่ม')}<div class="chips"><button class="chip" data-act="cfSet" data-k="noDrink" data-v="${on ? 1 : 0}" aria-pressed="${!on}">ไม่สั่งเครื่องดื่ม (บันทึกแค่ขนม)</button></div>
+    ${drinkUi}
+    ${lb('6. เบเกอรี่ / ขนม')}<div class="chips">${CAFE.bakery.map(x => { const n = +(st.bk || {})[x.k] || 0; return `<button class="chip" data-act="cfBk" data-v="${x.k}" aria-pressed="${n > 0}">${n > 1 ? `×${n} ` : ''}${esc(x.n)} <span class="xs" style="opacity:.7">${n0(x.k2)}</span></button>`; }).join('')}</div>
+    ${bks.length ? `<div class="xs muted">กินขนมกี่ส่วน</div>${optChips(CAFE.share, st.share, 'cfSet', 'share')}<div class="chips"><button class="chip" data-act="cfBkClr">ล้างขนมที่เลือก</button></div>` : ''}
+    <section class="card gold-edge">${on ? `<div><b>${esc(r.name)}</b> <span class="small">${n0(r.k)} kcal</span><div class="xs muted">${esc(r.desc)}</div></div>` : ''}
+      ${bks.map(x => `<div style="margin-top:4px"><b>${esc(x.name)}</b> <span class="small">${n0(x.k)} kcal</span>${x.desc !== 'เบเกอรี่/ขนม' ? `<div class="xs muted">${esc(x.desc)}</div>` : ''}</div>`).join('')}
+      <div style="margin-top:6px"><span class="big">${n0(tot.k)}</span> <span class="muted">kcal รวม</span></div>
+      <div class="small">โปรตีน ${tot.p} g · คาร์บ ${tot.c} g · ไขมัน ${tot.f} g</div></section>
+    ${mealSel()}${photoPicker('รูปแก้ว/ขนม')}
+    <button class="btn pri block" data-act="saveCafe" ${on || bks.length ? '' : 'disabled'}>บันทึก${on ? 'เครื่องดื่ม' : ''}${on && bks.length ? ' + ' : ''}${bks.length ? 'ขนม' : ''}</button>`;
+}
+async function saveCafe() {
+  const s = sheet, st = cfState(), meal = $('#fMeal').value, on = !+st.noDrink, items = [], now = Date.now();
+  if (on) { const r = cafeCalc(st); items.push({ n: r.name, q: 1, qs: r.desc, k: r.k, p: r.p, c: r.c, f: r.f, src: 'cafe', opt: { drink: st.drink, temp: r.temp, size: st.size, milk: st.milk, sweet: st.sweet, extras: [...(st.extras || [])], drank: st.drank } }); }
+  cfBakery(st).forEach(x => items.push({ n: x.name, q: 1, qs: x.desc, k: x.k, p: x.p, c: x.c, f: x.f, src: 'bakery' }));
+  if (!items.length) return toast('เลือกเครื่องดื่มหรือขนมก่อน');
+  items.forEach((it, i) => { it.t = now + i; it.by = S.me.role; });
+  if (s.ph?.length) items[0].ph = s.ph;
+  const { bk, share, noDrink, ...keep } = st; lsSet('oc_cafe', keep);
+  await mutateDay(S.view, ui.date, d => { (d.meals[meal] = d.meals[meal] || []).push(...items); });
+  const k = items.reduce((a, x) => a + x.k, 0);
+  closeSheet(); toast(`บันทึก ${items.length} รายการ ${n0(k)} kcal`); render();
 }
 function qkNum(k, v) { return ['size', 'oil', 'riceG', 'ate', 'eggN', 'prikpla', 'sip', 'sugar', 'peanut', 'kakmoo', 'garlic'].includes(k) ? +v : v; }
 function redrawFood() { const y = $('#sheetBody')?.parentElement?.scrollTop; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); const sh = $('#sheetBody')?.parentElement; if (sh && y != null) sh.scrollTop = y; }
@@ -1040,6 +1084,12 @@ const ACTS = {
   qkSet: el => { const st = qkState(); st[el.dataset.k] = qkNum(el.dataset.k, el.dataset.v); if (el.dataset.k === 'riceG' && +st.riceG && !+st.ate) st.ate = 100; redrawFood(); },
   ndSet: el => { const st = ndState(); st[el.dataset.k] = qkNum(el.dataset.k, el.dataset.v); redrawFood(); },
   ndTop: el => { const st = ndState(), k = el.dataset.v; st.tops = (st.tops || []).includes(k) ? st.tops.filter(x => x !== k) : [...(st.tops || []), k]; redrawFood(); },
+  cfSet: el => { const st = cfState(), k = el.dataset.k, v = el.dataset.v; st[k] = ['size', 'sweet', 'drank', 'share', 'noDrink'].includes(k) ? +v : v; if (k === 'drink') { const d = CAFE.drinks.find(x => x.k === v); if (d) st.sweet = d.sw0; } redrawFood(); },
+  cfEx: el => { const st = cfState(), k = el.dataset.v; st.extras = (st.extras || []).includes(k) ? st.extras.filter(x => x !== k) : [...(st.extras || []), k]; redrawFood(); },
+  cfBk: el => { const st = cfState(), k = el.dataset.v; st.bk = { ...(st.bk || {}), [k]: ((+(st.bk || {})[k] || 0) + 1) % 4 }; redrawFood(); },
+  cfBkClr: () => { cfState().bk = {}; redrawFood(); },
+  cfFrom: el => { const f = FOOD[el.dataset.id]; if (!f) return; const st = cfState(); if (f.cf) { Object.assign(st, { ...f.cf, noDrink: 0 }); } else if (f.bk) { st.bk = { ...(st.bk || {}), [f.bk]: Math.max(1, +(st.bk || {})[f.bk] || 0) }; } sheet.mode = 'cafe'; redrawFood(); },
+  saveCafe: () => saveCafe(),
   qkFrom: el => { const f = FOOD[el.dataset.id]; if (!f?.qk) return; sheet.qk = { ...qkState(), ...f.qk, size: 1, riceG: 200, rice: 'white', ate: 100, eggN: 1 }; sheet.mode = 'quick'; redrawFood(); },
   saveBuilt,
   pickFood: el => { sheet.pick = el.dataset.id; sheet.qty = null; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); $('#fQty')?.focus(); },

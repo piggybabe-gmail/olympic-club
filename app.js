@@ -1,6 +1,6 @@
 // The Olympic Club by PT-Palm — แอปติดตามอาหารและการเทรน (ลูกค้า / เทรนเนอร์ / เจ้าของระบบ)
 import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN, RECAPTCHA_SITE_KEY } from './firebase-config.js?v=20260929b';
-import { FOODS, FOOD, MEALS, TH_M } from './foods.js?v=20260929a';
+import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, quickCalc, noodleCalc, normTh } from './foods.js?v=20260929b';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
 const VER = '20260929g';
@@ -402,28 +402,93 @@ async function mutateDay(pid, ds, fn) {
 function foodSheetBody() {
   const s = sheet;
   if (s.mode === 'manual') return `
-    <div class="chips"><button class="chip" data-act="foodMode" data-v="db" aria-pressed="false">ค้นจากคลังอาหาร</button><button class="chip" aria-pressed="true">กรอกเอง</button></div>
+    ${foodModeChips()}
     <label class="f">ชื่ออาหาร<input class="in" id="mfName" value="${esc(s.mf.n || '')}"></label>
     <div class="grid2"><label class="f">แคลอรี (kcal)<input class="in" id="mfK" inputmode="decimal" value="${esc(s.mf.k ?? '')}"></label><label class="f">โปรตีน (g)<input class="in" id="mfP" inputmode="decimal" value="${esc(s.mf.p ?? '')}"></label>
     <label class="f">คาร์บ (g)<input class="in" id="mfC" inputmode="decimal" value="${esc(s.mf.c ?? '')}"></label><label class="f">ไขมัน (g)<input class="in" id="mfF" inputmode="decimal" value="${esc(s.mf.f ?? '')}"></label></div>
     <p class="xs muted" style="margin:0">ดูค่าจากฉลากโภชนาการ ถ้าฉลากบอกต่อหน่วยบริโภค ให้คูณจำนวนที่กินจริง</p>
     ${mealSel()}${photoPicker('รูปจาน/ฉลาก')}
     <button class="btn pri block" data-act="saveFood">บันทึก</button>`;
-  const q = (s.q || '').trim().toLowerCase();
-  const res = q ? FOODS.filter(f => f.n.toLowerCase().includes(q) || (f.cat || '').includes(q)).slice(0, 40) : [];
+  if (s.mode === 'quick') return quickSheetBody();
+  if (s.mode === 'noodle') return noodleSheetBody();
+  const q = (s.q || '').trim().toLowerCase(), qn = normTh(q);
+  const res = q ? FOODS.filter(f => f.n.toLowerCase().includes(q) || (f.cat || '').includes(q) || (qn && normTh(f.n).includes(qn))).slice(0, 40) : [];
+  const hintQ = qn && /กเพา|ขาว|ผด|ไขดาว|ตามสง|ราด|กวยเตยว|เสน|บหม|เยนตาโฟ|เกาเหลา|มามา|กวยจบ|วนเสน/.test(qn);
   const f = s.pick ? FOOD[s.pick] : null;
   let pickHtml = '';
   if (f) {
     const qty = num(s.qty) ?? f.d; const v = foodCalc(f, qty);
     pickHtml = `<section class="card gold-edge"><b>${esc(f.n)}</b>
       <label class="f">${f.u === 'g' ? 'น้ำหนัก (กรัม)' : 'จำนวน (' + esc(f.un || 'หน่วย') + ')'}<input class="in" id="fQty" inputmode="decimal" value="${esc(s.qty ?? f.d)}"></label>
-      <div class="small">≈ <b>${n0(v.k)} kcal</b> · P ${v.p} · C ${v.c} · F ${v.f} g</div></section>`;
+      <div class="small">≈ <b>${n0(v.k)} kcal</b> · P ${v.p} · C ${v.c} · F ${v.f} g</div>${f.qk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="qkFrom" data-id="${f.id}">ปรับข้าว ไข่ น้ำมัน หรือสั่งพิเศษ ›</button>` : ''}</section>`;
   }
-  return `<div class="chips"><button class="chip" aria-pressed="true">ค้นจากคลังอาหาร</button><button class="chip" data-act="foodMode" data-v="manual" aria-pressed="false">กรอกเอง</button></div>
+  return `${foodModeChips()}
     <label class="f">ค้นหาอาหาร<input class="in" id="fSearch" value="${esc(s.q || '')}" placeholder="เช่น ไข่ ปลา ข้าว อกไก่" autocomplete="off"></label>
+    ${hintQ ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="quick">ประกอบจานด่วน/ข้าวราด ›</button><button class="chip" data-act="foodMode" data-v="noodle">ประกอบชามก๋วยเตี๋ยว ›</button></div>` : ''}
     ${res.length ? `<div class="foodres">${res.map(x => `<button type="button" data-act="pickFood" data-id="${x.id}">${esc(x.n)} <span class="xs muted">· ${x.d} ${x.u === 'g' ? 'g' : esc(x.un || '')} · ${n0(foodCalc(x, x.d).k)} kcal</span></button>`).join('')}</div>` : (q ? '<p class="small muted" style="margin:0">ไม่พบในคลัง ลองคำอื่น หรือกด “กรอกเอง”</p>' : '')}
     ${pickHtml}${mealSel()}${photoPicker('รูปจาน')}
     <button class="btn pri block" data-act="saveFood" ${f ? '' : 'disabled'}>บันทึก</button>`;
+}
+function foodModeChips() {
+  const m = sheet.mode || 'db';
+  return `<div class="chips">${[['db', 'ค้นจากคลัง'], ['quick', 'จานด่วน/ข้าวราด'], ['noodle', 'ก๋วยเตี๋ยว'], ['manual', 'กรอกเอง']].map(([k, l]) => `<button class="chip" data-act="foodMode" data-v="${k}" aria-pressed="${m === k}">${l}</button>`).join('')}</div>`;
+}
+/* ---------- จานด่วน / ก๋วยเตี๋ยว: เลือกเหมือนสั่งที่ร้าน แอปคำนวณ kcal ให้ ---------- */
+const QK_DEF = { style: 'krapao', protein: 'porkmince', size: 1, oil: 1, rice: 'white', riceG: 200, ate: 100, egg: 'fried', eggN: 1, prikpla: 0 };
+const ND_DEF = { type: 'lek', soup: 'clear', tops: ['pork', 'ball'], size: 1, sip: 1, sugar: 0, peanut: 0, kakmoo: 0, garlic: 0 };
+function lsGet(k, d) { try { return { ...d, ...(JSON.parse(localStorage.getItem(k) || 'null') || {}) }; } catch (e) { return { ...d }; } }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* ไม่มี storage ก็ใช้ต่อได้ */ } }
+function qkState() { if (!sheet.qk) sheet.qk = lsGet('oc_quick', QK_DEF); return sheet.qk; }
+function ndState() { if (!sheet.nd) sheet.nd = lsGet('oc_noodle', ND_DEF); return sheet.nd; }
+function optChips(list, cur, act, key, sub) {
+  return `<div class="chips">${list.map(x => `<button class="chip" data-act="${act}" data-k="${key}" data-v="${x.k}" aria-pressed="${String(cur) === String(x.k)}">${esc(x.n)}${sub && x.k2 != null ? ` <span class="xs" style="opacity:.7">${n0(x.k2)}</span>` : ''}</button>`).join('')}</div>`;
+}
+function totalBox(r) {
+  return `<section class="card gold-edge"><b>${esc(r.name)}</b><div class="xs muted">${esc(r.desc)}</div>
+    <div style="margin-top:6px"><span class="big">${n0(r.k)}</span> <span class="muted">kcal</span></div>
+    <div class="small">โปรตีน ${r.p} g · คาร์บ ${r.c} g · ไขมัน ${r.f} g</div></section>`;
+}
+function quickSheetBody() {
+  const st = qkState(), r = quickCalc(st), lb = t => `<div class="small"><b>${t}</b></div>`;
+  return `${foodModeChips()}
+    <p class="xs muted" style="margin:0">เลือกเหมือนสั่งร้านตามสั่ง แอปรวม kcal ให้ · ตัวเลขเล็กบนปุ่มคือ kcal ของส่วนนั้น</p>
+    ${lb('1. เมนูผัด')}${optChips(QUICK.styles, st.style, 'qkSet', 'style')}
+    ${lb('2. เนื้อสัตว์')}${optChips(QUICK.proteins, st.protein, 'qkSet', 'protein', 1)}
+    ${optChips(QUICK.size, st.size, 'qkSet', 'size')}
+    ${lb('3. ข้าว')}${optChips(QUICK.riceG, st.riceG, 'qkSet', 'riceG')}
+    ${+st.riceG ? `${optChips(QUICK.riceType, st.rice, 'qkSet', 'rice')}<div class="xs muted">กินข้าวไป</div>${optChips(QUICK.ate, st.ate, 'qkSet', 'ate')}` : ''}
+    ${lb('4. ไข่')}${optChips(QUICK.eggs, st.egg, 'qkSet', 'egg', 1)}
+    ${st.egg !== 'none' ? optChips([{ k: 1, n: '1 ฟอง' }, { k: 2, n: '2 ฟอง' }], st.eggN, 'qkSet', 'eggN') : ''}
+    ${lb('5. สั่งเพิ่ม')}${optChips(QUICK.oilLv, st.oil, 'qkSet', 'oil')}
+    <div class="chips"><button class="chip" data-act="qkSet" data-k="prikpla" data-v="${+st.prikpla ? 0 : 1}" aria-pressed="${!!+st.prikpla}">พริกน้ำปลา</button></div>
+    ${totalBox(r)}${mealSel()}${photoPicker('รูปจาน')}
+    <button class="btn pri block" data-act="saveBuilt" data-v="quick">บันทึกจานนี้</button>`;
+}
+function noodleSheetBody() {
+  const st = ndState(), r = noodleCalc(st), sp = NOODLE.soups.find(x => x.k === st.soup) || NOODLE.soups[0], lb = t => `<div class="small"><b>${t}</b></div>`;
+  return `${foodModeChips()}
+    <p class="xs muted" style="margin:0">เลือกเส้น น้ำ และของใส่เหมือนสั่งที่ร้าน · ของใส่เลือกได้หลายอย่าง · ตัวเลขเล็กคือ kcal</p>
+    ${lb('1. เส้น')}${optChips(NOODLE.types, st.type, 'ndSet', 'type', 1)}
+    ${lb('2. น้ำ / แบบ')}${optChips(NOODLE.soups, st.soup, 'ndSet', 'soup', 1)}
+    ${sp.dry ? '' : `<div class="xs muted">น้ำซุป</div>${optChips(NOODLE.sip, st.sip, 'ndSet', 'sip')}`}
+    ${lb('3. ของใส่')}<div class="chips">${NOODLE.tops.map(x => `<button class="chip" data-act="ndTop" data-v="${x.k}" aria-pressed="${(st.tops || []).includes(x.k)}">${esc(x.n)} <span class="xs" style="opacity:.7">${n0(x.k2)}</span></button>`).join('')}</div>
+    ${lb('4. ขนาด')}${optChips(NOODLE.size, st.size, 'ndSet', 'size')}
+    ${lb('5. ปรุงเพิ่ม')}<div class="xs muted">น้ำตาล (ช้อนชา)</div>${optChips([{ k: 0, n: 'ไม่ใส่' }, { k: 1, n: '1' }, { k: 2, n: '2' }], st.sugar, 'ndSet', 'sugar')}
+    <div class="xs muted">ถั่วลิสงป่น (ช้อนชา)</div>${optChips([{ k: 0, n: 'ไม่ใส่' }, { k: 1, n: '1' }, { k: 2, n: '2' }], st.peanut, 'ndSet', 'peanut')}
+    <div class="chips"><button class="chip" data-act="ndSet" data-k="kakmoo" data-v="${+st.kakmoo ? 0 : 1}" aria-pressed="${!!+st.kakmoo}">กากหมูเจียว</button><button class="chip" data-act="ndSet" data-k="garlic" data-v="${+st.garlic ? 0 : 1}" aria-pressed="${!!+st.garlic}">กระเทียมเจียวเพิ่ม</button></div>
+    ${totalBox(r)}${mealSel()}${photoPicker('รูปชาม')}
+    <button class="btn pri block" data-act="saveBuilt" data-v="noodle">บันทึกชามนี้</button>`;
+}
+function qkNum(k, v) { return ['size', 'oil', 'riceG', 'ate', 'eggN', 'prikpla', 'sip', 'sugar', 'peanut', 'kakmoo', 'garlic'].includes(k) ? +v : v; }
+function redrawFood() { const y = $('#sheetBody')?.parentElement?.scrollTop; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); const sh = $('#sheetBody')?.parentElement; if (sh && y != null) sh.scrollTop = y; }
+async function saveBuilt(el) {
+  const s = sheet, kind = el.dataset.v, st = kind === 'quick' ? qkState() : ndState(), r = kind === 'quick' ? quickCalc(st) : noodleCalc(st), meal = $('#fMeal').value;
+  const item = { n: r.name, q: 1, qs: r.desc, k: r.k, p: r.p, c: r.c, f: r.f, src: kind, opt: { ...st } };
+  if (s.ph?.length) item.ph = s.ph;
+  item.t = Date.now(); item.by = S.me.role;
+  lsSet(kind === 'quick' ? 'oc_quick' : 'oc_noodle', st);
+  await mutateDay(S.view, ui.date, d => { (d.meals[meal] = d.meals[meal] || []).push(item); });
+  closeSheet(); toast(`บันทึก ${r.name} ${n0(r.k)} kcal`); render();
 }
 function mealSel() { return `<label class="f">มื้อ<select class="in" id="fMeal">${MEALS.map(m => `<option ${m === sheet.meal ? 'selected' : ''}>${m}</option>`).join('')}</select></label>`; }
 async function saveFood() {
@@ -972,6 +1037,11 @@ const ACTS = {
   rmFood: async el => { if (!confirm('ลบรายการนี้?')) return; const m = el.dataset.m, i = +el.dataset.i; await mutateDay(S.view, ui.date, d => { (d.meals[m] || []).splice(i, 1); }); render(); },
   addFood: el => { openSheet('เพิ่มอาหาร', '', { kind: 'food', meal: el.dataset.m, mode: 'db', q: '', pick: null, qty: null, mf: {}, ph: [] }); refreshSheet(foodSheetBody()); },
   foodMode: el => { sheet.mode = el.dataset.v; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); },
+  qkSet: el => { const st = qkState(); st[el.dataset.k] = qkNum(el.dataset.k, el.dataset.v); if (el.dataset.k === 'riceG' && +st.riceG && !+st.ate) st.ate = 100; redrawFood(); },
+  ndSet: el => { const st = ndState(); st[el.dataset.k] = qkNum(el.dataset.k, el.dataset.v); redrawFood(); },
+  ndTop: el => { const st = ndState(), k = el.dataset.v; st.tops = (st.tops || []).includes(k) ? st.tops.filter(x => x !== k) : [...(st.tops || []), k]; redrawFood(); },
+  qkFrom: el => { const f = FOOD[el.dataset.id]; if (!f?.qk) return; sheet.qk = { ...qkState(), ...f.qk, size: 1, riceG: 200, rice: 'white', ate: 100, eggN: 1 }; sheet.mode = 'quick'; redrawFood(); },
+  saveBuilt,
   pickFood: el => { sheet.pick = el.dataset.id; sheet.qty = null; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); $('#fQty')?.focus(); },
   saveFood,
   saveCoachNote: async () => { const v = $('#coachNote').value.trim(); await mutateDay(S.view, ui.date, d => { d.coachNote = v; }); toast('บันทึกโน้ตแล้ว'); render(); },
@@ -1070,6 +1140,7 @@ const ACTS = {
 function photoPickerKeep() { return `<div class="thumbs" id="thumbs">${thumbsHtml(sheet?.ph, true)}<label class="addthumb">${svg('cam', 22)}แนบรูป<input type="file" accept="image/*" multiple hidden data-act="pickPhoto"></label></div>`; }
 async function onChange(e) {
   const el = e.target;
+  if (el.id === 'fMeal' && sheet) { sheet.meal = el.value; return; }
   if (el.dataset?.act === 'pickPhoto' && el.files?.length) {
     const pid = S.view; const files = [...el.files]; toast('กำลังแนบรูป…', 8000);
     for (const f of files) { try { const d = await compress(f); const id = await savePhoto(pid, d); sheet.ph.push(id); sheet.lastImg = d; } catch (err) { console.error(err); toast('แนบรูปไม่สำเร็จ'); } }

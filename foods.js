@@ -112,13 +112,18 @@ export const FOODS=[
  {id:'d_sushi',n:'ซูชิแซลมอน',u:'pc',un:'คำ',d:4,k:50,p:2,c:7,f:1.5,cat:'อาหารจานเดียว'},
  // ร้านอาหาร / สั่งกลับบ้าน (ค่าประมาณจานร้านทั่วไป ใช้น้ำมันมากกว่าทำเอง)
  {id:'r_chickrice',n:'ข้าวมันไก่ (ร้าน มีหนัง)',u:'pc',un:'จาน',d:1,k:600,p:28,c:75,f:20,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
- {id:'r_krapaopork',n:'ข้าวกะเพราหมูสับไข่ดาว (ร้าน)',u:'pc',un:'จาน',d:1,k:650,p:28,c:70,f:28,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
- {id:'r_krapaochick',n:'ข้าวกะเพราไก่ ไม่ใส่ไข่ดาว (ร้าน)',u:'pc',un:'จาน',d:1,k:520,p:28,c:68,f:15,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
  {id:'r_friedrice',n:'ข้าวผัดหมู/ไก่ (ร้าน)',u:'pc',un:'จาน',d:1,k:580,p:20,c:80,f:20,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
  {id:'r_padthai',n:'ผัดไทยกุ้งสด',u:'pc',un:'จาน',d:1,k:550,p:20,c:70,f:20,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
  {id:'r_padsiew',n:'ผัดซีอิ๊วหมู',u:'pc',un:'จาน',d:1,k:680,p:22,c:80,f:28,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
  {id:'r_radna',n:'ราดหน้าหมู',u:'pc',un:'จาน',d:1,k:450,p:20,c:55,f:15,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
  {id:'r_noodleclear',n:'ก๋วยเตี๋ยวน้ำใส หมู/ลูกชิ้น',u:'pc',un:'ชาม',d:1,k:350,p:20,c:45,f:9,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
+ {id:'r_padkeemao',n:'ผัดขี้เมาเส้นใหญ่ (หมู/ไก่/ทะเล)',u:'pc',un:'จาน',d:1,k:620,p:25,c:70,f:26,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
+ {id:'r_kuakai',n:'ก๋วยเตี๋ยวคั่วไก่',u:'pc',un:'จาน',d:1,k:560,p:25,c:60,f:24,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
+ {id:'r_radnamee',n:'ราดหน้าหมี่กรอบ',u:'pc',un:'จาน',d:1,k:650,p:20,c:75,f:30,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
+ {id:'r_bameedry',n:'บะหมี่แห้งหมูแดง',u:'pc',un:'ชาม',d:1,k:430,p:20,c:55,f:14,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
+ {id:'r_sukidry',n:'สุกี้แห้งทะเล',u:'pc',un:'จาน',d:1,k:400,p:25,c:40,f:15,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
+ {id:'r_khaosoi',n:'ข้าวซอยไก่',u:'pc',un:'ชาม',d:1,k:650,p:28,c:55,f:35,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
+ {id:'r_khanomjeen',n:'ขนมจีนน้ำยา',u:'pc',un:'จาน',d:1,k:450,p:15,c:65,f:14,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
  {id:'r_khaokhamu',n:'ข้าวขาหมู',u:'pc',un:'จาน',d:1,k:690,p:30,c:75,f:30,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
  {id:'r_moodaeng',n:'ข้าวหมูแดง',u:'pc',un:'จาน',d:1,k:520,p:22,c:75,f:14,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
  {id:'r_gaiyang',n:'ไก่ย่าง (อก ไม่กินหนัง)',u:'pc',un:'ชิ้น (~150 g)',d:1,k:250,p:40,c:3,f:8,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
@@ -328,6 +333,130 @@ export const PROTEINS=[
 ];
 
 export const CIRC=[['waist','รอบเอว (ระดับสะดือ)'],['hip','รอบสะโพก (รวมหน้าท้อง)'],['bust','รอบอก (ระดับเนินอก)'],['chest','รอบอกบน'],['armR','ต้นแขนขวา'],['armL','ต้นแขนซ้าย'],['thighR','ต้นขาขวา'],['thighL','ต้นขาซ้าย']];
+
+// ===== อาหารจานด่วน / ร้านตามสั่ง (ข้าวราดผัด) · ค่าเป็นจานร้านทั่วไป =====
+// จาน = ซอส/ผัก ของเมนู + น้ำมันผัด + เนื้อสัตว์ + ข้าว + ไข่ (ถ้ามี) · k/p/c/f ต่อ 1 ส่วน
+export const QUICK={
+ styles:[
+  {k:'krapao',n:'กะเพรา',t:'ข้าวกะเพรา{p}',k2:40,p:1,c:8,f:0.3,oil:1},
+  {k:'prikgaeng',n:'ผัดพริกแกง',t:'ข้าวผัดพริกแกง{p}',k2:60,p:2,c:11,f:1.5,oil:1},
+  {k:'garlic',n:'กระเทียมพริกไทย',t:'ข้าว{p}กระเทียมพริกไทย',k2:55,p:1.5,c:9,f:1,oil:1.25},
+  {k:'prikpao',n:'ผัดพริกเผา',t:'ข้าวผัดพริกเผา{p}',k2:75,p:1.5,c:16,f:1,oil:1},
+  {k:'curry',n:'ผัดผงกะหรี่',t:'ข้าวผัดผงกะหรี่{p}',k2:130,p:7.5,c:12,f:6,oil:1},
+  {k:'sweetsour',n:'ผัดเปรี้ยวหวาน',t:'ข้าวผัดเปรี้ยวหวาน{p}',k2:110,p:1.5,c:26,f:0.3,oil:0.75},
+  {k:'veg',n:'ผัดผักรวม/คะน้า',t:'ข้าวผัดผัก{p}',k2:55,p:3,c:10,f:0.4,oil:0.75},
+  {k:'oyster',n:'ผัดน้ำมันหอย/พริกสด',t:'ข้าวผัดน้ำมันหอย{p}',k2:45,p:1.5,c:9,f:0.3,oil:1},
+  {k:'friedrice',n:'ข้าวผัด',t:'ข้าวผัด{p}',k2:70,p:3.5,c:6,f:2.7,oil:1.25}
+ ],
+ oil:{n:'น้ำมันผัด (ส่วนที่อยู่ในจาน)',k2:120,p:0,c:0,f:13.6},
+ oilLv:[{k:1,n:'ปกติ'},{k:0.5,n:'น้ำมันน้อย'},{k:0.15,n:'ไม่ใส่น้ำมัน/ผัดน้ำ'}],
+ proteins:[
+  {k:'porkmince',n:'หมูสับ',d:'~90 g',k2:220,p:17,c:0,f:17},
+  {k:'porkslice',n:'หมูชิ้น',d:'~90 g',k2:150,p:18,c:0,f:8.5},
+  {k:'crispy',n:'หมูกรอบ',d:'~80 g',k2:420,p:13,c:1,f:40},
+  {k:'chickmince',n:'ไก่สับ',d:'~90 g',k2:150,p:16,c:0,f:9.5},
+  {k:'chickbreast',n:'อกไก่',d:'~100 g',k2:120,p:23,c:0,f:2.6},
+  {k:'shrimp',n:'กุ้ง',d:'~7 ตัว',k2:85,p:20,c:0,f:0.5},
+  {k:'squid',n:'ปลาหมึก',d:'~100 g',k2:92,p:15.6,c:3,f:1.4},
+  {k:'seafood',n:'ทะเล',d:'กุ้ง+หมึก ~100 g',k2:90,p:18,c:1.5,f:1},
+  {k:'beef',n:'เนื้อ',d:'~90 g',k2:170,p:18,c:0,f:11}
+ ],
+ size:[{k:1,n:'ธรรมดา'},{k:1.5,n:'พิเศษ (เนื้อเพิ่ม)'}],
+ riceType:[{k:'white',n:'ข้าวสวย',k2:130,p:2.7,c:28.2,f:0.3},{k:'brown',n:'ข้าวกล้อง',k2:112,p:2.3,c:23.5,f:0.9},{k:'berry',n:'ไรซ์เบอร์รี่',k2:120,p:3,c:25,f:1}],
+ riceG:[{k:0,n:'ไม่เอาข้าว'},{k:100,n:'ครึ่งจาน (~100 g)'},{k:200,n:'ปกติ (~200 g)'},{k:300,n:'พิเศษ (~300 g)'}],
+ ate:[{k:100,n:'หมด'},{k:75,n:'¾'},{k:50,n:'ครึ่ง'},{k:25,n:'¼'}],
+ eggs:[
+  {k:'none',n:'ไม่ใส่ไข่'},
+  {k:'fried',n:'ไข่ดาว',k2:130,p:6.3,c:0.4,f:10.5},
+  {k:'crisp',n:'ไข่ดาวกรอบ',k2:165,p:6.3,c:0.4,f:14.3},
+  {k:'omelet',n:'ไข่เจียว',k2:200,p:7,c:1,f:18.5},
+  {k:'boiled',n:'ไข่ต้ม',k2:72,p:6.3,c:0.4,f:4.8}
+ ],
+ prikpla:{n:'พริกน้ำปลา',k2:8,p:0.8,c:1.2,f:0}
+};
+// ===== ก๋วยเตี๋ยว · ชามร้านทั่วไป =====
+export const NOODLE={
+ types:[
+  {k:'lek',n:'เส้นเล็ก',t:'ก๋วยเตี๋ยวเส้นเล็ก',k2:130,p:2.2,c:29,f:0.3},
+  {k:'yai',n:'เส้นใหญ่',t:'ก๋วยเตี๋ยวเส้นใหญ่',k2:200,p:2.5,c:38,f:4},
+  {k:'mee',n:'เส้นหมี่',t:'ก๋วยเตี๋ยวเส้นหมี่',k2:110,p:1.8,c:24,f:0.3},
+  {k:'bamee',n:'บะหมี่เหลือง/หยก',t:'บะหมี่',k2:150,p:5,c:28,f:2},
+  {k:'woonsen',n:'วุ้นเส้น',t:'วุ้นเส้น',k2:100,p:0.1,c:24.5,f:0.1},
+  {k:'kuayjab',n:'เส้นก๋วยจั๊บ',t:'ก๋วยจั๊บ',k2:160,p:2.5,c:36,f:0.4},
+  {k:'mama',n:'มาม่า',t:'มาม่า',k2:230,p:5,c:32,f:9},
+  {k:'none',n:'ไม่มีเส้น (เกาเหลา)',t:'เกาเหลา',k2:0,p:0,c:0,f:0}
+ ],
+ soups:[
+  {k:'clear',n:'น้ำใส',k2:60,p:3,c:3,f:4},
+  {k:'namtok',n:'น้ำตก',k2:90,p:4,c:6,f:5},
+  {k:'tomyum',n:'ต้มยำ',k2:120,p:3,c:10,f:7},
+  {k:'tomyumcream',n:'ต้มยำน้ำข้น',k2:170,p:4,c:12,f:12},
+  {k:'yentafo',n:'เย็นตาโฟ',k2:150,p:4,c:18,f:7},
+  {k:'pepper',n:'น้ำข้นพริกไทย',k2:90,p:4,c:6,f:5},
+  {k:'dry',n:'แห้ง',k2:100,p:1,c:6,f:8,dry:1},
+  {k:'tomyumdry',n:'ต้มยำแห้ง',k2:150,p:3,c:12,f:10,dry:1}
+ ],
+ tops:[
+  {k:'pork',n:'หมูสับ+หมูชิ้น',k2:140,p:15,c:1,f:8.5},
+  {k:'ball',n:'ลูกชิ้นหมู/ปลา (5 ลูก)',k2:110,p:9,c:7,f:5},
+  {k:'chicken',n:'ไก่ฉีก/ไก่ตุ๋น',k2:150,p:20,c:0,f:7.5},
+  {k:'beef',n:'เนื้อสด/เนื้อเปื่อย',k2:180,p:20,c:1,f:11},
+  {k:'seafood',n:'ทะเล (กุ้ง หมึก)',k2:90,p:17,c:2,f:1.2},
+  {k:'wonton',n:'เกี๊ยว (5 ชิ้น)',k2:150,p:8,c:16,f:6},
+  {k:'moodaeng',n:'หมูแดง',k2:100,p:11,c:5,f:4},
+  {k:'crispy',n:'หมูกรอบ (~50 g)',k2:260,p:8,c:0.5,f:25},
+  {k:'offal',n:'เครื่องใน/ตับ',k2:110,p:15,c:3,f:4},
+  {k:'egg',n:'ไข่ต้ม',k2:72,p:6.3,c:0.4,f:4.8}
+ ],
+ size:[{k:1,n:'ธรรมดา'},{k:1.4,n:'พิเศษ'}],
+ sip:[{k:1,n:'ซดหมด'},{k:0.6,n:'ซดครึ่ง'},{k:0.3,n:'ไม่ซด'}],
+ sugar:{n:'น้ำตาล',k2:16,p:0,c:4,f:0},
+ peanut:{n:'ถั่วลิสงป่น',k2:29,p:1.3,c:1,f:2.5},
+ kakmoo:{n:'กากหมูเจียว',k2:55,p:3,c:0,f:4.5},
+ garlic:{n:'กระเทียมเจียวเพิ่ม',k2:45,p:0.3,c:2,f:4}
+};
+const QPick=(L,k)=>L.find(x=>String(x.k)===String(k))||L[0];
+function qAdd(a,x,m){ if(!x||!(m>0)||x.k2==null) return a; return {k:a.k+x.k2*m,p:a.p+x.p*m,c:a.c+x.c*m,f:a.f+x.f*m}; }
+const R1=v=>Math.round(v*10)/10;
+function qFinish(t){ return {k:Math.round(t.k),p:R1(t.p),c:R1(t.c),f:R1(t.f)}; }
+// สเตตของจานด่วน: {style, protein, size, oil, rice, riceG, ate, egg, eggN, prikpla}
+export function quickCalc(st){
+ const s=QPick(QUICK.styles,st.style), pr=QPick(QUICK.proteins,st.protein), sz=+st.size||1, rt=QPick(QUICK.riceType,st.rice), eg=QPick(QUICK.eggs,st.egg);
+ const saucex=sz>1?1.25:1;
+ let t={k:0,p:0,c:0,f:0};
+ t=qAdd(t,s,saucex); t=qAdd(t,QUICK.oil,s.oil*(st.oil==null?1:+st.oil)*saucex); t=qAdd(t,pr,sz);
+ t=qAdd(t,rt,(+st.riceG||0)/100*((st.ate==null?100:+st.ate)/100));
+ if(eg.k2!=null) t=qAdd(t,eg,+st.eggN||1);
+ if(+st.prikpla) t=qAdd(t,QUICK.prikpla,1);
+ const eggTxt=eg.k2!=null?` + ${(+st.eggN||1)>1?eg.n+' 2 ฟอง':eg.n}`:'';
+ const name=s.t.replace('{p}',pr.n)+eggTxt+(sz>1?' (พิเศษ)':'');
+ const bits=[`${pr.n} ${pr.d}${sz>1?' ×1.5':''}`];
+ if(+st.riceG) bits.push(`${rt.n} ${st.riceG} g${(+st.ate||100)<100?` กิน ${st.ate}%`:''}`); else bits.push('ไม่เอาข้าว');
+ if(st.oil!=null&&+st.oil<1) bits.push(QPick(QUICK.oilLv,st.oil).n);
+ return {name, desc:bits.join(' · '), ...qFinish(t)};
+}
+// สเตตของก๋วยเตี๋ยว: {type, soup, tops:[...], size, sip, sugar, peanut, kakmoo, garlic}
+export function noodleCalc(st){
+ const ty=QPick(NOODLE.types,st.type), sp=QPick(NOODLE.soups,st.soup), sz=+st.size||1, sip=sp.dry?1:(st.sip==null?1:+st.sip);
+ const tops=(st.tops||[]).map(k=>NOODLE.tops.find(x=>x.k===k)).filter(Boolean);
+ let t={k:0,p:0,c:0,f:0};
+ t=qAdd(t,ty,sz>1?1.3:1); t=qAdd(t,sp,sip);
+ tops.forEach(x=>{t=qAdd(t,x,x.k==='egg'?1:sz>1?1.5:1);});
+ t=qAdd(t,NOODLE.sugar,+st.sugar||0); t=qAdd(t,NOODLE.peanut,+st.peanut||0);
+ if(+st.kakmoo) t=qAdd(t,NOODLE.kakmoo,1); if(+st.garlic) t=qAdd(t,NOODLE.garlic,1);
+ const name=`${ty.t}${sp.k==='yentafo'&&ty.k!=='none'?'เย็นตาโฟ':sp.n}${tops.length?' '+tops.map(x=>x.n.replace(/ \(.*\)$/,'')).join('+'):''}${sz>1?' (พิเศษ)':''}`;
+ const bits=[]; if(!sp.dry&&sip<1) bits.push(QPick(NOODLE.sip,sip).n);
+ if(+st.sugar) bits.push(`น้ำตาล ${st.sugar} ช้อนชา`); if(+st.peanut) bits.push(`ถั่ว ${st.peanut} ช้อนชา`);
+ if(+st.kakmoo) bits.push('กากหมู'); if(+st.garlic) bits.push('กระเทียมเจียวเพิ่ม');
+ return {name, desc:bits.join(' · ')||'ชามปกติ', ...qFinish(t)};
+}
+// ใส่ข้าวราดทุกแบบลงคลังอาหาร (ข้าวสวยปกติ · ไม่ใส่ไข่/ไข่ดาว) ให้ค้นชื่อเมนูเจอเลย
+for(const s of QUICK.styles) for(const pr of QUICK.proteins) for(const eg of ['none','fried']){
+ const r=quickCalc({style:s.k,protein:pr.k,rice:'white',riceG:200,egg:eg});
+ FOODS.push({id:`qk_${s.k}_${pr.k}_${eg}`,n:r.name+(eg==='none'?' ไม่ใส่ไข่':'')+' (ตามสั่ง)',u:'pc',un:'จาน',d:1,k:r.k,p:r.p,c:r.c,f:r.f,cat:'อาหารจานด่วน/ตามสั่ง',qk:{style:s.k,protein:pr.k,egg:eg}});
+}
+// ค้นแบบทนคำสะกดผิด: ตัดวรรณยุกต์ ไม้หันอากาศ สระอะ ร และช่องว่าง (กระเพา = กะเพรา, กวยเตียว = ก๋วยเตี๋ยว)
+export function normTh(s){ return String(s||'').toLowerCase().replace(/[่-๎ัะร\s]/g,''); }
 
 export const FOOD=Object.fromEntries(FOODS.map(f=>[f.id,f]));
 

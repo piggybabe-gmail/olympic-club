@@ -3,7 +3,7 @@ import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN, RECAPTCHA_SITE_KEY } from '.
 import { FOODS, FOOD, MEALS, TH_M } from './foods.js?v=20260929a';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20260929f';
+const VER = '20260929g';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -198,6 +198,7 @@ function lineCardHtml() {
   const i = line.info; const L = i?.link;
   const what = S.me.role === 'member' ? 'ผลการเทรนหลังโค้ชบันทึก' : S.me.role === 'trainer' ? `สรุปลูกค้าของคุณทุกวันเวลา ${esc(S.config.digestTime || '21:00')}` : 'แจ้งเตือนของระบบ และสรุปรายวัน (ถ้าเปิดไว้)';
   return `<section class="card"><div class="between"><b>LINE ของฉัน</b>${!i ? '<span class="tag grey">กำลังตรวจ…</span>' : L ? `<span class="tag blue">เชื่อมแล้ว · ${esc(L.name || '')}</span>` : '<span class="tag alert">ยังไม่เชื่อม</span>'}</div>
+    <div class="pill-note">บัญชีในแอปที่จะผูก: <b>${esc(S.me.name)}</b> · ${S.me.role === 'owner' ? 'เจ้าของระบบ' : S.me.role === 'trainer' ? 'เทรนเนอร์' : 'ลูกค้า'}${S.me.person?.username ? ' (@' + esc(S.me.person.username) + ')' : ''}</div>
     <span class="small muted">เชื่อมครั้งเดียว แล้วจะได้รับ ${what} เป็นแชต 1:1 จาก LINE OA</span>
     ${i && !i.ok ? `<div class="warn">${esc(i.error || 'เชื่อมต่อไม่ได้')}</div>` : ''}
     ${L && L.friend === false ? '<div class="warn">ยังไม่ได้เพิ่มเพื่อน LINE OA ต้องเพิ่มเพื่อนก่อนถึงจะได้รับข้อความ กด “เชื่อมใหม่” แล้วเลือกเพิ่มเพื่อน</div>' : ''}

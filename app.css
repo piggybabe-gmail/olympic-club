@@ -92,3 +92,17 @@ textarea.in{padding:10px 12px;min-height:72px;resize:vertical}
 .pill-note{background:#E3ECF5;color:var(--navy);border-radius:12px;padding:10px 12px;font-size:13px}
 .warn{background:#FBE9DD;color:#7A2E0B;border-radius:12px;padding:10px 12px;font-size:13px}
 @media (min-width:600px){.wrap{padding-top:20px}}
+
+/* รูปอาหารในรายการ + ตัวดูรูปเต็มจอ */
+.thumbs.mini{gap:6px}
+.thumbs.mini .thumb{width:64px;height:64px;border-radius:10px}
+.thumb button:focus-visible{outline:3px solid var(--gold,#B8862B);outline-offset:-3px}
+.lb{position:fixed;inset:0;z-index:80;background:rgba(8,11,16,.97);display:flex;flex-direction:column;color:#fff}
+.lb-stage{flex:1;min-height:0;overflow:auto;display:flex;align-items:center;justify-content:center;padding:56px 8px 8px}
+.lb-stage img{max-width:100%;max-height:100%;object-fit:contain;display:block;border-radius:6px;cursor:zoom-in;-webkit-touch-callout:default}
+.lb-stage img.zoom{max-width:none;max-height:none;width:auto;cursor:zoom-out;margin:auto}
+.lb-load{color:#cfd6df;font-size:14px}
+.lb-x{position:absolute;top:calc(10px + env(safe-area-inset-top));right:12px;width:44px;height:44px;border-radius:22px;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:26px;line-height:1;z-index:1;cursor:pointer}
+.lb-bar{display:flex;align-items:center;justify-content:center;gap:18px;padding:10px 0 calc(14px + env(safe-area-inset-bottom));font-size:14px}
+.lb-nav{width:48px;height:44px;border-radius:12px;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:26px;line-height:1;cursor:pointer}
+.lb-nav:disabled{opacity:.3;cursor:default}

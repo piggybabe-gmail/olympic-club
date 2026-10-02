@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, quickCalc, noodleCalc, normTh 
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20260929h';
+const VER = '20261002a';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -289,8 +289,42 @@ async function fillThumbs(root = document) {
 }
 const clipTag = ph => (ph && ph.length) ? ` <span class="clip">${svg('clip', 13)} ${ph.length} รูป</span>` : '';
 function thumbsHtml(ids, editable) {
-  return (ids || []).map((id, i) => `<div class="thumb"><button type="button" style="border:none;padding:0;width:100%;height:100%;background:none" data-act="viewPhoto" data-id="${id}" aria-label="ดูรูป ${i + 1}"><img data-photo="${id}" alt=""></button>${editable ? `<button type="button" class="x" data-act="rmPhoto" data-i="${i}" aria-label="ลบรูป ${i + 1}">×</button>` : ''}</div>`).join('');
+  return (ids || []).map((id, i) => `<div class="thumb"><button type="button" style="border:none;padding:0;width:100%;height:100%;background:none" data-act="viewPhoto" data-id="${id}" data-set="${(ids || []).join(',')}" data-i="${i}" aria-label="ดูรูป ${i + 1}"><img data-photo="${id}" alt=""></button>${editable ? `<button type="button" class="x" data-act="rmPhoto" data-i="${i}" aria-label="ลบรูป ${i + 1}">×</button>` : ''}</div>`).join('');
 }
+/* ---------- ตัวดูรูปเต็มจอ ---------- */
+const lb = { ids: [], i: 0, x: null };
+function openViewer(ids, i = 0) {
+  if (!ids.length) return;
+  lb.ids = ids; lb.i = Math.max(0, Math.min(i, ids.length - 1));
+  let el = document.getElementById('viewer');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'viewer'; el.className = 'lb'; el.dataset.act = 'lbBg';
+    el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'ดูรูป');
+    el.addEventListener('click', e => { if (e.target === el || e.target.classList.contains('lb-stage')) closeViewer(); });
+    el.addEventListener('touchstart', e => { lb.x = e.touches.length === 1 ? e.touches[0].clientX : null; }, { passive: true });
+    el.addEventListener('touchend', e => {
+      if (lb.x == null || el.querySelector('img.zoom')) return; const dx = e.changedTouches[0].clientX - lb.x; lb.x = null;
+      if (Math.abs(dx) > 50) navViewer(dx < 0 ? 1 : -1);
+    }, { passive: true });
+    document.body.appendChild(el);
+  }
+  document.body.style.overflow = 'hidden';
+  drawViewer();
+}
+async function drawViewer() {
+  const el = document.getElementById('viewer'); if (!el) return;
+  const n = lb.ids.length, i = lb.i, id = lb.ids[i];
+  el.innerHTML = `<button type="button" class="lb-x" data-act="lbClose" aria-label="ปิด">×</button>
+    <div class="lb-stage"><div class="lb-load">กำลังโหลดรูป…</div></div>
+    ${n > 1 ? `<div class="lb-bar"><button type="button" class="lb-nav" data-act="lbNav" data-d="-1" aria-label="รูปก่อนหน้า" ${i ? '' : 'disabled'}>‹</button><span>${i + 1} / ${n}</span><button type="button" class="lb-nav" data-act="lbNav" data-d="1" aria-label="รูปถัดไป" ${i < n - 1 ? '' : 'disabled'}>›</button></div>` : ''}`;
+  let d = ''; try { d = await photoData(id); } catch (e) { console.error(e); }
+  if (lb.ids[lb.i] !== id || !document.getElementById('viewer')) return;
+  const st = el.querySelector('.lb-stage');
+  st.innerHTML = d ? `<img src="${d}" alt="รูปที่ ${i + 1}" data-act="lbZoom" title="แตะเพื่อซูม">` : '<div class="lb-load">เปิดรูปนี้ไม่ได้ (อาจถูกลบไปแล้ว)</div>';
+  lb.ids.forEach(x => { if (x !== id) photoData(x).catch(() => {}); });
+}
+function navViewer(d) { const j = lb.i + d; if (j < 0 || j >= lb.ids.length) return; lb.i = j; drawViewer(); }
+function closeViewer() { document.getElementById('viewer')?.remove(); document.body.style.overflow = ''; }
 function photoPicker(label = 'แนบรูป') {
   return `<div class="thumbs" id="thumbs">${thumbsHtml(sheet?.ph, true)}<label class="addthumb">${svg('cam', 22)}${label}<input type="file" accept="image/*" multiple hidden data-act="pickPhoto"></label></div>`;
 }
@@ -370,7 +404,7 @@ async function renderToday(pid) {
     const items = day.meals?.[m] || []; const mk = items.reduce((a, x) => a + (+x.k || 0), 0);
     return `<div class="li" style="align-items:flex-start;flex-direction:column;gap:6px">
       <div class="between" style="width:100%"><b class="goldt small">${m}</b><span class="small"><b>${items.length ? n0(mk) + ' kcal' : ''}</b></span></div>
-      ${items.map((it, i) => `<div class="between" style="width:100%;align-items:center"><span class="small grow">${esc(it.n)}${it.q ? ` <span class="muted">· ${esc(it.qs || it.q)}</span>` : ''}${clipTag(it.ph)}</span><span class="small">${n0(it.k)}</span><button class="iconbtn" style="width:36px;height:36px" data-act="rmFood" data-m="${m}" data-i="${i}" aria-label="ลบ ${esc(it.n)}">×</button></div>`).join('')}
+      ${items.map((it, i) => `<div class="between" style="width:100%;align-items:center"><span class="small grow">${esc(it.n)}${it.q ? ` <span class="muted">· ${esc(it.qs || it.q)}</span>` : ''}</span><span class="small">${n0(it.k)}</span><button class="iconbtn" style="width:36px;height:36px" data-act="rmFood" data-m="${m}" data-i="${i}" aria-label="ลบ ${esc(it.n)}">×</button></div>${it.ph?.length ? `<div class="thumbs mini">${thumbsHtml(it.ph)}</div>` : ''}`).join('')}
       <button class="btn sm ghost" data-act="addFood" data-m="${m}">+ เพิ่ม${m}</button></div>`;
   }).join('');
   setMain(`
@@ -1143,7 +1177,11 @@ const ACTS = {
   saveBody,
   rmBody: async el => { if (!confirm('ลบรายการนี้?')) return; await fb.deleteDoc(D('people', S.view, 'body', el.dataset.id)); render(); },
   rmPhoto: el => { const i = +el.dataset.i; if (sheet?.ph) { sheet.ph.splice(i, 1); $('#thumbs').outerHTML = photoPickerKeep(); fillThumbs($('#sheetBody')); } else if (ui.log) { logForm(); ui.log.ph.splice(i, 1); render(); } },
-  viewPhoto: async el => { const d = await photoData(el.dataset.id); const w = window.open(); if (w) { w.document.write(`<title>รูป</title><body style="margin:0;background:#111"><img src="${d}" style="max-width:100%;display:block;margin:auto">`); } },
+  viewPhoto: el => openViewer((el.dataset.set || el.dataset.id).split(',').filter(Boolean), +el.dataset.i || 0),
+  lbBg: () => {},
+  lbClose: () => closeViewer(),
+  lbNav: el => navViewer(+el.dataset.d),
+  lbZoom: el => el.classList.toggle('zoom'),
   newSession: openNewSession, saveSession,
   cancelSession: async el => { if (!confirm('ยกเลิกนัดนี้?')) return; await fb.updateDoc(D('sessions', el.dataset.id), { status: 'cancelled', trainerPid: S.me.pid }); render(); },
   logSession: async el => { const s = await get(D('sessions', el.dataset.id)); await startLog(s); },
@@ -1220,7 +1258,9 @@ function onInput(e) {
   if (el.id === 'fSearch' && sheet) { sheet.q = el.value; sheet.pick = null; const pos = el.selectionStart; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); const n = $('#fSearch'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) { } }
   if (el.dataset?.set && ui.log) { const m = ui.log.moves[+el.dataset.mi]; m.sets[+el.dataset.si][el.dataset.set] = el.value; }
 }
-function onKey(e) { if (e.key === 'Enter' && (e.target.id === 'lgPass' || e.target.id === 'lgUser')) doLogin(); if (e.key === 'Escape' && sheet) closeSheet(); }
+function onKey(e) {
+  if (document.getElementById('viewer')) { if (e.key === 'Escape') closeViewer(); else if (e.key === 'ArrowLeft') navViewer(-1); else if (e.key === 'ArrowRight') navViewer(1); return; }
+  if (e.key === 'Enter' && (e.target.id === 'lgPass' || e.target.id === 'lgUser')) doLogin(); if (e.key === 'Escape' && sheet) closeSheet(); }
 
 export const __test = { S, ui, dayTotals, foodCalc, digestText, addDays, weekStart, thDate, lineChart, render, ACTS, onInput, onChange, setFb: (f, d, a) => { fb = f; db = d; auth = a; } };
 if (typeof window !== 'undefined' && !window.__NO_BOOT__) {

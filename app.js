@@ -216,6 +216,7 @@ function lineCardHtml() {
 async function refreshLineCard() { await lineInfo(true); if (['more', 'system'].includes(ui.tab) && !viewingClient()) render(); }
 function startApp() {
   const qp = new URLSearchParams(location.search);
+  if (qp.has('u')) { qp.delete('u'); history.replaceState(null, '', location.pathname + (qp.toString() ? '?' + qp : '') + location.hash); }
   if (qp.has('line')) { const v = qp.get('line'); history.replaceState(null, '', location.pathname); setTimeout(() => toast(v === 'linked' ? 'เชื่อม LINE แล้ว ✅' : v === 'cancel' ? 'ยกเลิกการเชื่อม LINE' : 'เชื่อม LINE ไม่สำเร็จ ลองใหม่อีกครั้ง', 3500), 300); line.info = null; }
   if (S.me.role === 'member') { S.view = S.me.pid; ui.tab = 'today'; }
   else ui.tab = TABS[S.me.role][0][0];
@@ -1277,4 +1278,22 @@ export const __test = { S, ui, dayTotals, foodCalc, digestText, addDays, weekSta
 if (typeof window !== 'undefined' && !window.__NO_BOOT__) {
   document.addEventListener('click', onClick); document.addEventListener('change', onChange); document.addEventListener('input', onInput); document.addEventListener('keydown', onKey);
   boot();
+  // แจ้งเมื่อมีเวอร์ชันใหม่ (หน้าเก่าที่เปิดค้างไว้ หรือเบราว์เซอร์จำไฟล์เก่า)
+  const MYV = (import.meta.url.match(/[?&]v=([\w-]+)/) || [])[1];
+  const checkUpdate = async () => {
+    if (!MYV || document.getElementById('updBar')) return;
+    try {
+      const h = await (await fetch('index.html?_=' + Date.now(), { cache: 'no-store' })).text();
+      const v = (h.match(/app\.js\?v=([\w-]+)/) || [])[1];
+      if (v && v !== MYV) {
+        const b = document.createElement('button'); b.id = 'updBar'; b.type = 'button';
+        b.textContent = 'มีเวอร์ชันใหม่ · แตะเพื่ออัปเดต';
+        b.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);top:calc(10px + env(safe-area-inset-top));z-index:9999;border:none;border-radius:22px;padding:12px 20px;background:#E0A526;color:#14202E;font:inherit;font-weight:700;box-shadow:0 6px 20px #0003;cursor:pointer';
+        b.onclick = () => { if (ui.log && !confirm('ยังมีผลเทรนที่กรอกค้างอยู่ อัปเดตตอนนี้ข้อมูลที่ยังไม่บันทึกจะหาย ต้องการอัปเดตเลยไหม?')) return; const q = new URLSearchParams(location.search); q.set('u', v); location.replace(location.pathname + '?' + q + location.hash); };
+        document.body.appendChild(b);
+      }
+    } catch { /* ออฟไลน์ ข้ามไป */ }
+  };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkUpdate(); });
+  setInterval(checkUpdate, 5 * 60000); setTimeout(checkUpdate, 15000);
 }

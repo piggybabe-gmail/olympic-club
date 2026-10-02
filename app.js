@@ -10,6 +10,13 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
 const r1 = x => Math.round((Number(x) || 0) * 10) / 10;
 const num = x => { const v = parseFloat(String(x ?? '').replace(/,/g, '')); return Number.isFinite(v) ? v : null; };
+/* น้ำหนักท่าเล่น: เก็บ kg เสมอ (ใช้คิดสถิติ/Volume) + lb + หน่วยที่โค้ชใส่ (m.u) */
+const LB = 0.45359237;
+const r2 = x => Math.round((Number(x) || 0) * 100) / 100;
+const setKg = (u, w) => u === 'lb' ? (num(w) || 0) * LB : (num(w) || 0);
+const wBoth = (x, u) => { const kg = +x.kg || 0; const lb = x.lb != null ? +x.lb : kg / LB; return u === 'lb' ? [`${r1(lb)} lb`, `${r1(kg)} kg`] : [`${r1(kg)} kg`, `${r1(lb)} lb`]; };
+const convHint = (el, m) => { const c = document.querySelector(`[data-conv="${el.dataset.mi}-${el.dataset.si}"]`); const w = num(el.value); if (c) c.innerHTML = w ? `≈ ${r1(m.u === 'lb' ? w * LB : w / LB)} ${m.u === 'lb' ? 'kg' : 'lb'}` : '&nbsp;'; };
+const wText = (kg, u) => u === 'lb' ? `${r1(kg / LB)} lb (${r1(kg)} kg)` : `${r1(kg)} kg (${r1(kg / LB)} lb)`;
 const TH_D = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 const TH_DL = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
 
@@ -657,9 +664,9 @@ async function renderWorkouts(pid) {
     const top = Math.max(0, ...m.sets.map(x => +x.kg || 0));
     const before = chrono.filter(s => (s.date + s.time) < (sel.date + sel.time)).map(s => topKg(s, m.name));
     const pr = top > 0 && before.length && top > Math.max(0, ...before);
-    return `<section class="card"><div class="between"><b>${esc(m.name)}</b>${pr ? `<span class="tag gold">สถิติใหม่ ${r1(top)} kg</span>` : ''}</div>
-      <div class="sets xs muted" style="grid-template-columns:64px 1fr 1fr"><span>เซ็ต</span><span>ครั้ง</span><span>น้ำหนัก</span></div>
-      ${m.sets.map((x, i) => `<div class="sets" style="grid-template-columns:64px 1fr 1fr"><span class="muted small">เซ็ต ${i + 1}</span><b>${esc(x.r)} ครั้ง</b><b>${esc(x.kg)} kg</b></div>`).join('')}</section>`;
+    return `<section class="card"><div class="between"><b>${esc(m.name)}</b>${pr ? `<span class="tag gold">สถิติใหม่ ${wText(top, m.u)}</span>` : ''}</div>
+      <div class="sets xs muted" style="grid-template-columns:64px 1fr 1.3fr"><span>เซ็ต</span><span>ครั้ง</span><span>น้ำหนัก</span></div>
+      ${m.sets.map((x, i) => { const [a, b] = wBoth(x, m.u); return `<div class="sets" style="grid-template-columns:64px 1fr 1.3fr"><span class="muted small">เซ็ต ${i + 1}</span><b>${esc(x.r)} ครั้ง</b><span><b>${a}</b> <span class="small muted" style="white-space:nowrap">· ${b}</span></span></div>`; }).join('')}</section>`;
   }).join('');
   const allMoves = [...new Set(chrono.flatMap(s => (s.moves || []).map(m => m.name)))];
   const mv = allMoves.includes(ui.wkMove) ? ui.wkMove : (sel.moves?.[0]?.name || allMoves[0]);
@@ -672,7 +679,7 @@ async function renderWorkouts(pid) {
     ${sel.note ? `<section class="card sand"><b class="xs" style="color:#5E440D">โน้ตจากโค้ช</b><span>${esc(sel.note)}</span></section>` : ''}
     ${sel.ph?.length ? `<div class="thumbs">${thumbsHtml(sel.ph)}</div>` : ''}
     ${mv ? `<section class="card dark"><div class="between"><b>พัฒนาการ</b><select class="in" style="max-width:60%;min-height:40px" data-act="wkMove" aria-label="เลือกท่า">${allMoves.map(m => `<option ${m === mv ? 'selected' : ''}>${esc(m)}</option>`).join('')}</select></div>
-      <span class="xs muted">น้ำหนักสูงสุดในแต่ละครั้งที่โค้ชบันทึก</span>${lineChart(pts, '#F0C24B', true)}</section>` : ''}`);
+      <span class="xs muted">น้ำหนักสูงสุดในแต่ละครั้งที่โค้ชบันทึก (kg${pts.length ? ` · ล่าสุด ${wText(pts[pts.length - 1].v)}` : ''})</span>${lineChart(pts, '#F0C24B', true)}</section>` : ''}`);
   fillThumbs();
 }
 function lineChart(pts, color, dark) {
@@ -834,15 +841,16 @@ async function renderLog() {
       ${ms.length ? `<section class="card"><b>บันทึกนอกตาราง</b><label class="f">ลูกค้า<select class="in" id="lgMember">${ms.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></label><div class="grid2"><label class="f">วันที่<input class="in" type="date" id="lgDate" value="${ds}"></label><label class="f">เวลา<input class="in" type="time" id="lgTime" value="${nowHM()}"></label></div><button class="btn pri" data-act="logAdhoc">เริ่มบันทึก</button></section>` : ''}`);
   }
   const L = ui.log; let vol = 0, sets = 0;
-  L.moves.forEach(m => m.sets.forEach(x => { vol += (+x.r || 0) * (+x.kg || 0); sets++; }));
+  L.moves.forEach(m => m.sets.forEach(x => { vol += (+x.r || 0) * setKg(m.u, x.w); sets++; }));
   setMain(`<div class="between"><h1>บันทึกการเทรน</h1><button class="btn sm ghost" data-act="logCancel">ยกเลิก</button></div>
     <section class="card"><b>${esc(L.memberName)}</b><span class="small muted">${thDate(L.date, true)} · ${esc(L.time)}</span></section>
     <div class="chips">${SESSION_TYPES.map(t => `<button class="chip" data-act="logType" data-v="${t}" aria-pressed="${L.type === t}">${t}</button>`).join('')}</div>
     <div class="between"><h2>ท่าที่เล่น</h2><span class="small muted">${L.moves.length} ท่า · ${sets} เซ็ต · ${n0(vol)} kg</span></div>
-    ${L.moves.map((m, mi) => { const top = Math.max(0, ...m.sets.map(x => +x.kg || 0)); const v = m.sets.reduce((a, x) => a + (+x.r || 0) * (+x.kg || 0), 0);
-      return `<section class="card"><div class="between" style="align-items:center"><div><b>${mi + 1}. ${esc(m.name)}</b><div class="xs muted">${m.sets.length} เซ็ต · หนักสุด ${r1(top)} kg · Volume ${n0(v)} kg</div></div><button class="iconbtn" data-act="logRmMove" data-i="${mi}" aria-label="ลบท่า ${esc(m.name)}">${svg('trash', 18)}</button></div>
-        <div class="sets xs muted"><span>เซ็ต</span><span>ครั้ง</span><span>น้ำหนัก (kg)</span><span></span></div>
-        ${m.sets.map((x, si) => `<div class="sets"><b class="small">เซ็ต ${si + 1}</b><input inputmode="numeric" data-set="r" data-mi="${mi}" data-si="${si}" value="${esc(x.r)}" aria-label="${esc(m.name)} เซ็ต ${si + 1} ครั้ง"><input inputmode="decimal" data-set="kg" data-mi="${mi}" data-si="${si}" value="${esc(x.kg)}" aria-label="${esc(m.name)} เซ็ต ${si + 1} น้ำหนัก"><button class="iconbtn" style="width:36px" data-act="logRmSet" data-mi="${mi}" data-si="${si}" aria-label="ลบเซ็ต ${si + 1}">×</button></div>`).join('')}
+    ${L.moves.map((m, mi) => { const top = Math.max(0, ...m.sets.map(x => setKg(m.u, x.w))); const v = m.sets.reduce((a, x) => a + (+x.r || 0) * setKg(m.u, x.w), 0); const ou = m.u === 'lb' ? 'kg' : 'lb';
+      return `<section class="card"><div class="between" style="align-items:center"><div><b>${mi + 1}. ${esc(m.name)}</b><div class="xs muted">${m.sets.length} เซ็ต · หนักสุด ${wText(top, m.u)} · Volume ${n0(v)} kg</div></div><button class="iconbtn" data-act="logRmMove" data-i="${mi}" aria-label="ลบท่า ${esc(m.name)}">${svg('trash', 18)}</button></div>
+        <div class="row" style="gap:6px;align-items:center"><span class="xs muted">หน่วยน้ำหนัก</span>${['kg', 'lb'].map(u => `<button class="chip" style="min-height:32px;padding:0 14px" data-act="logUnit" data-i="${mi}" data-v="${u}" aria-pressed="${(m.u || 'kg') === u}">${u === 'kg' ? 'kg กิโลกรัม' : 'lb ปอนด์'}</button>`).join('')}</div>
+        <div class="sets xs muted"><span>เซ็ต</span><span>ครั้ง</span><span>น้ำหนัก (${m.u === 'lb' ? 'lb' : 'kg'})</span><span></span></div>
+        ${m.sets.map((x, si) => { const w = num(x.w); return `<div class="sets" style="align-items:start"><b class="small" style="line-height:44px">เซ็ต ${si + 1}</b><input inputmode="numeric" data-set="r" data-mi="${mi}" data-si="${si}" value="${esc(x.r)}" aria-label="${esc(m.name)} เซ็ต ${si + 1} ครั้ง"><div style="display:flex;flex-direction:column;gap:2px"><input inputmode="decimal" data-set="w" data-mi="${mi}" data-si="${si}" value="${esc(x.w)}" aria-label="${esc(m.name)} เซ็ต ${si + 1} น้ำหนัก (${m.u === 'lb' ? 'ปอนด์' : 'กิโลกรัม'})"><span class="xs muted" data-conv="${mi}-${si}" style="padding-left:4px">${w ? `≈ ${r1(m.u === 'lb' ? w * LB : w / LB)} ${ou}` : '&nbsp;'}</span></div><button class="iconbtn" style="width:36px" data-act="logRmSet" data-mi="${mi}" data-si="${si}" aria-label="ลบเซ็ต ${si + 1}">×</button></div>`; }).join('')}
         <button class="btn sm ghost" style="border-style:dashed" data-act="logAddSet" data-i="${mi}">+ เพิ่มเซ็ต (ก๊อปค่าเซ็ตล่าสุด)</button></section>`; }).join('')}
     ${L.picking ? `<section class="card gold-edge"><b>เลือกท่าจากคลัง</b><div class="chips">${MOVES.map(m => `<button class="chip" data-act="logPick" data-v="${esc(m)}">${esc(m)}</button>`).join('')}</div>
       <div class="row"><input class="in" id="logCustom" placeholder="หรือพิมพ์ชื่อท่าเอง" style="flex:1"><button class="btn pri" data-act="logCustom">เพิ่ม</button></div></section>` : ''}
@@ -858,12 +866,12 @@ function logForm() { const L = ui.log; if (!L) return; L.min = $('#lgMin')?.valu
 async function startLog(s) {
   const m = await person(s.memberPid); const rows = await bodyRows(s.memberPid).catch(() => []);
   const w = latestWeight(rows) || 65;
-  ui.log = { sid: s.id || null, memberPid: s.memberPid, memberName: s.memberName || m?.name || '', date: s.date, time: s.time, type: s.type || 'Full body', moves: (s.moves || []).map(x => ({ name: x.name, sets: x.sets.map(y => ({ ...y })) })), min: s.min ?? 60, kcal: s.kcal ?? '', note: s.note || '', ph: [...(s.ph || [])], picking: false, weight: w, est: Math.round(5 * w) };
+  ui.log = { sid: s.id || null, memberPid: s.memberPid, memberName: s.memberName || m?.name || '', date: s.date, time: s.time, type: s.type || 'Full body', moves: (s.moves || []).map(x => { const u = x.u === 'lb' ? 'lb' : 'kg'; return { name: x.name, u, sets: x.sets.map(y => ({ r: y.r, w: u === 'lb' ? (y.lb ?? r1((+y.kg || 0) / LB)) : y.kg })) }; }), min: s.min ?? 60, kcal: s.kcal ?? '', note: s.note || '', ph: [...(s.ph || [])], picking: false, weight: w, est: Math.round(5 * w) };
   ui.tab = 'log'; render();
 }
 async function saveLog() {
   logForm(); const L = ui.log; const min = num(L.min) || 0; const kcal = num(L.kcal) ?? Math.round(5 * L.weight * (min / 60));
-  const moves = L.moves.map(m => ({ name: m.name, sets: m.sets.map(x => ({ r: num(x.r) || 0, kg: num(x.kg) || 0 })) })).filter(m => m.sets.length);
+  const moves = L.moves.map(m => { const u = m.u === 'lb' ? 'lb' : 'kg'; return { name: m.name, u, sets: m.sets.map(x => { const w = num(x.w) || 0; return u === 'lb' ? { r: num(x.r) || 0, kg: r2(w * LB), lb: w } : { r: num(x.r) || 0, kg: w, lb: r1(w / LB) }; }) }; }).filter(m => m.sets.length);
   const ref = L.sid ? D('sessions', L.sid) : fb.doc(C('sessions'));
   const prev = L.sid ? await get(ref) : null;
   // แก้ผลก่อนถึงเวลาส่ง: ใช้เวลาส่งเดิม (ระบบส่งฉบับล่าสุด) · ส่งไปแล้ว: ไม่ส่งซ้ำ
@@ -1189,9 +1197,10 @@ const ACTS = {
   logCancel: () => { if (confirm('ยกเลิกการบันทึกนี้?')) { ui.log = null; render(); } },
   logType: el => { logForm(); ui.log.type = el.dataset.v; render(); },
   logPicking: () => { logForm(); ui.log.picking = !ui.log.picking; render(); },
-  logPick: el => { logForm(); ui.log.moves.push({ name: el.dataset.v, sets: [{ r: 10, kg: 0 }] }); ui.log.picking = false; render(); },
-  logCustom: () => { logForm(); const v = $('#logCustom').value.trim(); if (!v) return; ui.log.moves.push({ name: v, sets: [{ r: 10, kg: 0 }] }); ui.log.picking = false; render(); },
-  logAddSet: el => { logForm(); const m = ui.log.moves[+el.dataset.i]; const l = m.sets[m.sets.length - 1] || { r: 10, kg: 0 }; m.sets.push({ ...l }); render(); },
+  logUnit: el => { logForm(); const m = ui.log.moves[+el.dataset.i]; const to = el.dataset.v; if ((m.u || 'kg') === to) return; m.sets.forEach(x => { const w = num(x.w); if (w) x.w = r1(to === 'lb' ? w / LB : w * LB); }); m.u = to; ui.log.unit = to; render(); },
+  logPick: el => { logForm(); ui.log.moves.push({ name: el.dataset.v, u: ui.log.unit || 'kg', sets: [{ r: 10, w: 0 }] }); ui.log.picking = false; render(); },
+  logCustom: () => { logForm(); const v = $('#logCustom').value.trim(); if (!v) return; ui.log.moves.push({ name: v, u: ui.log.unit || 'kg', sets: [{ r: 10, w: 0 }] }); ui.log.picking = false; render(); },
+  logAddSet: el => { logForm(); const m = ui.log.moves[+el.dataset.i]; const l = m.sets[m.sets.length - 1] || { r: 10, w: 0 }; m.sets.push({ ...l }); render(); },
   logRmSet: el => { logForm(); ui.log.moves[+el.dataset.mi].sets.splice(+el.dataset.si, 1); render(); },
   logRmMove: el => { logForm(); if (confirm('ลบท่านี้?')) { ui.log.moves.splice(+el.dataset.i, 1); render(); } },
   logSave: saveLog,
@@ -1249,14 +1258,16 @@ async function onChange(e) {
     toast('แนบรูปแล้ว'); render(); return;
   }
   if (el.dataset?.act === 'wkMove') { ui.wkMove = el.value; render(); return; }
-  if (el.dataset?.set && ui.log) { const m = ui.log.moves[+el.dataset.mi]; m.sets[+el.dataset.si][el.dataset.set] = el.value; return; }
+  if (el.dataset?.set && ui.log) { const m = ui.log.moves[+el.dataset.mi]; m.sets[+el.dataset.si][el.dataset.set] = el.value;
+    if (el.dataset.set === 'w') convHint(el, m);
+    return; }
   if (el.id === 'fQty' && sheet) { sheet.qty = el.value; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); return; }
   if ((el.id === 'aMin') && sheet?.kind === 'act' && sheet.mode === 'auto') { readActForm(); refreshSheet(actSheetBody()); fillThumbs($('#sheetBody')); }
 }
 function onInput(e) {
   const el = e.target;
   if (el.id === 'fSearch' && sheet) { sheet.q = el.value; sheet.pick = null; const pos = el.selectionStart; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); const n = $('#fSearch'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) { } }
-  if (el.dataset?.set && ui.log) { const m = ui.log.moves[+el.dataset.mi]; m.sets[+el.dataset.si][el.dataset.set] = el.value; }
+  if (el.dataset?.set && ui.log) { const m = ui.log.moves[+el.dataset.mi]; m.sets[+el.dataset.si][el.dataset.set] = el.value; if (el.dataset.set === 'w') convHint(el, m); }
 }
 function onKey(e) {
   if (document.getElementById('viewer')) { if (e.key === 'Escape') closeViewer(); else if (e.key === 'ArrowLeft') navViewer(-1); else if (e.key === 'ArrowRight') navViewer(1); return; }

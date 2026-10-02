@@ -332,7 +332,7 @@ function ocWorkoutText_(s) {
   const L = ['🏋️ ผลการเทรน · ' + ocThDate_(s.date), (s.type || '') + ' กับ ' + (s.trainerName || 'โค้ช') + ' · ' + n0_(s.min) + ' นาที · ' + n0_(s.kcal) + ' kcal', ''];
   (s.moves || []).forEach(function (m) {
     L.push(m.name);
-    L.push('  ' + (m.sets || []).map(function (x) { return (+x.kg ? x.kg + ' kg × ' : '') + (x.r || 0) + ' ครั้ง'; }).join(' · '));
+    L.push('  ' + (m.sets || []).map(function (x) { return (+x.kg ? (m.u === 'lb' ? (x.lb + ' lb (' + Math.round(x.kg * 10) / 10 + ' kg)') : (x.kg + ' kg (' + (x.lb != null ? x.lb : Math.round(x.kg / 0.45359237 * 10) / 10) + ' lb)')) + ' × ' : '') + (x.r || 0) + ' ครั้ง'; }).join(' · '));
   });
   if (s.note) { L.push(''); L.push('โน้ตจากโค้ช: ' + s.note); }
   L.push(''); L.push('ดูพัฒนาการในแอป: ' + OC.appUrl);

@@ -155,6 +155,12 @@ const OC = {
   days: ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'],
   months: ['ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 };
+// ใครได้รับอะไร (ตั้งในแอป แท็บระบบ → config/app.alerts[k] = { on, types }) · ยังไม่ตั้ง = ค่าเริ่มต้นตามบทบาท
+function ocWants_(cfg, k, role, t) {
+  const a = (cfg.alerts || {})[k];
+  if (!a) return role === 'owner' ? (t === 'digest' && !!cfg.digestToOwner) : role === 'trainer' ? t === 'digest' : t === 'workout';
+  return a.on !== false && (a.types || []).indexOf(t) >= 0;
+}
 function ocLinks_() { try { return JSON.parse(P.getProperty('OC_LINKS') || '{}'); } catch (e) { return {}; } }
 function ocSaveLinks_(l) { P.setProperty('OC_LINKS', JSON.stringify(l)); }
 
@@ -238,8 +244,9 @@ function ocApi_(b) {
       return { ok: true, url: 'https://access.line.me/oauth2/v2.1/authorize?' + Object.keys(q).map(function (k) { return k + '=' + encodeURIComponent(q[k]); }).join('&') };
     }
     if (b.oc === 'test') {
-      const t = L[me.k]; if (!t) return { ok: false, error: 'ยังไม่ได้เชื่อม LINE' };
-      const code = push_(t.uid, 'ทดสอบจาก The Olympic Club ✅\nถึง ' + me.name + ' · ระบบแจ้งเตือนทำงานปกติ');
+      const tk = me.role === 'owner' && b.k ? String(b.k) : me.k;
+      const t = L[tk]; if (!t) return { ok: false, error: 'ยังไม่ได้เชื่อม LINE' };
+      const code = push_(t.uid, 'ทดสอบจาก The Olympic Club ✅\nถึง ' + (tk === me.k ? me.name : (t.appName || t.name || '')) + ' · ระบบแจ้งเตือนทำงานปกติ');
       return code === 200 ? { ok: true } : { ok: false, error: 'ส่งไม่สำเร็จ (' + code + ') ตรวจว่าเพิ่มเพื่อน OA แล้ว' };
     }
     if (b.oc === 'unlink') {
@@ -344,16 +351,20 @@ function ocTick() {
   const lock = LockService.getScriptLock(); if (!lock.tryLock(5000)) return;
   try {
     const L = ocLinks_(); const now = Date.now();
+    const cfg = fsGet_('config/app') || {}; const ds = ocToday_();
     // (1) ผลเทรน: ส่งถึงลูกค้าเมื่อครบเวลาหน่วงหลังโค้ชบันทึก (แก้ก่อนถึงเวลาได้ ระบบส่งฉบับล่าสุด)
+    //     ส่งตาม "ใครได้รับอะไร": ลูกค้า (ผลของตัวเอง) · เทรนเนอร์ผู้บันทึกและเจ้าของ (สำเนา) ถ้าเปิดหัวข้อผลการเทรน
     fsQuery_('', 'sessions', [['notified', false]]).forEach(function (s) {
       if (s.status !== 'logged' || !(+s.notifyAfter) || +s.notifyAfter > now) return;
-      let sent = false; const t = L[s.memberPid];
-      if (t) sent = push_(t.uid, ocWorkoutText_(s)) === 200;
+      let sent = false; const text = ocWorkoutText_(s); const t = L[s.memberPid];
+      if (t && ocWants_(cfg, s.memberPid, 'member', 'workout')) sent = push_(t.uid, text) === 200;
+      const copy = '📋 สำเนา · ผลเทรนของ ' + (s.memberName || 'ลูกค้า') + '\n' + text;
+      if (s.trainerPid && L[s.trainerPid] && ocWants_(cfg, s.trainerPid, 'trainer', 'workout')) push_(L[s.trainerPid].uid, copy);
+      if (L.owner && ocWants_(cfg, 'owner', 'owner', 'workout')) push_(L.owner.uid, copy);
       fsPatch_(s._path, { notified: true, lineSent: sent, notifiedAt: new Date().toISOString() });
     });
     // (2) สรุปรายวัน: วันละครั้ง เมื่อถึงเวลาที่ตั้งไว้ (ค่าเริ่มต้น 21:00)
     //     จดผลรายคนใน OC_DIGEST_LOG · ถ้าส่งไม่ครบ (เช่น Firestore/LINE ขัดข้อง) รอบถัดไป (10 นาที) ส่งเฉพาะคนที่ยังไม่ได้
-    const cfg = fsGet_('config/app') || {}; const ds = ocToday_();
     const hm = Utilities.formatDate(new Date(), OC.tz, 'HH:mm');
     if (cfg.lineOn !== false && hm >= (cfg.digestTime || '21:00') && P.getProperty('OC_DIGEST_DATE') !== ds) ocSendDigest_(cfg, ds, L);
   } finally { lock.releaseLock(); }
@@ -366,6 +377,7 @@ function ocSendDigest_(cfg, ds, L) {
   const all = ocMembers_();
   fsQuery_('', 'people', [['role', 'trainer']]).forEach(function (tr) {
     if (tr.active !== true || log.sent[tr._id]) return;
+    if (!ocWants_(cfg, tr._id, 'trainer', 'digest')) return;
     const ms = all.filter(function (m) { return m.trainerPid === tr._id; });
     if (!ms.length) { log.skip[tr._id] = tr.name + ': ไม่มีลูกค้า'; return; }
     if (!L[tr._id]) { log.skip[tr._id] = tr.name + ': ยังไม่เชื่อม LINE'; return; }
@@ -373,7 +385,14 @@ function ocSendDigest_(cfg, ds, L) {
     if (code === 200) log.sent[tr._id] = tr.name + ' (' + ms.length + ' คน)';
     else { failed++; log.skip[tr._id] = tr.name + ': ส่งไม่สำเร็จ ' + code + (L[tr._id].friend === false ? ' · ยังไม่เพิ่มเพื่อน OA' : ''); }
   });
-  if (cfg.digestToOwner && all.length && !log.sent.owner) {
+  // ลูกค้าที่เปิดรับ "สรุปรายวัน" ได้สรุปของตัวเองคนเดียว
+  all.forEach(function (m) {
+    if (log.sent[m._id] || !ocWants_(cfg, m._id, 'member', 'digest')) return;
+    if (!L[m._id]) { log.skip[m._id] = m.name + ': ยังไม่เชื่อม LINE'; return; }
+    const code = push_(L[m._id].uid, ocDigestText_([m], ds, false));
+    if (code === 200) log.sent[m._id] = m.name + ' (ของตัวเอง)'; else { failed++; log.skip[m._id] = m.name + ': ส่งไม่สำเร็จ ' + code; }
+  });
+  if (ocWants_(cfg, 'owner', 'owner', 'digest') && all.length && !log.sent.owner) {
     if (!L.owner) log.skip.owner = 'เจ้าของ: ยังไม่เชื่อม LINE';
     else { const code = push_(L.owner.uid, ocDigestText_(all, ds, true)); if (code === 200) log.sent.owner = 'เจ้าของ (' + all.length + ' คน)'; else { failed++; log.skip.owner = 'เจ้าของ: ส่งไม่สำเร็จ ' + code; } }
   }

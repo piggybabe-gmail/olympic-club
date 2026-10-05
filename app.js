@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, quickCalc, noodleCalc, normTh 
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261005a';
+const VER = '20261005b';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -182,6 +182,23 @@ function renderConsent() {
 }
 /* ============ LINE (ผ่าน Apps Script relay ยืนยันตัวตนด้วย Firebase ID token) ============ */
 const line = { info: null, busy: false };
+// ใครได้รับอะไร: config/app.alerts[k] = { on, types } · k = 'owner' หรือ pid · ถ้ายังไม่ตั้ง ใช้ค่าเริ่มต้นตามบทบาท (ตรงกับ ocWants_ ใน Apps Script)
+const ALERT_TYPES = [['digest', 'สรุปรายวัน'], ['workout', 'ผลการเทรน']];
+const ALERT_HINT = {
+  owner: 'สรุปรายวัน = ลูกค้าทุกคน · ผลการเทรน = สำเนาผลเทรนทุกครั้งที่ส่งถึงลูกค้า',
+  trainer: 'สรุปรายวัน = ลูกค้าของตัวเอง · ผลการเทรน = สำเนาผลเทรนลูกค้าของตัวเอง',
+  member: 'สรุปรายวัน = ของตัวเองคนเดียว · ผลการเทรน = ผลหลังโค้ชบันทึก'
+};
+function alertOf(k, role) {
+  const a = (S.config.alerts || {})[k];
+  if (a) return { on: a.on !== false, types: Array.isArray(a.types) ? a.types : [] };
+  if (role === 'owner') return { on: !!S.config.digestToOwner, types: S.config.digestToOwner ? ['digest'] : [] };
+  return { on: true, types: role === 'trainer' ? ['digest'] : ['workout'] };
+}
+async function saveAlert(k, a) {
+  const alerts = { ...(S.config.alerts || {}), [k]: a };
+  await fb.setDoc(D('config', 'app'), { alerts: { [k]: a } }, { merge: true }); S.config.alerts = alerts;
+}
 function lineOn() { return !!(S.config.lineUrl && S.config.lineOn !== false); }
 async function relay(oc, extra = {}) {
   if (!S.config.lineUrl) throw new Error('เจ้าของระบบยังไม่ได้ตั้งค่า LINE');
@@ -204,7 +221,8 @@ async function lineLink() {
 function lineCardHtml() {
   if (!S.config.lineUrl) return '';
   const i = line.info; const L = i?.link;
-  const what = S.me.role === 'member' ? 'ผลการเทรนหลังโค้ชบันทึก' : S.me.role === 'trainer' ? `สรุปลูกค้าของคุณทุกวันเวลา ${esc(S.config.digestTime || '21:00')}` : 'แจ้งเตือนของระบบ และสรุปรายวัน (ถ้าเปิดไว้)';
+  const myA = alertOf(S.me.role === 'owner' ? 'owner' : S.me.pid, S.me.role);
+  const what = myA.on && myA.types.length ? myA.types.map(t => t === 'digest' ? `สรุปรายวัน (${esc(S.config.digestTime || '21:00')})` : 'ผลการเทรน').join(' และ ') : 'ยังไม่มีหัวข้อที่เปิดรับ (เจ้าของระบบเป็นคนเลือก)';
   return `<section class="card"><div class="between"><b>LINE ของฉัน</b>${!i ? '<span class="tag grey">กำลังตรวจ…</span>' : L ? `<span class="tag blue">เชื่อมแล้ว · ${esc(L.name || '')}</span>` : '<span class="tag alert">ยังไม่เชื่อม</span>'}</div>
     <div class="pill-note">บัญชีในแอปที่จะผูก: <b>${esc(S.me.name)}</b> · ${S.me.role === 'owner' ? 'เจ้าของระบบ' : S.me.role === 'trainer' ? 'เทรนเนอร์' : 'ลูกค้า'}${S.me.person?.username ? ' (@' + esc(S.me.person.username) + ')' : ''}</div>
     <span class="small muted">เชื่อมครั้งเดียว แล้วจะได้รับ ${what} เป็นแชต 1:1 จาก LINE OA</span>
@@ -1013,6 +1031,7 @@ async function renderSystem() {
       <div class="grid2"><label class="f">เวลาส่งสรุปรายวัน<input class="in" type="time" id="cfTime" value="${esc(c.digestTime || '21:00')}"></label><label class="f">หน่วงส่งผลเทรน (นาที)<input class="in" id="cfDelay" inputmode="numeric" value="${esc(c.workoutDelayMin || 60)}"></label></div>
       <button class="btn pri" data-act="saveConfig">บันทึกการตั้งค่า</button></section>
     ${lineAdminHtml(c)}
+    ${whoGetsHtml(ms, trs)}
     ${lineCardHtml()}
     <section class="card"><div class="between"><span class="small muted">ความยินยอม PDPA</span><b>${consent} / ${ms.length} คน</b></div></section>`);
 }
@@ -1027,13 +1046,38 @@ function lineAdminHtml(c) {
   const names = {}; S.cache.forEach((v, k) => { if (k.startsWith('p:') && v) names[k.slice(2)] = v.name; }); names.owner = 'เจ้าของระบบ';
   const links = i?.links ? Object.entries(i.links) : [];
   return `<section class="card"><div class="between"><b>แจ้งเตือน LINE</b><span class="tag ${on ? 'gold' : 'grey'}">${on ? 'เปิดอยู่' : c.lineUrl ? 'ปิดอยู่' : 'ยังไม่ตั้งค่า'}</span></div>
-    <p class="small muted" style="margin:0">ส่งผ่าน LINE OA ด้วย Apps Script (ไม่ต้องใช้แพ็กเกจ Blaze): <b>สรุปรายวัน ${esc(c.digestTime || '21:00')}</b> ถึงเทรนเนอร์แต่ละคน (เฉพาะลูกค้าของตัวเอง) และ <b>ผลเทรนถึงลูกค้า</b> หลังโค้ชบันทึก ${esc(c.workoutDelayMin || 60)} นาที ไม่บันทึกก็ไม่ส่ง · ทุกคนต้องกด “เชื่อม LINE” ที่แท็บเพิ่มเติมของตัวเอง 1 ครั้ง</p>
+    <p class="small muted" style="margin:0">ส่งผ่าน LINE OA ด้วย Apps Script (ไม่ต้องใช้แพ็กเกจ Blaze): <b>สรุปรายวัน ${esc(c.digestTime || '21:00')}</b> ถึงเทรนเนอร์แต่ละคน (เฉพาะลูกค้าของตัวเอง) และ <b>ผลเทรนถึงลูกค้า</b> หลังโค้ชบันทึก ${esc(c.workoutDelayMin || 60)} นาที ไม่บันทึกก็ไม่ส่ง · ทุกคนต้องกด “เชื่อม LINE” ที่แท็บเพิ่มเติมของตัวเอง 1 ครั้ง · เลือกว่าใครได้รับอะไรที่การ์ดถัดไป</p>
     <label class="f">ลิงก์ระบบ LINE (Apps Script Web App)<input class="in" id="lnUrl" value="${esc(c.lineUrl || '')}" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="none" spellcheck="false"></label>
     <label class="row small" style="min-height:44px"><input type="checkbox" id="lnOn" ${c.lineOn !== false ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> เปิดการส่งอัตโนมัติ</label>
-    <label class="row small" style="min-height:44px"><input type="checkbox" id="lnOwner" ${c.digestToOwner ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> ส่งสรุปรายวันของลูกค้าทุกคนให้เจ้าของระบบด้วย</label>
     <div class="row"><button class="btn pri" data-act="saveLine">บันทึก</button>${c.lineUrl ? '<button class="btn" data-act="lineRefresh">ตรวจสถานะ</button>' : ''}</div>
     ${c.lineUrl ? (!i ? '<span class="small muted">กำลังตรวจ…</span>' : !i.ok ? `<div class="warn">${esc(i.error || 'เชื่อมต่อไม่ได้')}</div>` : `<div class="small">LINE OA ${i.hasToken ? '✅' : '❌'} · LINE Login ${i.hasLogin ? '✅' : '❌'} · ตัวตั้งเวลา ${i.ticking ? '✅ ทำงานทุก 10 นาที' : '❌ ยังไม่ได้ Run ocSetup'}${i.lastDigest ? ` · ส่งสรุปล่าสุด ${thDate(i.lastDigest)}` : ''}${digestLogHtml(i.digestLog)}</div>
       <b class="small">เชื่อม LINE แล้ว ${links.length} คน</b>${links.length ? `<div class="list">${links.map(([k, L]) => `<div class="li"><div class="grow"><b>${esc(names[k] || L.appName || k)}</b><div class="xs muted">LINE: ${esc(L.name || '')}${L.friend === false ? ' · <span class="alert">ยังไม่เพิ่มเพื่อน OA</span>' : ''}</div></div><button class="btn sm ghost" data-act="lineUnlink" data-k="${esc(k)}">ยกเลิก</button></div>`).join('')}</div>` : ''}`) : ''}
+  </section>`;
+}
+
+function whoGetsHtml(ms, trs) {
+  if (!S.config.lineUrl) return '';
+  const i = line.info, links = i?.links || {};
+  const coach = {}; trs.forEach(t => { coach[t.id] = t.name; });
+  const people = [['owner', 'เจ้าของระบบ', 'owner', 'เจ้าของ'],
+    ...trs.filter(t => t.active).map(t => [t.id, t.name, 'trainer', t.canManageTrainers ? 'หัวหน้าเทรนเนอร์' : 'เทรนเนอร์']),
+    ...ms.filter(m => m.active).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')).map(m => [m.id, m.name, 'member', 'ลูกค้า' + (m.trainerName || coach[m.trainerPid] ? ' · โค้ช ' + (m.trainerName || coach[m.trainerPid]) : '')])];
+  const row = ([k, name, role, label]) => {
+    const a = alertOf(k, role), L = links[k];
+    return `<div class="card" style="gap:10px;box-shadow:none;border:1px solid var(--line)">
+      <div class="between" style="align-items:flex-start;gap:8px"><div><b>${esc(name)}</b> <span class="xs muted">(${esc(label)})</span></div>
+        ${!i ? '' : L ? `<span class="tag blue">LINE: ${esc(L.name || '')}</span>` : '<span class="tag grey">ยังไม่เชื่อม LINE</span>'}</div>
+      ${L && L.friend === false ? '<div class="xs alert">ยังไม่เพิ่มเพื่อน LINE OA จะไม่ได้รับข้อความ</div>' : ''}
+      <label class="row small" style="min-height:44px"><input type="checkbox" data-alert-on="${esc(k)}" data-role="${role}" ${a.on ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> อนุญาต/รับแจ้งเตือน</label>
+      <div class="chips">${ALERT_TYPES.map(([t, l]) => `<button class="chip" aria-pressed="${a.on && a.types.includes(t)}" data-act="alertType" data-k="${esc(k)}" data-role="${role}" data-t="${t}" ${a.on ? '' : 'disabled style="opacity:.45"'}>${l}</button>`).join('')}</div>
+      <div class="xs muted">${ALERT_HINT[role]}</div>
+      ${L ? `<div class="row"><button class="btn sm" data-act="lineTestTo" data-k="${esc(k)}">ส่งทดสอบ</button><button class="btn sm ghost danger" data-act="lineUnlink" data-k="${esc(k)}">ยกเลิกการเชื่อม</button></div>` : ''}
+    </div>`;
+  };
+  return `<section class="card"><div class="between"><b>ใครได้รับอะไร</b><span class="xs muted">กดหัวข้อเพื่อเปิด/ปิด · บันทึกทันที</span></div>
+    <p class="small muted" style="margin:0">ติ๊ก <b>อนุญาต/รับแจ้งเตือน</b> แล้วเลือกหัวข้อ (ปุ่มสีเข้ม = รับ) สรุปรายวันส่งเวลา ${esc(S.config.digestTime || '21:00')} ผลการเทรนส่งหลังโค้ชบันทึก ${esc(S.config.workoutDelayMin || 60)} นาที · ทุกข้อความใช้โควตา LINE OA เปิดเท่าที่จำเป็น</p>
+    ${people.map(row).join('')}
+    <p class="xs muted" style="margin:0">เทรนเนอร์และลูกค้าเปิดแอป → แท็บ <b>เพิ่มเติม</b> → <b>เชื่อม LINE</b> · ของคุณเองกดที่การ์ด LINE ของฉันด้านล่าง</p>
   </section>`;
 }
 
@@ -1283,8 +1327,15 @@ const ACTS = {
   lineDigestTest: async () => { toast('กำลังส่ง…', 8000); const r = await relay('digestTest'); toast(r.ok ? `ส่งสรุป ${r.n} คนเข้า LINE แล้ว` : (r.error || 'ส่งไม่สำเร็จ')); },
   lineUnlink: async el => { if (!confirm('ยกเลิกการเชื่อม LINE? จะไม่ได้รับแจ้งเตือนอีก')) return; const r = await relay('unlink', el.dataset.k ? { k: el.dataset.k } : {}); toast(r.ok ? 'ยกเลิกแล้ว' : (r.error || 'ไม่สำเร็จ')); await refreshLineCard(); },
   lineRefresh: async () => { await refreshLineCard(); toast('ตรวจแล้ว'); },
+  alertType: async el => {
+    if (S.me.role !== 'owner') return;
+    const k = el.dataset.k, t = el.dataset.t, a = alertOf(k, el.dataset.role);
+    const types = a.types.includes(t) ? a.types.filter(x => x !== t) : [...a.types, t];
+    await saveAlert(k, { on: true, types }); el.setAttribute('aria-pressed', String(types.includes(t))); toast('บันทึกแล้ว', 1200);
+  },
+  lineTestTo: async el => { const r = await relay('test', { k: el.dataset.k }); toast(r.ok ? 'ส่งแล้ว' : (r.error || 'ส่งไม่สำเร็จ')); },
   saveLine: async () => {
-    const c = { lineUrl: $('#lnUrl').value.trim(), lineOn: $('#lnOn').checked, digestToOwner: $('#lnOwner').checked };
+    const c = { lineUrl: $('#lnUrl').value.trim(), lineOn: $('#lnOn').checked };
     if (c.lineUrl && !/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(c.lineUrl)) return toast('ลิงก์ต้องเป็น https://script.google.com/macros/s/…/exec');
     await fb.setDoc(D('config', 'app'), c, { merge: true }); Object.assign(S.config, c); line.info = null; toast('บันทึกแล้ว'); await refreshLineCard();
   },
@@ -1296,6 +1347,11 @@ const ACTS = {
 function photoPickerKeep() { return `<div class="thumbs" id="thumbs">${thumbsHtml(sheet?.ph, true)}<label class="addthumb">${svg('cam', 22)}แนบรูป<input type="file" accept="image/*" multiple hidden data-act="pickPhoto"></label></div>`; }
 async function onChange(e) {
   const el = e.target;
+  if (el.dataset?.alertOn && S.me.role === 'owner') {
+    const k = el.dataset.alertOn, a = alertOf(k, el.dataset.role);
+    try { await saveAlert(k, { on: el.checked, types: a.types }); toast(el.checked ? 'เปิดรับแจ้งเตือนแล้ว' : 'ปิดแจ้งเตือนแล้ว', 1500); render(); } catch (err) { console.error(err); toast('บันทึกไม่สำเร็จ'); el.checked = !el.checked; }
+    return;
+  }
   if (el.id === 'fMeal' && sheet) { sheet.meal = el.value; return; }
   if (el.dataset?.act === 'pickPhoto' && el.files?.length) {
     const pid = S.view; const files = [...el.files]; toast('กำลังแนบรูป…', 8000);

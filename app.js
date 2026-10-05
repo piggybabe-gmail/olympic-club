@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, quickCalc, noodleCalc, normTh 
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261002a';
+const VER = '20261005a';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -223,6 +223,57 @@ function startApp() {
   render();
 }
 async function logout() { await fb.signOut(auth); }
+
+/* ============ เปลี่ยนรหัสผ่านของตัวเอง ============ */
+// ใช้ได้กับบัญชีชื่อผู้ใช้ + รหัสผ่าน (ลูกค้าและเทรนเนอร์) · เจ้าของเข้าด้วย Google จึงไม่มีรหัสในแอป
+function hasPwLogin() { return !!auth?.currentUser?.providerData?.some(x => x.providerId === 'password'); }
+function pwCardHtml() {
+  if (!hasPwLogin() || viewingClient()) return '';
+  return `<section class="card"><div class="between"><b>รหัสผ่านของฉัน</b><button class="btn sm" data-act="changePw">เปลี่ยนรหัสผ่าน</button></div>
+    <span class="small muted">ตั้งรหัสใหม่ที่จำได้เอง ไม่ต้องรอโค้ช · ใช้กับชื่อผู้ใช้ @${esc(S.me.person?.username || '')}</span></section>`;
+}
+function pwSheetBody(msg = '') {
+  const t = sheet?.show ? 'text' : 'password';
+  return `${msg ? `<div class="warn">${esc(msg)}</div>` : ''}
+    <label class="f">รหัสผ่านปัจจุบัน<input class="in" id="cpOld" type="${t}" autocomplete="current-password"></label>
+    <label class="f">รหัสผ่านใหม่ (อย่างน้อย 6 ตัว)<input class="in" id="cpNew" type="${t}" autocomplete="new-password"></label>
+    <label class="f">พิมพ์รหัสผ่านใหม่อีกครั้ง<input class="in" id="cpNew2" type="${t}" autocomplete="new-password"></label>
+    <button class="btn sm ghost" data-act="pwShow" style="align-self:flex-start">${sheet?.show ? 'ซ่อนรหัส' : 'แสดงรหัส'}</button>
+    <button class="btn gold block" data-act="savePw">บันทึกรหัสผ่านใหม่</button>
+    <span class="xs muted">ลืมรหัสปัจจุบัน? แจ้งโค้ช (หรือหัวหน้าเทรนเนอร์/เจ้าของระบบ) ให้กด “ตั้งรหัสผ่านใหม่” ให้</span>`;
+}
+function openChangePw() { openSheet('เปลี่ยนรหัสผ่าน', '', { kind: 'pw', show: false }); refreshSheet(pwSheetBody()); setTimeout(() => $('#cpOld')?.focus(), 50); }
+function pwVals() { return { o: $('#cpOld')?.value || '', n: $('#cpNew')?.value || '', n2: $('#cpNew2')?.value || '' }; }
+function pwRedraw(msg) { const v = pwVals(); refreshSheet(pwSheetBody(msg)); $('#cpOld').value = v.o; $('#cpNew').value = v.n; $('#cpNew2').value = v.n2; }
+async function savePw() {
+  if (!sheet || sheet.kind !== 'pw' || sheet.busy) return;
+  const { o, n, n2 } = pwVals(); const u = auth.currentUser;
+  const uname = (S.me.person?.username || '').toLowerCase();
+  const err = !o ? 'กรอกรหัสผ่านปัจจุบัน'
+    : n.length < 6 ? 'รหัสผ่านใหม่ต้องมีอย่างน้อย 6 ตัว'
+    : /\s/.test(n) ? 'รหัสผ่านใหม่ห้ามมีช่องว่าง'
+    : n !== n2 ? 'รหัสผ่านใหม่ทั้งสองช่องไม่ตรงกัน'
+    : n === o ? 'รหัสผ่านใหม่ต้องไม่ซ้ำกับรหัสเดิม'
+    : uname && n.toLowerCase() === uname ? 'รหัสผ่านต้องไม่เหมือนชื่อผู้ใช้'
+    : '';
+  if (err) return pwRedraw(err);
+  if (!u || !hasPwLogin()) return pwRedraw('บัญชีนี้ไม่ได้ใช้รหัสผ่าน');
+  sheet.busy = true; const b = document.querySelector('[data-act="savePw"]'); if (b) { b.disabled = true; b.textContent = 'กำลังบันทึก…'; }
+  try {
+    await fb.reauthenticateWithCredential(u, fb.EmailAuthProvider.credential(u.email, o));
+    await fb.updatePassword(u, n);
+    closeSheet(); toast('เปลี่ยนรหัสผ่านแล้ว ✅ ครั้งหน้าใช้รหัสใหม่เข้าสู่ระบบ', 4000);
+  } catch (e) {
+    const c = String(e.code || '');
+    sheet.busy = false;
+    pwRedraw(c.includes('invalid-credential') || c.includes('wrong-password') ? 'รหัสผ่านปัจจุบันไม่ถูกต้อง'
+      : c.includes('too-many') ? 'ลองผิดหลายครั้ง รอสักครู่แล้วลองใหม่'
+      : c.includes('weak-password') ? 'รหัสผ่านใหม่ง่ายเกินไป ลองตั้งให้ยาวขึ้น'
+      : c.includes('password-does-not-meet') ? 'รหัสผ่านใหม่ยังไม่ตรงตามเงื่อนไขของระบบ ลองตั้งให้ยาวขึ้นและผสมตัวเลข'
+      : c.includes('network') ? 'อินเทอร์เน็ตขัดข้อง ลองใหม่อีกครั้ง'
+      : 'เปลี่ยนรหัสผ่านไม่สำเร็จ (' + c + ')');
+  }
+}
 
 /* ============ ข้อมูล ============ */
 async function person(pid, fresh) {
@@ -758,6 +809,7 @@ async function renderMore() {
   setMain(`<h1>เพิ่มเติม</h1>
     <section class="card"><b>${esc(me.name)}</b><span class="small muted">${me.role === 'owner' ? 'เจ้าของระบบ' : me.role === 'trainer' ? (isHead() ? 'หัวหน้าเทรนเนอร์ · ผู้ดูแลฝ่ายงาน' : 'เทรนเนอร์ · ผู้ดูแลฝ่ายงาน') : 'สมาชิก'}${me.person?.username ? ' · @' + esc(me.person.username) : ''}</span></section>
     ${lineCardHtml()}
+    ${pwCardHtml()}
     ${membersHtml}
     <a class="btn" href="manual.html">คู่มือการใช้งาน</a>
     <button class="btn danger" data-act="logout">ออกจากระบบ</button>
@@ -1114,6 +1166,7 @@ async function onClick(e) {
 }
 const ACTS = {
   login: doLogin, ownerLogin, logout, reload: () => render(), closeSheet,
+  changePw: openChangePw, savePw, pwShow: () => { sheet.show = !sheet.show; pwRedraw(); },
   consent: async () => { await fb.updateDoc(D('people', S.me.pid), { consentAt: fb.serverTimestamp() }); S.me.person.consentAt = true; startApp(); },
   tab: el => { if (el.dataset.v === 'log' && S.me.role === 'trainer' && !viewingClient()) ui.log = ui.log; ui.tab = el.dataset.v; window.scrollTo(0, 0); render(); },
   exitClient: () => { S.view = null; ui.tab = 'clients'; render(); },
@@ -1272,7 +1325,8 @@ function onInput(e) {
 }
 function onKey(e) {
   if (document.getElementById('viewer')) { if (e.key === 'Escape') closeViewer(); else if (e.key === 'ArrowLeft') navViewer(-1); else if (e.key === 'ArrowRight') navViewer(1); return; }
-  if (e.key === 'Enter' && (e.target.id === 'lgPass' || e.target.id === 'lgUser')) doLogin(); if (e.key === 'Escape' && sheet) closeSheet(); }
+  if (e.key === 'Enter' && (e.target.id === 'lgPass' || e.target.id === 'lgUser')) doLogin();
+  if (e.key === 'Enter' && ['cpOld', 'cpNew', 'cpNew2'].includes(e.target.id)) { e.preventDefault(); if (e.target.id === 'cpNew2') savePw(); else $(e.target.id === 'cpOld' ? '#cpNew' : '#cpNew2')?.focus(); } if (e.key === 'Escape' && sheet) closeSheet(); }
 
 export const __test = { S, ui, dayTotals, foodCalc, digestText, addDays, weekStart, thDate, lineChart, render, ACTS, onInput, onChange, setFb: (f, d, a) => { fb = f; db = d; auth = a; } };
 if (typeof window !== 'undefined' && !window.__NO_BOOT__) {

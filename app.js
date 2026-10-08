@@ -1,10 +1,10 @@
 // The Olympic Club by PT-Palm — แอปติดตามอาหารและการเทรน (ลูกค้า / เทรนเนอร์ / เจ้าของระบบ)
 import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN, RECAPTCHA_SITE_KEY } from './firebase-config.js?v=20260929b';
-import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, quickCalc, noodleCalc, normTh } from './foods.js?v=20260929c';
+import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, quickCalc, noodleCalc, normTh } from './foods.js?v=20261008a';
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261005b';
+const VER = '20261008a';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -527,7 +527,7 @@ function foodSheetBody() {
   const q = (s.q || '').trim().toLowerCase(), qn = normTh(q);
   const res = q ? FOODS.filter(f => f.n.toLowerCase().includes(q) || (f.cat || '').includes(q) || (f.al || '').toLowerCase().includes(q) || (qn && (normTh(f.n).includes(qn) || normTh(f.al).includes(qn)))).slice(0, 40) : [];
   const hintCafe = qn && /กาแฟ|ลาเต|อเมิกา|มอคคา|คาปู|เอสเย็น|ชาเย็น|ชานม|โกโก|มทฉ|มจฉ|มัท|ชาเขียว|สมูท|คาเฟ|เบเกอ|ควซอง|คซอง|เคก|บาวนี|มฟฟิน|คุกกี|โอเลียง|นมชมพู|ขนม|latte|mocha|coffee|americano|matcha|cafe/.test(qn);
-  const hintQ = qn && /กเพา|ขาว|ผด|ไขดาว|ตามสง|ราด|กวยเตยว|เสน|บหม|เยนตาโฟ|เกาเหลา|มามา|กวยจบ|วนเสน/.test(qn);
+  const hintQ = qn && /กเพา|ขาว|ผด|บอกโคล|ไขดาว|ตามสง|ราด|กวยเตยว|เสน|บหม|เยนตาโฟ|เกาเหลา|มามา|กวยจบ|วนเสน/.test(qn);
   const f = s.pick ? FOOD[s.pick] : null;
   let pickHtml = '';
   if (f) {
@@ -568,7 +568,7 @@ function quickSheetBody() {
   return `${foodModeChips()}
     <p class="xs muted" style="margin:0">เลือกเหมือนสั่งร้านตามสั่ง แอปรวม kcal ให้ · ตัวเลขเล็กบนปุ่มคือ kcal ของส่วนนั้น</p>
     ${lb('1. เมนูผัด')}${optChips(QUICK.styles, st.style, 'qkSet', 'style')}
-    ${lb('2. เนื้อสัตว์')}${optChips(QUICK.proteins, st.protein, 'qkSet', 'protein', 1)}
+    ${lb('2. เนื้อสัตว์ (หรือไม่ใส่ = ผักล้วน)')}${optChips(QUICK.proteins, st.protein, 'qkSet', 'protein', 1)}
     ${optChips(QUICK.size, st.size, 'qkSet', 'size')}
     ${lb('3. ข้าว')}${optChips(QUICK.riceG, st.riceG, 'qkSet', 'riceG')}
     ${+st.riceG ? `${optChips(QUICK.riceType, st.rice, 'qkSet', 'rice')}<div class="xs muted">กินข้าวไป</div>${optChips(QUICK.ate, st.ate, 'qkSet', 'ate')}` : ''}

@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, quickCalc, noodleCalc, normTh 
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261008a';
+const VER = '20261008b';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -155,7 +155,7 @@ async function ownerLogin() {
   catch (e) { if (String(e.code).includes('popup')) await fb.signInWithRedirect(auth, pr); else toast('เข้าด้วย Google ไม่สำเร็จ (' + e.code + ')'); }
 }
 async function handleUser(u) {
-  S.cache.clear(); S.view = null; ui.log = null; closeSheet();
+  S.cache.clear(); S.view = null; ui.log = null; S.moveLib = null; closeSheet();
   if (!u) { S.me = null; return renderLogin(); }
   if ((u.email || '').toLowerCase() === OWNER_EMAIL && u.emailVerified) {
     S.me = { role: 'owner', name: 'เจ้าของระบบ', pid: null, uid: u.uid };
@@ -185,13 +185,15 @@ const line = { info: null, busy: false };
 // ใครได้รับอะไร: config/app.alerts[k] = { on, types } · k = 'owner' หรือ pid · ถ้ายังไม่ตั้ง ใช้ค่าเริ่มต้นตามบทบาท (ตรงกับ ocWants_ ใน Apps Script)
 const ALERT_TYPES = [['digest', 'สรุปรายวัน'], ['workout', 'ผลการเทรน']];
 const ALERT_HINT = {
-  owner: 'สรุปรายวัน = ลูกค้าทุกคน · ผลการเทรน = สำเนาผลเทรนทุกครั้งที่ส่งถึงลูกค้า',
-  trainer: 'สรุปรายวัน = ลูกค้าของตัวเอง · ผลการเทรน = สำเนาผลเทรนลูกค้าของตัวเอง',
-  member: 'สรุปรายวัน = ของตัวเองคนเดียว · ผลการเทรน = ผลหลังโค้ชบันทึก'
+  owner: 'สรุปรายวัน = ลูกค้าทุกคน · ผลการเทรนไม่ส่งสำเนามาที่เจ้าของ (ดูในแอปได้)',
+  trainer: 'สรุปรายวัน = ลูกค้าของตัวเอง · ผลการเทรนไม่ส่งกลับมาที่โค้ช (ส่งถึงลูกค้าคนนั้นคนเดียว)',
+  member: 'สรุปรายวัน = ของตัวเองคนเดียว · ผลการเทรน = เฉพาะผลของตัวเอง หลังโค้ชบันทึก'
 };
+// ผลการเทรนส่งถึงลูกค้าเจ้าของผลคนเดียว: เทรนเนอร์/เจ้าของเลือกได้แค่สรุปรายวัน
+const alertTypesFor = role => role === 'member' ? ALERT_TYPES : ALERT_TYPES.filter(([t]) => t !== 'workout');
 function alertOf(k, role) {
   const a = (S.config.alerts || {})[k];
-  if (a) return { on: a.on !== false, types: Array.isArray(a.types) ? a.types : [] };
+  if (a) return { on: a.on !== false, types: (Array.isArray(a.types) ? a.types : []).filter(t => role === 'member' || t !== 'workout') };
   if (role === 'owner') return { on: !!S.config.digestToOwner, types: S.config.digestToOwner ? ['digest'] : [] };
   return { on: true, types: role === 'trainer' ? ['digest'] : ['workout'] };
 }
@@ -226,6 +228,7 @@ function lineCardHtml() {
   return `<section class="card"><div class="between"><b>LINE ของฉัน</b>${!i ? '<span class="tag grey">กำลังตรวจ…</span>' : L ? `<span class="tag blue">เชื่อมแล้ว · ${esc(L.name || '')}</span>` : '<span class="tag alert">ยังไม่เชื่อม</span>'}</div>
     <div class="pill-note">บัญชีในแอปที่จะผูก: <b>${esc(S.me.name)}</b> · ${S.me.role === 'owner' ? 'เจ้าของระบบ' : S.me.role === 'trainer' ? 'เทรนเนอร์' : 'ลูกค้า'}${S.me.person?.username ? ' (@' + esc(S.me.person.username) + ')' : ''}</div>
     <span class="small muted">เชื่อมครั้งเดียว แล้วจะได้รับ ${what} เป็นแชต 1:1 จาก LINE OA</span>
+    ${S.me.role === 'member' ? '<span class="xs muted">กดเชื่อมจากมือถือที่เปิด LINE ของตัวเองเท่านั้น (1 LINE ต่อลูกค้า 1 คน) ระบบจะส่งเฉพาะผลเทรนของคุณ</span>' : ''}
     ${i && !i.ok ? `<div class="warn">${esc(i.error || 'เชื่อมต่อไม่ได้')}</div>` : ''}
     ${L && L.friend === false ? '<div class="warn">ยังไม่ได้เพิ่มเพื่อน LINE OA ต้องเพิ่มเพื่อนก่อนถึงจะได้รับข้อความ กด “เชื่อมใหม่” แล้วเลือกเพิ่มเพื่อน</div>' : ''}
     <div class="row"><button class="btn ${L ? '' : 'gold'}" data-act="lineLink">${L ? 'เชื่อมใหม่' : 'เชื่อม LINE'}</button>
@@ -923,8 +926,9 @@ async function renderLog() {
         <div class="sets xs muted"><span>เซ็ต</span><span>ครั้ง</span><span>น้ำหนัก (${m.u === 'lb' ? 'lb' : 'kg'})</span><span></span></div>
         ${m.sets.map((x, si) => { const w = num(x.w); return `<div class="sets" style="align-items:start"><b class="small" style="line-height:44px">เซ็ต ${si + 1}</b><input inputmode="numeric" data-set="r" data-mi="${mi}" data-si="${si}" value="${esc(x.r)}" aria-label="${esc(m.name)} เซ็ต ${si + 1} ครั้ง"><div style="display:flex;flex-direction:column;gap:2px"><input inputmode="decimal" data-set="w" data-mi="${mi}" data-si="${si}" value="${esc(x.w)}" aria-label="${esc(m.name)} เซ็ต ${si + 1} น้ำหนัก (${m.u === 'lb' ? 'ปอนด์' : 'กิโลกรัม'})"><span class="xs muted" data-conv="${mi}-${si}" style="padding-left:4px">${w ? `≈ ${r1(m.u === 'lb' ? w * LB : w / LB)} ${ou}` : '&nbsp;'}</span></div><button class="iconbtn" style="width:36px" data-act="logRmSet" data-mi="${mi}" data-si="${si}" aria-label="ลบเซ็ต ${si + 1}">×</button></div>`; }).join('')}
         <button class="btn sm ghost" style="border-style:dashed" data-act="logAddSet" data-i="${mi}">+ เพิ่มเซ็ต (ก๊อปค่าเซ็ตล่าสุด)</button></section>`; }).join('')}
-    ${L.picking ? `<section class="card gold-edge"><b>เลือกท่าจากคลัง</b><div class="chips">${MOVES.map(m => `<button class="chip" data-act="logPick" data-v="${esc(m)}">${esc(m)}</button>`).join('')}</div>
-      <div class="row"><input class="in" id="logCustom" placeholder="หรือพิมพ์ชื่อท่าเอง" style="flex:1"><button class="btn pri" data-act="logCustom">เพิ่ม</button></div></section>` : ''}
+    ${L.picking ? `<section class="card gold-edge"><b>เลือกท่า</b>
+      <input class="in" id="logCustom" placeholder="ค้นหา หรือพิมพ์ชื่อท่าใหม่" value="${esc(L.q || '')}" autocomplete="off" autocapitalize="words" enterkeyhint="done">
+      <div id="movePick" style="display:flex;flex-direction:column;gap:8px">${movePickHtml()}</div></section>` : ''}
     <button class="btn" data-act="logPicking">${L.picking ? 'ปิดรายการท่า' : '+ เพิ่มท่า'}</button>
     <div class="grid2"><label class="f">ระยะเวลา (นาที)<input class="in" id="lgMin" inputmode="numeric" value="${esc(L.min)}"></label><label class="f">เผาผลาญ kcal<input class="in" id="lgKcal" inputmode="numeric" value="${esc(L.kcal)}" placeholder="${n0(L.est)}"></label></div>
     <div><div class="small" style="font-weight:600;margin-bottom:8px">รูป / วิดีโอท่า <span class="muted" style="font-weight:400">(ไม่บังคับ · รูปเท่านั้นในรอบนี้)</span></div><div class="thumbs" id="logThumbs">${thumbsHtml(L.ph, true)}<label class="addthumb">${svg('cam', 22)}แนบรูป<input type="file" accept="image/*" multiple hidden data-act="pickLogPhoto"></label></div></div>
@@ -935,11 +939,62 @@ async function renderLog() {
 }
 function logForm() { const L = ui.log; if (!L) return; L.min = $('#lgMin')?.value ?? L.min; L.kcal = $('#lgKcal')?.value ?? L.kcal; L.note = $('#lgNote')?.value ?? L.note; }
 async function startLog(s) {
+  loadMoveLib().catch(() => {});
   const m = await person(s.memberPid); const rows = await bodyRows(s.memberPid).catch(() => []);
   const w = latestWeight(rows) || 65;
   ui.log = { sid: s.id || null, memberPid: s.memberPid, memberName: s.memberName || m?.name || '', date: s.date, time: s.time, type: s.type || 'Full body', moves: (s.moves || []).map(x => { const u = x.u === 'lb' ? 'lb' : 'kg'; return { name: x.name, u, sets: x.sets.map(y => ({ r: y.r, w: u === 'lb' ? (y.lb ?? r1((+y.kg || 0) / LB)) : y.kg })) }; }), min: s.min ?? 60, kcal: s.kcal ?? '', note: s.note || '', ph: [...(s.ph || [])], picking: false, weight: w, est: Math.round(5 * w) };
   ui.tab = 'log'; render();
 }
+/* ---------- คลังท่าของเทรนเนอร์: ชื่อท่าที่พิมพ์เองถูกจำไว้ เลือกใช้ซ้ำกับลูกค้าทุกคนได้ทันที ---------- */
+// เก็บที่ people/{เทรนเนอร์}/days/_moves (อยู่ในข้อมูลของตัวเองตาม Rules เดิม) + รวมชื่อท่าจากผลเทรนที่เคยบันทึก
+const moveKey = x => String(x || '').trim().replace(/\s+/g, ' ').toLowerCase();
+const moveClean = x => String(x || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+const moveLibRef = () => D('people', S.me.pid || '_owner', 'days', '_moves');
+async function loadMoveLib() {
+  if (S.moveLib) return S.moveLib;
+  let doc = null, hist = [];
+  try { doc = await get(moveLibRef()); } catch (e) { console.warn('moveLib', e); }
+  try { if (S.me.pid) hist = await trainerSessions(); } catch (e) { console.warn('moveHist', e); }
+  const std = new Set(MOVES.map(moveKey)), hidden = new Set((doc?.hidden || []).map(moveKey));
+  const all = [...(doc?.names || [])];
+  hist.filter(x => x.status === 'logged').sort((a, b) => ((b.date || '') + (b.time || '')).localeCompare((a.date || '') + (a.time || ''))).forEach(x => (x.moves || []).forEach(m => all.push(m.name)));
+  const seen = new Set(), names = [];
+  all.forEach(n => { const k = moveKey(n); if (!k || seen.has(k) || std.has(k) || hidden.has(k)) return; seen.add(k); names.push(moveClean(n)); });
+  return (S.moveLib = { names, hidden: [...hidden] });
+}
+async function saveMoveLib() {
+  try { await fb.setDoc(moveLibRef(), { names: S.moveLib.names.slice(0, 300), hidden: S.moveLib.hidden.slice(-300), at: Date.now() }); }
+  catch (e) { console.error(e); toast('จำชื่อท่าไม่สำเร็จ ลองใหม่อีกครั้ง'); }
+}
+// คืนชื่อที่ใช้จริง (สะกดตามคลังถ้าตรงกัน) และย้ายท่าที่พิมพ์เองขึ้นบนสุดของ "ท่าที่จำไว้"
+function rememberMove(raw) {
+  const name = moveClean(raw), k = moveKey(name); if (!k) return '';
+  const std = MOVES.find(m => moveKey(m) === k); if (std) return std;
+  const lib = S.moveLib || (S.moveLib = { names: [], hidden: [] });
+  const cur = lib.names.find(n => moveKey(n) === k) || name;
+  lib.names = [cur, ...lib.names.filter(n => moveKey(n) !== k)];
+  lib.hidden = lib.hidden.filter(h => h !== k);
+  saveMoveLib(); return cur;
+}
+function movePickHtml() {
+  const L = ui.log, q = moveKey(L.q), lib = S.moveLib?.names || [];
+  const has = n => !q || moveKey(n).includes(q);
+  const mine = lib.filter(has), std = MOVES.filter(has);
+  const exact = q && [...lib, ...MOVES].some(n => moveKey(n) === q);
+  const add = q && !exact ? `<button class="btn ${mine.length || std.length ? '' : 'pri'} block" data-act="logCustom">+ เพิ่มท่าใหม่ “${esc(moveClean(L.q))}” และจำไว้ใช้ครั้งหน้า</button>` : '';
+  return `${mine.length || std.length ? '' : add}
+    ${lib.length ? `<div class="between" style="margin-top:4px"><b class="small">ท่าที่จำไว้ของฉัน</b><span class="xs muted">${lib.length} ท่า · กด × เพื่อลืมชื่อที่พิมพ์ผิด</span></div>
+      <div class="chips">${mine.map(n => `<span class="chip" style="display:inline-flex;align-items:center;gap:2px;padding:0 4px 0 14px"><button data-act="logPick" data-v="${esc(n)}" style="all:unset;cursor:pointer;line-height:40px">${esc(n)}</button><button data-act="moveForget" data-v="${esc(n)}" aria-label="ลืมท่า ${esc(n)}" style="all:unset;cursor:pointer;width:28px;text-align:center;font-size:18px;color:#8A94A3">×</button></span>`).join('') || '<span class="xs muted">ไม่มีท่าที่ตรงกับคำค้น</span>'}</div>` : ''}
+    <b class="small" style="margin-top:4px">คลังท่ามาตรฐาน</b>
+    <div class="chips">${std.map(m => `<button class="chip" data-act="logPick" data-v="${esc(m)}">${esc(m)}</button>`).join('') || '<span class="xs muted">ไม่มีท่าที่ตรงกับคำค้น</span>'}</div>
+    ${mine.length || std.length ? add : ''}`;
+}
+function refreshMovePick() { const b = $('#movePick'); if (b) b.innerHTML = movePickHtml(); }
+function addMove(raw) {
+  logForm(); const name = rememberMove(raw); if (!name) return;
+  ui.log.moves.push({ name, u: ui.log.unit || 'kg', sets: [{ r: 10, w: 0 }] }); ui.log.picking = false; ui.log.q = ''; render();
+}
+
 async function saveLog() {
   logForm(); const L = ui.log; const min = num(L.min) || 0; const kcal = num(L.kcal) ?? Math.round(5 * L.weight * (min / 60));
   const moves = L.moves.map(m => { const u = m.u === 'lb' ? 'lb' : 'kg'; return { name: m.name, u, sets: m.sets.map(x => { const w = num(x.w) || 0; return u === 'lb' ? { r: num(x.r) || 0, kg: r2(w * LB), lb: w } : { r: num(x.r) || 0, kg: w, lb: r1(w / LB) }; }) }; }).filter(m => m.sets.length);
@@ -951,7 +1006,7 @@ async function saveLog() {
   const b = fb.writeBatch(db);
   b.set(ref, data, { merge: true });
   b.set(D('people', L.memberPid, 'activities', 's_' + ref.id), { date: L.date, type: 'coach', name: `เทรนกับ ${S.me.name} · ${L.type}`, min, kcal: Math.round(kcal), source: 'coach', sid: ref.id, ph: L.ph, t: Date.now(), byUid: auth.currentUser.uid });
-  await b.commit(); ui.log = null; toast('บันทึกผลการเทรนแล้ว'); ui.tab = 'schedule'; render();
+  const who = L.memberName; await b.commit(); ui.log = null; toast(`บันทึกผลของ ${who} แล้ว · LINE ส่งถึง ${who} คนเดียว`, 3500); ui.tab = 'schedule'; render();
 }
 
 /* ---------- เทรนเนอร์: สรุปวันนี้ ---------- */
@@ -1059,6 +1114,7 @@ function whoGetsHtml(ms, trs) {
   if (!S.config.lineUrl) return '';
   const i = line.info, links = i?.links || {};
   const coach = {}; trs.forEach(t => { coach[t.id] = t.name; });
+  const names = { owner: 'เจ้าของระบบ' }; trs.forEach(t => { names[t.id] = t.name; }); ms.forEach(m => { names[m.id] = m.name; });
   const people = [['owner', 'เจ้าของระบบ', 'owner', 'เจ้าของ'],
     ...trs.filter(t => t.active).map(t => [t.id, t.name, 'trainer', t.canManageTrainers ? 'หัวหน้าเทรนเนอร์' : 'เทรนเนอร์']),
     ...ms.filter(m => m.active).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')).map(m => [m.id, m.name, 'member', 'ลูกค้า' + (m.trainerName || coach[m.trainerPid] ? ' · โค้ช ' + (m.trainerName || coach[m.trainerPid]) : '')])];
@@ -1069,7 +1125,8 @@ function whoGetsHtml(ms, trs) {
         ${!i ? '' : L ? `<span class="tag blue">LINE: ${esc(L.name || '')}</span>` : '<span class="tag grey">ยังไม่เชื่อม LINE</span>'}</div>
       ${L && L.friend === false ? '<div class="xs alert">ยังไม่เพิ่มเพื่อน LINE OA จะไม่ได้รับข้อความ</div>' : ''}
       <label class="row small" style="min-height:44px"><input type="checkbox" data-alert-on="${esc(k)}" data-role="${role}" ${a.on ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> อนุญาต/รับแจ้งเตือน</label>
-      <div class="chips">${ALERT_TYPES.map(([t, l]) => `<button class="chip" aria-pressed="${a.on && a.types.includes(t)}" data-act="alertType" data-k="${esc(k)}" data-role="${role}" data-t="${t}" ${a.on ? '' : 'disabled style="opacity:.45"'}>${l}</button>`).join('')}</div>
+      ${L && L.dup && L.dup.length ? `<div class="xs alert">⚠️ LINE นี้ผูกกับบัญชีอื่นด้วย (${esc(L.dup.map(x => names[x] || links[x]?.appName || x).join(', '))}) ข้อความของทุกบัญชีจะเด้งเข้าเครื่องเดียวกัน ให้แต่ละคนเชื่อม LINE ของตัวเอง แล้วกด “ยกเลิกการเชื่อม” บัญชีที่ผูกผิด</div>` : ''}
+      <div class="chips">${alertTypesFor(role).map(([t, l]) => `<button class="chip" aria-pressed="${a.on && a.types.includes(t)}" data-act="alertType" data-k="${esc(k)}" data-role="${role}" data-t="${t}" ${a.on ? '' : 'disabled style="opacity:.45"'}>${l}</button>`).join('')}</div>
       <div class="xs muted">${ALERT_HINT[role]}</div>
       ${L ? `<div class="row"><button class="btn sm" data-act="lineTestTo" data-k="${esc(k)}">ส่งทดสอบ</button><button class="btn sm ghost danger" data-act="lineUnlink" data-k="${esc(k)}">ยกเลิกการเชื่อม</button></div>` : ''}
     </div>`;
@@ -1294,10 +1351,15 @@ const ACTS = {
   logAdhoc: async () => { const mid = $('#lgMember').value; const m = await person(mid); await startLog({ memberPid: mid, memberName: m.name, date: $('#lgDate').value, time: $('#lgTime').value || nowHM(), type: 'Full body' }); },
   logCancel: () => { if (confirm('ยกเลิกการบันทึกนี้?')) { ui.log = null; render(); } },
   logType: el => { logForm(); ui.log.type = el.dataset.v; render(); },
-  logPicking: () => { logForm(); ui.log.picking = !ui.log.picking; render(); },
+  logPicking: async () => { logForm(); ui.log.picking = !ui.log.picking; ui.log.q = ''; if (ui.log.picking) await loadMoveLib(); render(); if (ui.log?.picking) $('#logCustom')?.focus(); },
   logUnit: el => { logForm(); const m = ui.log.moves[+el.dataset.i]; const to = el.dataset.v; if ((m.u || 'kg') === to) return; m.sets.forEach(x => { const w = num(x.w); if (w) x.w = r1(to === 'lb' ? w / LB : w * LB); }); m.u = to; ui.log.unit = to; render(); },
-  logPick: el => { logForm(); ui.log.moves.push({ name: el.dataset.v, u: ui.log.unit || 'kg', sets: [{ r: 10, w: 0 }] }); ui.log.picking = false; render(); },
-  logCustom: () => { logForm(); const v = $('#logCustom').value.trim(); if (!v) return; ui.log.moves.push({ name: v, u: ui.log.unit || 'kg', sets: [{ r: 10, w: 0 }] }); ui.log.picking = false; render(); },
+  logPick: el => addMove(el.dataset.v),
+  logCustom: () => addMove($('#logCustom')?.value || ui.log.q),
+  moveForget: el => {
+    const k = moveKey(el.dataset.v); if (!S.moveLib || !confirm(`ลืมชื่อท่า “${el.dataset.v}”? (ผลเทรนเก่าที่ใช้ชื่อนี้ยังอยู่ครบ)`)) return;
+    S.moveLib.names = S.moveLib.names.filter(n => moveKey(n) !== k); if (!S.moveLib.hidden.includes(k)) S.moveLib.hidden.push(k);
+    saveMoveLib(); refreshMovePick();
+  },
   logAddSet: el => { logForm(); const m = ui.log.moves[+el.dataset.i]; const l = m.sets[m.sets.length - 1] || { r: 10, w: 0 }; m.sets.push({ ...l }); render(); },
   logRmSet: el => { logForm(); ui.log.moves[+el.dataset.mi].sets.splice(+el.dataset.si, 1); render(); },
   logRmMove: el => { logForm(); if (confirm('ลบท่านี้?')) { ui.log.moves.splice(+el.dataset.i, 1); render(); } },
@@ -1376,12 +1438,14 @@ async function onChange(e) {
 }
 function onInput(e) {
   const el = e.target;
+  if (el.id === 'logCustom' && ui.log) { ui.log.q = el.value; refreshMovePick(); return; }
   if (el.id === 'fSearch' && sheet) { sheet.q = el.value; sheet.pick = null; const pos = el.selectionStart; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); const n = $('#fSearch'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) { } }
   if (el.dataset?.set && ui.log) { const m = ui.log.moves[+el.dataset.mi]; m.sets[+el.dataset.si][el.dataset.set] = el.value; if (el.dataset.set === 'w') convHint(el, m); }
 }
 function onKey(e) {
   if (document.getElementById('viewer')) { if (e.key === 'Escape') closeViewer(); else if (e.key === 'ArrowLeft') navViewer(-1); else if (e.key === 'ArrowRight') navViewer(1); return; }
   if (e.key === 'Enter' && (e.target.id === 'lgPass' || e.target.id === 'lgUser')) doLogin();
+  if (e.key === 'Enter' && e.target.id === 'logCustom' && ui.log && !e.isComposing) { e.preventDefault(); const q = moveKey(e.target.value); if (!q) return; const hit = [...(S.moveLib?.names || []), ...MOVES].find(n => moveKey(n) === q); addMove(hit || e.target.value); }
   if (e.key === 'Enter' && ['cpOld', 'cpNew', 'cpNew2'].includes(e.target.id)) { e.preventDefault(); if (e.target.id === 'cpNew2') savePw(); else $(e.target.id === 'cpOld' ? '#cpNew' : '#cpNew2')?.focus(); } if (e.key === 'Escape' && sheet) closeSheet(); }
 
 export const __test = { S, ui, dayTotals, foodCalc, digestText, addDays, weekStart, thDate, lineChart, render, ACTS, onInput, onChange, setFb: (f, d, a) => { fb = f; db = d; auth = a; } };

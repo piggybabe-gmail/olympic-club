@@ -157,10 +157,15 @@ const OC = {
 };
 // ใครได้รับอะไร (ตั้งในแอป แท็บระบบ → config/app.alerts[k] = { on, types }) · ยังไม่ตั้ง = ค่าเริ่มต้นตามบทบาท
 function ocWants_(cfg, k, role, t) {
+  if (t === 'workout' && role !== 'member') return false; // ผลการเทรนส่งถึงลูกค้าเจ้าของผลคนเดียว ไม่ส่งสำเนา
   const a = (cfg.alerts || {})[k];
   if (!a) return role === 'owner' ? (t === 'digest' && !!cfg.digestToOwner) : role === 'trainer' ? t === 'digest' : t === 'workout';
   return a.on !== false && (a.types || []).indexOf(t) >= 0;
 }
+// LINE uid นี้ผูกกับบัญชีเทรนเนอร์อยู่ไหม
+function ocStaffUid_(L, uid) { return Object.keys(L).some(function (k) { return L[k].uid === uid && L[k].role === 'trainer'; }); }
+// บัญชีอื่นที่ใช้ LINE เดียวกัน (ให้เจ้าของเห็นในหน้า "ใครได้รับอะไร")
+function ocDupOf_(L, k) { return Object.keys(L).filter(function (x) { return x !== k && L[x].uid === L[k].uid; }); }
 function ocLinks_() { try { return JSON.parse(P.getProperty('OC_LINKS') || '{}'); } catch (e) { return {}; } }
 function ocSaveLinks_(l) { P.setProperty('OC_LINKS', JSON.stringify(l)); }
 
@@ -232,7 +237,7 @@ function ocApi_(b) {
     const L = ocLinks_();
     if (b.oc === 'info') {
       const out = { ok: true, me: me.k, link: L[me.k] ? { name: L[me.k].name, friend: L[me.k].friend, at: L[me.k].at } : null, hasToken: !!P.getProperty('LINE_TOKEN'), hasLogin: !!P.getProperty('LOGIN_CHANNEL_ID'), ticking: ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'ocTick'; }), lastDigest: P.getProperty('OC_DIGEST_DATE') || '', digestLog: me.role === 'owner' ? ocDigestLog_() : me.role === 'trainer' ? (function (g) { return { date: g.date, at: g.at, mine: (g.sent || {})[me.k] ? 'ส่งแล้ว' : (g.skip || {})[me.k] || '' }; })(ocDigestLog_()) : null };
-      if (me.role === 'owner') { out.links = {}; Object.keys(L).forEach(function (k) { out.links[k] = { name: L[k].name, appName: L[k].appName, friend: L[k].friend, at: L[k].at }; }); }
+      if (me.role === 'owner') { out.links = {}; Object.keys(L).forEach(function (k) { out.links[k] = { name: L[k].name, appName: L[k].appName, friend: L[k].friend, at: L[k].at, role: L[k].role, dup: ocDupOf_(L, k) }; }); }
       return out;
     }
     if (b.oc === 'start') {
@@ -280,6 +285,14 @@ function ocLoginCallback_(p) {
   let friend = null;
   try { const f = UrlFetchApp.fetch('https://api.line.me/friendship/v1/status', { headers: { Authorization: 'Bearer ' + t.access_token }, muteHttpExceptions: true }); if (f.getResponseCode() === 200) friend = JSON.parse(f.getContentText()).friendFlag; } catch (err) { }
   const L = ocLinks_();
+  // แยกสิทธิ์: 1 LINE ต่อลูกค้า 1 คน และ LINE ของเทรนเนอร์ใช้เป็น LINE ของลูกค้าไม่ได้ (กันผลเทรนเด้งผิดคน)
+  if (st.role === 'member') {
+    const coachK = Object.keys(L).filter(function (k) { return k !== st.k && L[k].uid === v.sub && L[k].role === 'trainer'; })[0];
+    if (coachK) return ocPage_('ใช้ LINE นี้ไม่ได้', 'LINE "' + (v.name || '') + '" ผูกกับบัญชีเทรนเนอร์ ' + (L[coachK].appName || '') + ' อยู่แล้ว\nให้ลูกค้ากดเชื่อมจากมือถือที่เปิด LINE ของตัวเอง', back + 'fail');
+    Object.keys(L).forEach(function (k) { if (k !== st.k && L[k].uid === v.sub && L[k].role === 'member') delete L[k]; });
+  } else if (st.role === 'trainer') {
+    Object.keys(L).forEach(function (k) { if (k !== st.k && L[k].uid === v.sub && L[k].role === 'member') delete L[k]; });
+  }
   L[st.k] = { uid: v.sub, name: v.name || '', appName: st.n || '', role: st.role, at: new Date().toISOString(), friend: friend };
   ocSaveLinks_(L); CacheService.getScriptCache().remove('oc_' + nonce);
   if (friend) push_(v.sub, 'เชื่อม LINE กับ The Olympic Club แล้ว ✅\n' + (st.role === 'member' ? 'คุณจะได้รับผลการเทรนหลังโค้ชบันทึก' : st.role === 'trainer' ? 'คุณจะได้รับสรุปลูกค้าทุกวัน' : 'คุณจะได้รับแจ้งเตือนของระบบ'));
@@ -352,16 +365,16 @@ function ocTick() {
   try {
     const L = ocLinks_(); const now = Date.now();
     const cfg = fsGet_('config/app') || {}; const ds = ocToday_();
-    // (1) ผลเทรน: ส่งถึงลูกค้าเมื่อครบเวลาหน่วงหลังโค้ชบันทึก (แก้ก่อนถึงเวลาได้ ระบบส่งฉบับล่าสุด)
-    //     ส่งตาม "ใครได้รับอะไร": ลูกค้า (ผลของตัวเอง) · เทรนเนอร์ผู้บันทึกและเจ้าของ (สำเนา) ถ้าเปิดหัวข้อผลการเทรน
+    // (1) ผลเทรน: ส่งถึง "ลูกค้าเจ้าของผลคนนั้นคนเดียว" เมื่อครบเวลาหน่วงหลังโค้ชบันทึก (แก้ก่อนถึงเวลาได้ ระบบส่งฉบับล่าสุด)
+    //     ไม่ส่งสำเนาถึงเทรนเนอร์/เจ้าของ/ลูกค้าคนอื่น · ถ้า LINE ของลูกค้าคนนี้เป็นเครื่องเดียวกับเทรนเนอร์ (ผูกผิด) ไม่ส่ง
     fsQuery_('', 'sessions', [['notified', false]]).forEach(function (s) {
       if (s.status !== 'logged' || !(+s.notifyAfter) || +s.notifyAfter > now) return;
-      let sent = false; const text = ocWorkoutText_(s); const t = L[s.memberPid];
-      if (t && ocWants_(cfg, s.memberPid, 'member', 'workout')) sent = push_(t.uid, text) === 200;
-      const copy = '📋 สำเนา · ผลเทรนของ ' + (s.memberName || 'ลูกค้า') + '\n' + text;
-      if (s.trainerPid && L[s.trainerPid] && ocWants_(cfg, s.trainerPid, 'trainer', 'workout')) push_(L[s.trainerPid].uid, copy);
-      if (L.owner && ocWants_(cfg, 'owner', 'owner', 'workout')) push_(L.owner.uid, copy);
-      fsPatch_(s._path, { notified: true, lineSent: sent, notifiedAt: new Date().toISOString() });
+      let sent = false, why = ''; const t = L[s.memberPid];
+      if (!t) why = 'ยังไม่เชื่อม LINE';
+      else if (!ocWants_(cfg, s.memberPid, 'member', 'workout')) why = 'ปิดรับผลการเทรน';
+      else if (ocStaffUid_(L, t.uid)) why = 'LINE ผูกกับบัญชีเทรนเนอร์';
+      else { sent = push_(t.uid, ocWorkoutText_(s)) === 200; if (!sent) why = 'ส่งไม่สำเร็จ'; }
+      fsPatch_(s._path, { notified: true, lineSent: sent, lineTo: sent ? s.memberPid : '', lineSkip: why, notifiedAt: new Date().toISOString() });
     });
     // (2) สรุปรายวัน: วันละครั้ง เมื่อถึงเวลาที่ตั้งไว้ (ค่าเริ่มต้น 21:00)
     //     จดผลรายคนใน OC_DIGEST_LOG · ถ้าส่งไม่ครบ (เช่น Firestore/LINE ขัดข้อง) รอบถัดไป (10 นาที) ส่งเฉพาะคนที่ยังไม่ได้

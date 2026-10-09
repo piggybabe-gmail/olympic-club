@@ -144,7 +144,14 @@ export const FOODS=[
  {id:'r_moodaeng',n:'ข้าวหมูแดง',u:'pc',un:'จาน',d:1,k:520,p:22,c:75,f:14,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
  {id:'r_gaiyang',n:'ไก่ย่าง (อก ไม่กินหนัง)',u:'pc',un:'ชิ้น (~150 g)',d:1,k:250,p:40,c:3,f:8,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
  {id:'r_kormooyang',n:'คอหมูย่าง',u:'g',d:100,k:340,p:17,c:3,f:29,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
- {id:'r_stickyrice',n:'ข้าวเหนียว',u:'pc',un:'ห่อ (~100 g)',d:1,k:230,p:4,c:50,f:0.4,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
+ {id:'r_stickyrice',n:'ข้าวเหนียว',u:'pc',un:'ห่อ (~100 g)',d:1,k:230,p:4,c:50,f:0.4,cat:'ร้านอาหาร/สั่งกลับบ้าน',al:'ข้าวเหนียวนึ่ง sticky rice',mp:'rice'},
+ // หมูปิ้ง / ข้าวเหนียว (ไม้ร้านรถเข็นทั่วไป ~40 g สุก หมักน้ำตาล กะทิ/นม)
+ {id:'mp_std',n:'หมูปิ้งธรรมดา (ไม้ ~40 g)',u:'pc',un:'ไม้',d:2,k:110,p:8,c:5,f:6.5,cat:'หมูปิ้ง/ข้าวเหนียว',al:'หมูปิ้ง หมูปิ้งไม้ moo ping',mp:'std'},
+ {id:'mp_lean',n:'หมูปิ้งเนื้อล้วน ไม่ติดมัน (ไม้ ~40 g)',u:'pc',un:'ไม้',d:2,k:90,p:10,c:5,f:3.5,cat:'หมูปิ้ง/ข้าวเหนียว',al:'หมูปิ้ง หมูปิ้งไม่ติดมัน หมูปิ้งสันใน moo ping',mp:'lean'},
+ {id:'mp_fatty',n:'หมูปิ้งติดมันเยอะ (ไม้ ~40 g)',u:'pc',un:'ไม้',d:2,k:150,p:6,c:5,f:12,cat:'หมูปิ้ง/ข้าวเหนียว',al:'หมูปิ้ง หมูปิ้งติดมัน หมูปิ้งสามชั้น moo ping',mp:'fatty'},
+ {id:'mp_milk',n:'หมูปิ้งนมสด/หมูนุ่ม (ไม้ ~40 g)',u:'pc',un:'ไม้',d:2,k:120,p:7.5,c:7,f:7,cat:'หมูปิ้ง/ข้าวเหนียว',al:'หมูปิ้ง หมูปิ้งนมสด หมูนุ่ม moo ping',mp:'milk'},
+ {id:'mp_big',n:'หมูปิ้งไม้ใหญ่ (ไม้ ~70 g)',u:'pc',un:'ไม้',d:1,k:190,p:14,c:8,f:11.5,cat:'หมูปิ้ง/ข้าวเหนียว',al:'หมูปิ้ง หมูปิ้งไม้ใหญ่ moo ping',mp:'big'},
+ {id:'mp_rice_g',n:'ข้าวเหนียวนึ่ง (ชั่ง/กะเป็นกรัม)',u:'g',d:100,k:230,p:4,c:50,f:0.4,cat:'หมูปิ้ง/ข้าวเหนียว',al:'ข้าวเหนียว ข้าวเหนียวนึ่ง sticky rice',mp:'rice'},
  {id:'r_tomyumthick',n:'ต้มยำกุ้งน้ำข้น',u:'pc',un:'ถ้วย',d:1,k:300,p:18,c:10,f:21,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
  {id:'r_greencurry',n:'แกงเขียวหวานไก่',u:'pc',un:'ถ้วย',d:1,k:300,p:20,c:10,f:20,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
  {id:'r_suki',n:'สุกี้น้ำ (ร้าน)',u:'pc',un:'ชาม',d:1,k:350,p:25,c:35,f:10,cat:'ร้านอาหาร/สั่งกลับบ้าน'},
@@ -393,6 +400,39 @@ export const QUICK={
  ],
  prikpla:{n:'พริกน้ำปลา',k2:8,p:0.8,c:1.2,f:0}
 };
+// ===== หมูปิ้ง + ข้าวเหนียว · ชุดรถเข็น (ค่าต่อ 1 ไม้ / ข้าวเหนียวต่อ 100 g ตรงกับคลัง) =====
+export const MOOPING={
+ types:[
+  {k:'std',n:'หมูปิ้งธรรมดา',d:'ไม้ ~40 g',k2:110,p:8,c:5,f:6.5},
+  {k:'lean',n:'เนื้อล้วน ไม่ติดมัน',d:'ไม้ ~40 g',k2:90,p:10,c:5,f:3.5},
+  {k:'fatty',n:'ติดมันเยอะ',d:'ไม้ ~40 g',k2:150,p:6,c:5,f:12},
+  {k:'milk',n:'นมสด/หมูนุ่ม',d:'ไม้ ~40 g',k2:120,p:7.5,c:7,f:7},
+  {k:'big',n:'หมูปิ้งไม้ใหญ่',d:'ไม้ ~70 g',k2:190,p:14,c:8,f:11.5}
+ ],
+ rice:{n:'ข้าวเหนียว',k2:230,p:4,c:50,f:0.4},
+ bags:[{k:0,n:'ไม่เอาข้าวเหนียว'},{k:70,n:'ถุงเล็ก ~70 g'},{k:100,n:'ถุงปกติ ~100 g'},{k:150,n:'ถุงใหญ่ ~150 g'}],
+ ate:[{k:100,n:'หมด'},{k:75,n:'¾'},{k:67,n:'⅔'},{k:50,n:'ครึ่ง'},{k:33,n:'⅓'},{k:25,n:'¼'}]
+};
+// สเตต: {cnt:{std:3,...}, riceG: น้ำหนักข้าวเหนียวทั้งถุง (g), ate: % ที่กิน, fromLeft: 1 = ถุงที่เหลือจากครั้งก่อน}
+export function mpCalc(st){
+ const cnt=st.cnt||{}, rows=MOOPING.types.map(x=>({x,n:Math.max(0,+cnt[x.k]||0)})).filter(r=>r.n>0);
+ let pork=null;
+ if(rows.length){
+  let t={k:0,p:0,c:0,f:0}; rows.forEach(r=>{t=qAdd(t,r.x,r.n);});
+  const n=rows.reduce((a,r)=>a+r.n,0);
+  const name=rows.length===1?`${rows[0].x.k==='std'||rows[0].x.k==='big'?rows[0].x.n:'หมูปิ้ง'+rows[0].x.n} ${n} ไม้`:`หมูปิ้ง ${n} ไม้`;
+  pork={name,n,desc:rows.length===1?rows[0].x.d:rows.map(r=>`${r.x.n} ×${r.n}`).join(' · '),...qFinish(t)};
+ }
+ const bag=Math.max(0,+st.riceG||0), ate=Math.min(100,Math.max(0,st.ate==null?100:+st.ate)), g=Math.round(bag*ate/100);
+ let rice=null;
+ if(bag>0&&g>0){
+  const al=MOOPING.ate.find(x=>x.k===ate);
+  const how=ate>=100?'กินหมด':al?`กิน ${al.n} (${ate}%)`:`กิน ${ate}%`;
+  rice={name:`ข้าวเหนียว ~${g} g`,g,left:bag-g,desc:`${st.fromLeft?'ส่วนที่เหลือจากครั้งก่อน':'ถุง'} ${bag} g · ${how}`,...qFinish(qAdd({k:0,p:0,c:0,f:0},MOOPING.rice,g/100))};
+ }
+ const tot=[pork,rice].filter(Boolean).reduce((a,x)=>({k:a.k+x.k,p:R1(a.p+x.p),c:R1(a.c+x.c),f:R1(a.f+x.f)}),{k:0,p:0,c:0,f:0});
+ return {pork,rice,g,left:bag-g,tot};
+}
 // ===== ก๋วยเตี๋ยว · ชามร้านทั่วไป =====
 export const NOODLE={
  types:[

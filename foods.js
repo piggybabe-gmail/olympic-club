@@ -45,9 +45,13 @@ export const FOODS=[
  {id:'porktl',n:'หมูสันใน (ดิบ)',u:'g',d:150,k:120,p:21,c:0,f:3.5,cat:'หมู'},
  {id:'porktlck',n:'หมูสันใน (สุก ย่าง/ต้ม)',u:'g',d:120,k:143,p:26,c:0,f:3.5,cat:'หมู'},
  {id:'porkloinck',n:'หมูสันนอกเลาะมัน (สุก)',u:'g',d:120,k:165,p:28,c:0,f:5.5,cat:'หมู'},
+ {id:'porkminceck',n:'หมูสับไม่ติดมัน (สุก ผัด/ต้ม ไม่รวมน้ำมัน)',u:'g',d:100,k:190,p:27,c:0,f:9,cat:'หมู',al:'หมูสับ หมูบด หมูสับสุก'},
+ {id:'porkmincefatck',n:'หมูสับติดมัน (สุก ผัด/ต้ม ไม่รวมน้ำมัน)',u:'g',d:100,k:297,p:25.7,c:0,f:20.8,cat:'หมู',al:'หมูสับ หมูบด หมูสับติดมัน'},
  {id:'porkmince',n:'หมูสับไม่ติดมัน (ดิบ)',u:'g',d:120,k:143,p:21,c:0,f:6,cat:'หมู'},
  {id:'beeflean',n:'เนื้อวัวสันใน/สะโพก ไม่ติดมัน (ดิบ)',u:'g',d:150,k:125,p:22,c:0,f:4,cat:'เนื้อวัว'},
  {id:'beefleanck',n:'เนื้อวัวสันใน/สะโพก ไม่ติดมัน (สุก)',u:'g',d:120,k:180,p:30,c:0,f:6.5,cat:'เนื้อวัว'},
+ {id:'beefminceck',n:'เนื้อวัวสับ 90% (สุก ผัด/ต้ม ไม่รวมน้ำมัน)',u:'g',d:100,k:217,p:26.1,c:0,f:11.8,cat:'เนื้อวัว',al:'เนื้อสับ เนื้อบด เนื้อวัวบด beef mince'},
+ {id:'beefribeyeck',n:'เนื้อวัวติดมัน ริบอาย/สันนอก (สุก ย่าง/สเต็ก)',u:'g',d:120,k:291,p:24,c:0,f:21,cat:'เนื้อวัว',al:'สเต็ก ริบอาย ribeye steak เนื้อติดมัน เนื้อวากิว'},
  {id:'beefmince',n:'เนื้อวัวสับ 90% ไม่ติดมัน (ดิบ)',u:'g',d:120,k:176,p:20,c:0,f:10,cat:'เนื้อวัว'},
  {id:'greek',n:'กรีกโยเกิร์ตไขมันต่ำ',u:'g',d:150,k:73,p:10,c:3.9,f:1.9,cat:'นม/โยเกิร์ต'},
  {id:'yogurt',n:'โยเกิร์ตรสธรรมชาติ',u:'g',d:135,k:61,p:3.5,c:4.7,f:3.3,cat:'นม/โยเกิร์ต'},
@@ -62,6 +66,9 @@ export const FOODS=[
  {id:'tofu',n:'เต้าหู้แข็ง',u:'g',d:100,k:144,p:17,c:3,f:9,cat:'ถั่ว'},
  {id:'edamame',n:'ถั่วแระญี่ปุ่น',u:'g',d:100,k:121,p:12,c:9,f:5,cat:'ถั่ว'},
  {id:'riceraw',n:'ข้าวสาร (ดิบ ก่อนหุง)',u:'g',d:60,k:365,p:7.1,c:80,f:0.7,cat:'แป้ง'},
+ {id:'riceladle',n:'ข้าวสวย/ข้าวหอมมะลิ (นับทัพพี ~60 g)',u:'pc',un:'ทัพพี',d:2,k:78,p:1.6,c:16.8,f:0.2,cat:'แป้ง',al:'ข้าวสวย ข้าวหอมมะลิ ข้าวขาว ทัพพี'},
+ {id:'brownladle',n:'ข้าวกล้อง (นับทัพพี ~60 g)',u:'pc',un:'ทัพพี',d:2,k:67,p:1.4,c:14.1,f:0.5,cat:'แป้ง',al:'ข้าวกล้อง ทัพพี'},
+ {id:'riceberryladle',n:'ข้าวไรซ์เบอร์รี่ (นับทัพพี ~60 g)',u:'pc',un:'ทัพพี',d:2,k:72,p:1.8,c:15,f:0.6,cat:'แป้ง',al:'ไรซ์เบอร์รี่ riceberry ทัพพี'},
  {id:'rice',n:'ข้าวสวย (หุงสุกแล้ว)',u:'g',d:150,k:130,p:2.7,c:28,f:0.3,cat:'แป้ง'},
  {id:'brown',n:'ข้าวกล้อง (หุงสุกแล้ว)',u:'g',d:150,k:112,p:2.3,c:23.5,f:0.8,cat:'แป้ง'},
  {id:'riceberry',n:'ข้าวไรซ์เบอร์รี่ (หุงสุกแล้ว)',u:'g',d:150,k:120,p:3,c:25,f:1,cat:'แป้ง'},
@@ -590,7 +597,18 @@ export function noodleCalc(st){
  return {name, desc:bits.join(' · ')||'ชามปกติ', ...qFinish(t)};
 }
 // จานทำเอง/มิกซ์วัตถุดิบ: items=[{id,q}] (q = กรัม หรือจำนวนหน่วยของวัตถุดิบนั้น) · ate = % ที่กิน (ทำกินคนเดียว = 100)
-export const MIX_QUICK=['egg','mamabig','mama','spinachth','spinach','morningglory','kale','porkball','shrimp','chickbrck','tofu','oiltsp'];
+export const MIX_QUICK=['egg','riceladle','beefleanck','porkminceck','porktlck','chickbrck','salmonck','tilapiack','shrimp','mamabig','spinachth','kale','oiltsp'];
+// หมวดวัตถุดิบในโหมดทำเอง: q = ปุ่มลัดที่ใช้บ่อยของหมวด · cats = หมวดในคลังที่แสดงทั้งหมดใต้ปุ่มลัด
+export const MIX_GROUPS=[
+ {k:'pop',n:'ใช้บ่อย',q:MIX_QUICK,cats:[]},
+ {k:'meat',n:'เนื้อ/หมู/ไก่',q:['beefleanck','beefminceck','beefribeyeck','porktlck','porkloinck','porkminceck','porkmincefatck','chickbrck','chickthighck','porkball'],cats:['เนื้อวัว','หมู','ไก่','เนื้อแปรรูป/ลูกชิ้น']},
+ {k:'fish',n:'ปลา/กุ้ง/ทะเล',q:['salmonck','seabassck','tilapiack','snakeheadck','mackerel','saba','tuna','shrimp','squid','fishball'],cats:['ปลา','กุ้ง/ทะเล']},
+ {k:'carb',n:'ข้าว/เส้น',q:['riceladle','brownladle','riceberryladle','rice','mamabig','mama','eggnoodle','ricenoodle'],cats:['แป้ง','เส้น/บะหมี่กึ่งสำเร็จรูป']},
+ {k:'egg',n:'ไข่/เต้าหู้',q:['egg','eggfry','omeletlo','eggduck','eggsalted','tofu','eggtofu'],cats:['ไข่','ถั่ว']},
+ {k:'veg',n:'ผัก/เห็ด',q:['spinachth','morningglory','kale','broccoli','cabbage','bokchoy','carrot','enoki'],cats:['ผัก']},
+ {k:'fat',n:'น้ำมัน/เครื่องปรุง',q:['oiltsp','oiltbsp','oystersauce','soysauce','fishsauce','sugar','garlic'],cats:['ไขมัน','เครื่องปรุง/น้ำสลัด']}];
+// หมวดสรุปในจาน (โชว์ว่าจานนี้แคลมาจากอะไรบ้าง)
+export const MIX_SUM=[['เนื้อสัตว์',['เนื้อวัว','หมู','ไก่','เนื้อแปรรูป/ลูกชิ้น','ปลา','กุ้ง/ทะเล']],['ข้าว/เส้น',['แป้ง','เส้น/บะหมี่กึ่งสำเร็จรูป']],['ไข่/เต้าหู้',['ไข่','ถั่ว']],['ผัก',['ผัก']],['น้ำมัน/ซอส',['ไขมัน','เครื่องปรุง/น้ำสลัด']]];
 export const MIX_ATE=[{k:100,n:'กินหมด'},{k:75,n:'¾'},{k:50,n:'ครึ่ง'},{k:33,n:'⅓'},{k:25,n:'¼'}];
 export function mixCalc(items,ate,FOODMAP){
  const share=Math.min(100,Math.max(1,+ate||100))/100;

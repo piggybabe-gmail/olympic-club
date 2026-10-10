@@ -1,10 +1,10 @@
 // The Olympic Club by PT-Palm — แอปติดตามอาหารและการเทรน (ลูกค้า / เทรนเนอร์ / เจ้าของระบบ)
 import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN, RECAPTCHA_SITE_KEY } from './firebase-config.js?v=20260929b';
-import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, MIX_QUICK, MIX_ATE, quickCalc, noodleCalc, mpCalc, mixCalc, normTh } from './foods.js?v=20261010a';
+import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, MIX_GROUPS, MIX_SUM, MIX_ATE, quickCalc, noodleCalc, mpCalc, mixCalc, normTh } from './foods.js?v=20261010b';
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261010a';
+const VER = '20261010b';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -695,7 +695,7 @@ async function saveMp() {
 /* ---------- จานทำเอง: มิกซ์วัตถุดิบหลายอย่างเป็นจานเดียว แอปรวม kcal/P/C/F ให้ ---------- */
 // สูตรที่จำไว้เก็บที่ people/{คนที่ดูอยู่}/days/_mixes ใช้ซ้ำได้ทุกเครื่อง (อยู่ในข้อมูลของคนนั้นตาม Rules เดิม)
 const mixLibRef = () => D('people', S.view, 'days', '_mixes');
-function mxState() { if (!sheet.mx) sheet.mx = { items: [], ate: 100, name: '', q: '', fav: 1 }; return sheet.mx; }
+function mxState() { if (!sheet.mx) sheet.mx = { items: [], ate: 100, name: '', q: '', fav: 1, g: 'pop' }; return sheet.mx; }
 function mixLib() { return S.mixLib?.pid === S.view ? S.mixLib.list : null; }
 async function loadMixLib() {
   if (mixLib()) return;
@@ -707,15 +707,29 @@ async function loadMixLib() {
 const mxShort = n => String(n || '').replace(/ \(.*?\)/g, '').trim();
 function mixAutoName(lines) { const n = lines.map(x => { const f = FOOD[x.id], u = mxShort(f?.un); return mxShort(x.n) + (f && f.u !== 'g' && +x.q !== 1 && !/ช้อน/.test(u) ? ` ${x.q} ${u}` : ''); }); return n.slice(0, 4).join(' + ') + (n.length > 4 ? ' ฯลฯ' : ''); }
 function mixDesc(r) { const a = r.lines.map(x => `${mxShort(x.n)} ${x.qs}`); if (r.share < 1) a.push(`กิน ${Math.round(r.share * 100)}% ของทั้งจาน (ทั้งจาน ${n0(r.all.k)} kcal)`); return 'ทำเอง · ' + a.join(' · '); }
-function mxRead() { const st = sheet?.mx; if (!st) return; const n = $('#mxName'); if (n) st.name = n.value; document.querySelectorAll('[data-mxg]').forEach(el => { const it = st.items[+el.dataset.mxg], v = num(el.value); if (it && v != null && v >= 0) it.q = Math.min(5000, r1(v)); }); }
+function mxRead() { const st = sheet?.mx; if (!st) return; const dm = document.querySelector('[data-mxmore]'); if (dm) sheet.mxMore = dm.open ? 1 : 0; const n = $('#mxName'); if (n) st.name = n.value; document.querySelectorAll('[data-mxg]').forEach(el => { const it = st.items[+el.dataset.mxg], v = num(el.value); if (it && v != null && v >= 0) it.q = Math.min(5000, r1(v)); }); }
 function mxAdd(id) {
   const f = FOOD[id]; if (!f) return; const st = mxState(), it = st.items.find(x => x.id === id);
   if (it) it.q = r1(+it.q + (f.u === 'g' ? f.d : 1));
   else st.items.push({ id, q: f.u === 'g' ? f.d : (f.d >= 3 ? f.d : 1) });
 }
+function mxTag(n) { const m = String(n || '').match(/\((ดิบ|สุก)/); return m ? m[1] : ''; }
+function mxChip(f, st) {
+  const it = st.items.find(x => x.id === f.id), tag = mxTag(f.n), per = f.u === 'g' ? `${n0(f.k)}/100 g` : `${n0(f.k)}/${mxShort(f.un)}`;
+  return `<button class="chip" data-act="mxAdd" data-id="${f.id}" aria-pressed="${!!it}">+ ${esc(mxShort(f.n))}${tag ? ` (${tag})` : ''}${it ? ` · ${esc(it.q)}${f.u === 'g' ? ' g' : ''}` : ''} <span class="xs muted">${esc(per)}</span></button>`;
+}
+function mixSumHtml(r) {
+  if (!r.lines.length) return '';
+  const a = MIX_SUM.map(([n, cats]) => [n, r.lines.filter(l => cats.includes(FOOD[l.id]?.cat)).reduce((t, l) => t + l.k, 0)]);
+  const other = r.lines.reduce((t, l) => t + l.k, 0) - a.reduce((t, x) => t + x[1], 0); if (other > 0) a.push(['อื่น ๆ', other]);
+  const sh = r.share < 1 ? r.share : 1, used = a.filter(x => x[1] > 0);
+  return used.length > 1 ? `<div class="xs" style="margin-top:4px">มาจาก: ${used.map(([n, k]) => `${n} <b>${n0(k * sh)}</b>`).join(' · ')} kcal</div>` : '';
+}
 function mixSheetBody() {
   const st = mxState(), r = mixCalc(st.items, st.ate, FOOD), lb = t => `<div class="small"><b>${t}</b></div>`, lib = mixLib();
   if (!lib) loadMixLib();
+  const grp = MIX_GROUPS.find(g => g.k === st.g) || MIX_GROUPS[0], more = FOODS.filter(f => grp.cats.includes(f.cat) && !grp.q.includes(f.id));
+  const cnt = {}; st.items.forEach(it => { const c = FOOD[it.id]?.cat; MIX_GROUPS.forEach(g => { if (g.cats.includes(c)) cnt[g.k] = (cnt[g.k] || 0) + 1; }); });
   const q = (st.q || '').trim().toLowerCase(), qn = normTh(q);
   const res = q ? FOODS.filter(f => !f.qk && (f.n.toLowerCase().includes(q) || (f.cat || '').includes(q) || (f.al || '').toLowerCase().includes(q) || (qn && (normTh(f.n).includes(qn) || normTh(f.al).includes(qn))))).slice(0, 25) : [];
   const rows = st.items.map((it, i) => { const f = FOOD[it.id]; if (!f) return ''; const v = foodCalc(f, +it.q || 0);
@@ -725,11 +739,14 @@ function mixSheetBody() {
     return `<div class="between" style="align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)"><div style="min-width:0"><b class="small">${esc(f.n)}</b><div class="xs muted">${f.u === 'g' ? '' : esc(f.un || '') + ' · '}${n0(v.k)} kcal · P ${v.p} · C ${v.c} · F ${v.f}</div></div>
       <div class="row" style="gap:6px;flex-wrap:nowrap;align-items:center">${ctl}<button class="btn sm ghost" data-act="mxDel" data-i="${i}" aria-label="เอาออก ${esc(f.n)}">×</button></div></div>`; }).join('');
   return `${foodModeChips()}
-    <p class="xs muted" style="margin:0">ทำกินเอง เช่น มาม่าห่อใหญ่ + ไข่ 3 ฟอง + ผักโขม · ใส่วัตถุดิบที่ใช้จริงทีละอย่าง แอปรวม kcal ทั้งจานให้ · แตะซ้ำเพื่อเพิ่มจำนวน</p>
+    <p class="xs muted" style="margin:0">ทำกินเอง ใส่หลายอย่างในจานเดียว เช่น ข้าว 2 ทัพพี + เนื้อ + หมูสับ + ปลา + ไข่ หรือ มาม่าห่อใหญ่ + ไข่ 3 ฟอง + ผักโขม · แอปรวม kcal โปรตีน คาร์บ ไขมัน ทั้งจานให้</p>
     ${lib?.length ? `${lb('สูตรของฉัน (แตะเพื่อใช้ซ้ำ)')}<div class="chips">${lib.map((m, i) => `<button class="chip" data-act="mxLoad" data-i="${i}">${esc(m.n)}</button>`).join('')}</div>
       <div class="chips"><button class="chip" data-act="mxLibEdit" aria-pressed="${!!sheet.mxLibEdit}">${sheet.mxLibEdit ? 'เสร็จ' : 'ลบสูตรที่ไม่ใช้'}</button>${sheet.mxLibEdit ? lib.map((m, i) => `<button class="chip" data-act="mxLibDel" data-i="${i}">× ${esc(m.n)}</button>`).join('') : ''}</div>` : ''}
-    ${lb('1. วัตถุดิบที่ใช้บ่อย')}<div class="chips">${MIX_QUICK.map(id => FOOD[id]).filter(Boolean).map(f => `<button class="chip" data-act="mxAdd" data-id="${f.id}">+ ${esc(mxShort(f.n))}</button>`).join('')}</div>
-    <label class="f">ค้นวัตถุดิบอื่น<input class="in" id="mxSearch" value="${esc(st.q || '')}" placeholder="เช่น คะน้า เห็ด ลูกชิ้น ซอสหอย" autocomplete="off"></label>
+    ${lb('1. เลือกวัตถุดิบตามหมวด (แตะได้หลายอย่าง แตะซ้ำ = เพิ่มจำนวน)')}
+    <div class="chips">${MIX_GROUPS.map(g => `<button class="chip" data-act="mxGrp" data-v="${g.k}" aria-pressed="${grp.k === g.k}">${esc(g.n)}${(cnt[g.k] || 0) ? ` (${cnt[g.k]})` : ''}</button>`).join('')}</div>
+    <div class="chips">${grp.q.map(id => FOOD[id]).filter(Boolean).map(f => mxChip(f, st)).join('')}</div>
+    ${more.length ? `<details${sheet.mxMore ? ' open' : ''} data-mxmore><summary class="small">ดูทั้งหมดในหมวด${esc(grp.n)} (${more.length} รายการ)</summary><div class="foodres">${more.map(x => `<button type="button" data-act="mxAdd" data-id="${x.id}">${esc(x.n)} <span class="xs muted">· ${x.u === 'g' ? '100 g' : '1 ' + esc(x.un || '')} = ${n0(foodCalc(x, x.u === 'g' ? 100 : 1).k)} kcal</span></button>`).join('')}</div></details>` : ''}
+    <label class="f">หรือค้นวัตถุดิบ<input class="in" id="mxSearch" value="${esc(st.q || '')}" placeholder="เช่น เนื้อ หมูสับ ปลานิล ข้าว คะน้า ซอสหอย" autocomplete="off"></label>
     ${res.length ? `<div class="foodres">${res.map(x => `<button type="button" data-act="mxAdd" data-id="${x.id}">${esc(x.n)} <span class="xs muted">· ${x.u === 'g' ? '100 g' : '1 ' + esc(x.un || '')} = ${n0(foodCalc(x, x.u === 'g' ? 100 : 1).k)} kcal</span></button>`).join('')}</div>` : (q ? '<p class="small muted" style="margin:0">ไม่พบวัตถุดิบนี้ ลองคำอื่น</p>' : '')}
     ${lb(`2. ในจานนี้ (${st.items.length} อย่าง)`)}
     ${rows || '<p class="small muted" style="margin:0">ยังไม่มีวัตถุดิบ แตะปุ่มด้านบนหรือค้นหาเพื่อเพิ่ม</p>'}
@@ -741,6 +758,7 @@ function mixSheetBody() {
       ${r.lines.length ? `<div class="xs muted">${esc(mixDesc(r))}</div>` : ''}
       <div style="margin-top:6px"><span class="big">${n0(r.k)}</span> <span class="muted">kcal${r.share < 1 ? ' (ส่วนที่กิน)' : ''}</span></div>
       <div class="small">โปรตีน ${r.p} g · คาร์บ ${r.c} g · ไขมัน ${r.f} g</div>
+      ${mixSumHtml(r)}
       ${r.share < 1 ? `<div class="xs muted">ทั้งจาน ${n0(r.all.k)} kcal · P ${r.all.p} · C ${r.all.c} · F ${r.all.f}</div>` : ''}</section>
     ${mealSel()}${photoPicker('รูปจาน')}
     <button class="btn pri block" data-act="saveMix" ${r.lines.length ? '' : 'disabled'}>บันทึกจานนี้</button>`;
@@ -1432,6 +1450,7 @@ const ACTS = {
     sheet.mode = 'mix'; sheet.q = ''; sheet.pick = null; redrawFood(); },
   mxStep: el => { mxRead(); const st = mxState(), it = st.items[+el.dataset.i]; if (!it) return; it.q = r1(+it.q + (+el.dataset.v)); if (!(it.q > 0)) st.items.splice(+el.dataset.i, 1); redrawFood(); },
   mxDel: el => { mxRead(); mxState().items.splice(+el.dataset.i, 1); redrawFood(); },
+  mxGrp: el => { mxRead(); const st = mxState(); st.g = el.dataset.v; sheet.mxMore = 0; redrawFood(); },
   mxClr: () => { mxRead(); mxState().items = []; redrawFood(); },
   mxSet: el => { mxRead(); mxState()[el.dataset.k] = +el.dataset.v; redrawFood(); },
   mxLoad: el => { const m = (mixLib() || [])[+el.dataset.i]; if (!m) return; const st = mxState(); st.items = (m.items || []).filter(x => FOOD[x.id]).map(x => ({ ...x })); st.name = m.n; st.ate = 100; redrawFood(); },

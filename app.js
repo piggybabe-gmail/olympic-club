@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, MIX_GROUPS, MIX_SUM, 
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261010b';
+const VER = '20261011a';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -921,25 +921,42 @@ async function renderBody(pid) {
     <section class="card"><div class="between"><b>น้ำหนัก</b>${w.length > 1 ? `<span class="small blue"><b>${w[w.length - 1].v - w[0].v >= 0 ? '+' : ''}${r1(w[w.length - 1].v - w[0].v)} kg</b></span>` : ''}</div>${lineChart(w, '#1D3A5C')}</section>
     <section class="card"><div class="between"><b>ผลสแกนล่าสุด</b><span class="xs muted">${last ? thDate(last.date) : ''}</span></div>
       ${last ? `<div class="grid3">${cell('น้ำหนัก', 'weight', ' kg')}${cell('กล้ามเนื้อ SMM', 'smm', ' kg')}${cell('ไขมัน', 'fatPct', '%')}</div>${last.ph?.length ? `<div class="thumbs">${thumbsHtml(last.ph)}</div>` : ''}` : '<p class="small muted" style="margin:0">ยังไม่มีผลสแกน กด “เพิ่มผลสแกน” แล้วแนบใบ InBody ได้เลย</p>'}</section>
-    <div class="grid2"><button class="btn pri" data-act="addBody" data-v="weight">บันทึกน้ำหนัก</button><button class="btn" data-act="addBody" data-v="scan">เพิ่มผลสแกน</button></div>
-    ${rows.length ? `<section style="display:flex;flex-direction:column;gap:8px"><h2>ประวัติ</h2><div class="list">${[...rows].reverse().slice(0, 20).map(r => `<div class="li"><div class="grow"><b class="small">${thDate(r.date)}</b><div class="xs muted">${[['weight', 'น้ำหนัก', 'kg'], ['smm', 'SMM', 'kg'], ['fatPct', 'ไขมัน', '%'], ['waist', 'เอว', 'cm'], ['hip', 'สะโพก', 'cm'], ['arm', 'แขน', 'cm']].filter(([k]) => num(r[k]) != null).map(([k, l, u]) => `${l} ${r1(r[k])} ${u}`).join(' · ')}${clipTag(r.ph)}</div></div><button class="iconbtn" data-act="rmBody" data-id="${r.id}" aria-label="ลบรายการ">${svg('trash', 18)}</button></div>`).join('')}</div></section>` : ''}`);
+    ${measCard(rows)}
+    <div class="grid3"><button class="btn pri" data-act="addBody" data-v="weight">บันทึกน้ำหนัก</button><button class="btn gold" data-act="addBody" data-v="meas">วัดสัดส่วน</button><button class="btn" data-act="addBody" data-v="scan">เพิ่มผลสแกน</button></div>
+    ${rows.length ? `<section style="display:flex;flex-direction:column;gap:8px"><h2>ประวัติ</h2><div class="list">${[...rows].reverse().slice(0, 20).map(r => `<div class="li"><div class="grow"><b class="small">${thDate(r.date)}</b><div class="xs muted">${[['weight', 'น้ำหนัก', 'kg'], ['smm', 'SMM', 'kg'], ['fatPct', 'ไขมัน', '%'], ...CIRC.map(([k, , sh]) => [k, sh, 'cm'])].filter(([k]) => num(r[k]) != null).map(([k, l, u]) => `${l} ${r1(r[k])} ${u}`).join(' · ')}${clipTag(r.ph)}</div></div><button class="iconbtn" data-act="rmBody" data-id="${r.id}" aria-label="ลบรายการ">${svg('trash', 18)}</button></div>`).join('')}</div></section>` : ''}`);
   fillThumbs();
 }
-const BODY_FIELDS = [['weight', 'น้ำหนัก (kg)'], ['smm', 'กล้ามเนื้อ SMM (kg)'], ['fatKg', 'ไขมัน (kg)'], ['fatPct', 'ไขมัน (%)'], ['bmr', 'BMR (kcal)'], ['visceral', 'ไขมันช่องท้อง (ระดับ)'], ['water', 'น้ำในร่างกาย (kg)'], ['waist', 'รอบเอว (cm)'], ['hip', 'รอบสะโพก (cm)'], ['arm', 'รอบแขน (cm)']];
+const SCAN_FIELDS = [['weight', 'น้ำหนัก (kg)'], ['smm', 'กล้ามเนื้อ SMM (kg)'], ['fatKg', 'ไขมัน (kg)'], ['fatPct', 'ไขมัน (%)'], ['bmr', 'BMR (kcal)'], ['visceral', 'ไขมันช่องท้อง (ระดับ)'], ['water', 'น้ำในร่างกาย (kg)']];
+// สัดส่วนจากสายวัด เก็บเป็น cm เสมอ [key, ป้ายในฟอร์ม, ป้ายสั้น]
+const CIRC = [['bust', 'รอบอก (ระดับเนินอก)', 'อก'], ['chest', 'รอบอกบน / ใต้รักแร้', 'อกบน'], ['underbust', 'รอบใต้อก', 'ใต้อก'], ['waist', 'รอบเอว (ระดับสะดือ)', 'เอว'], ['belly', 'รอบหน้าท้อง (จุดที่ใหญ่สุด)', 'หน้าท้อง'], ['hip', 'รอบสะโพก (จุดที่ใหญ่สุด)', 'สะโพก'], ['armR', 'ต้นแขนขวา', 'แขน ข'], ['armL', 'ต้นแขนซ้าย', 'แขน ซ'], ['thighR', 'ต้นขาขวา', 'ขา ข'], ['thighL', 'ต้นขาซ้าย', 'ขา ซ'], ['calfR', 'น่องขวา', 'น่อง ข'], ['calfL', 'น่องซ้าย', 'น่อง ซ'], ['arm', 'รอบแขน (ข้อมูลเดิม)', 'แขน']];
+const CIRC_FORM = CIRC.filter(([k]) => k !== 'arm');
+const BODY_FIELDS = [...SCAN_FIELDS, ...CIRC];
+const IN = 2.54;
+function measCard(rows) {
+  const ms = rows.filter(r => CIRC.some(([k]) => num(r[k]) != null)); const last = ms[ms.length - 1];
+  if (!last) return '<section class="card"><b>สัดส่วน (สายวัด)</b><p class="small muted" style="margin:6px 0 0">ยังไม่มีผลวัด กด “วัดสัดส่วน” แล้วกรอกรอบอก เอว สะโพก แขน ขา ได้เลย</p></section>';
+  const prevOf = k => { for (let i = rows.indexOf(last) - 1; i >= 0; i--) if (num(rows[i][k]) != null) return num(rows[i][k]); return null; };
+  const firstOf = k => { for (const r of rows) if (num(r[k]) != null) return { v: num(r[k]), d: r.date }; return null; };
+  const cells = CIRC.filter(([k]) => num(last[k]) != null).map(([k, , sh]) => { const v = num(last[k]), pv = prevOf(k), f = firstOf(k); const d = pv != null ? r1(v - pv) : null; const tot = f && f.d !== last.date ? r1(v - f.v) : null;
+    return `<div><div class="xs muted">${sh}</div><b style="font-size:18px">${r1(v)}</b><span class="xs muted"> cm</span><br>${d != null ? `<span class="xs ${d <= 0 ? 'blue' : 'goldt'}">${d > 0 ? '+' : ''}${d} ครั้งก่อน</span>` : ''}${tot != null ? `<br><span class="xs muted">${tot > 0 ? '+' : ''}${tot} จากครั้งแรก</span>` : ''}</div>`; }).join('');
+  return `<section class="card"><div class="between"><b>สัดส่วนล่าสุด (สายวัด)</b><span class="xs muted">${thDate(last.date)}</span></div><div class="grid3" style="margin-top:8px">${cells}</div>${last.ph?.length && !num(last.smm) ? `<div class="thumbs">${thumbsHtml(last.ph)}</div>` : ''}</section>`;
+}
 function bodySheetBody() {
-  const s = sheet; const fields = s.mode === 'weight' ? BODY_FIELDS.slice(0, 1) : BODY_FIELDS;
+  const s = sheet; const fields = s.mode === 'weight' ? SCAN_FIELDS.slice(0, 1) : s.mode === 'meas' ? CIRC_FORM : SCAN_FIELDS; const inch = s.mode === 'meas' && s.unit === 'in';
   return `<label class="f">วันที่วัด<input class="in" type="date" id="bDate" value="${esc(s.v.date)}"></label>
+    ${s.mode === 'meas' ? `<div class="chips"><button class="chip" data-act="measUnit" data-v="cm" aria-pressed="${!inch}">กรอกเป็น cm</button><button class="chip" data-act="measUnit" data-v="in" aria-pressed="${inch}">กรอกเป็นนิ้ว (แปลงเป็น cm ให้)</button></div><p class="xs muted" style="margin:0">วัดตอนเช้าก่อนกินอาหาร สายวัดแนบผิวพอดี ไม่รัด กรอกเฉพาะจุดที่วัด ช่องว่างข้ามได้${s.prevHint ? ` · ตัวเลขจาง ๆ ในช่องคือผลครั้งก่อน` : ''}</p>` : ''}
     ${s.mode === 'scan' ? `<div><div class="small" style="font-weight:600;margin-bottom:8px">ใบผลสแกน <span class="muted" style="font-weight:400">(ไม่บังคับ)</span></div>${photoPicker('แนบใบ InBody')}
       ${s.lastImg ? `<button class="btn gold block" style="margin-top:8px" data-act="aiInbody">${svg('spark', 18)} ${s.aiMsg || 'ให้ AI กรอกให้'}</button>` : ''}</div>` : ''}
-    <div class="grid2">${fields.map(([k, l]) => `<label class="f">${l}<input class="in" inputmode="decimal" data-bf="${k}" value="${esc(s.v[k] ?? '')}" style="${s.aiKeys?.includes(k) ? 'border-color:#E0A526;border-width:2px' : ''}"></label>`).join('')}</div>
+    <div class="grid2">${fields.map(([k, l]) => `<label class="f">${l}${s.mode === 'meas' ? ` (${inch ? 'นิ้ว' : 'cm'})` : ''}<input class="in" inputmode="decimal" data-bf="${k}" value="${esc(s.v[k] ?? '')}" placeholder="${s.mode === 'meas' && s.prev?.[k] != null ? esc(String(inch ? r1(s.prev[k] / IN) : s.prev[k])) : ''}" style="${s.aiKeys?.includes(k) ? 'border-color:#E0A526;border-width:2px' : ''}"></label>`).join('')}</div>
     ${s.aiKeys?.length ? '<p class="xs goldt" style="margin:0">ช่องกรอบทองคือค่าที่ AI อ่าน ตรวจกับใบผลอีกครั้งก่อนบันทึก</p>' : ''}
-    ${s.mode === 'weight' ? photoPicker('รูปตาชั่ง') : ''}
+    ${s.mode === 'weight' ? photoPicker('รูปตาชั่ง') : ''}${s.mode === 'meas' ? photoPicker('รูปสายวัด / ใบจดผล') : ''}
     <button class="btn pri block" data-act="saveBody">บันทึก</button>`;
 }
 function readBodyForm() { const s = sheet; s.v.date = $('#bDate')?.value || s.v.date; document.querySelectorAll('[data-bf]').forEach(el => { s.v[el.dataset.bf] = el.value; }); }
 async function saveBody() {
   readBodyForm(); const s = sheet; const rec = { date: s.v.date, t: Date.now(), ph: s.ph || [] };
-  let any = false; for (const [k] of BODY_FIELDS) { const v = num(s.v[k]); if (v != null) { rec[k] = v; any = true; } }
+  const fields = s.mode === 'weight' ? SCAN_FIELDS.slice(0, 1) : s.mode === 'meas' ? CIRC_FORM : SCAN_FIELDS;
+  let any = false; for (const [k] of fields) { let v = num(s.v[k]); if (v != null && s.mode === 'meas' && s.unit === 'in') v = r1(v * IN); if (v != null) { rec[k] = v; any = true; } }
   if (!any) return toast('กรอกอย่างน้อย 1 ค่า');
   await fb.addDoc(C('people', S.view, 'body'), rec); closeSheet(); toast('บันทึกแล้ว'); render();
 }
@@ -1493,7 +1510,12 @@ const ACTS = {
   },
   rmAct: async el => { if (!confirm('ลบกิจกรรมนี้?')) return; await fb.deleteDoc(D('people', S.view, 'activities', el.dataset.id)); render(); },
   wkSel: el => { ui.wkSel = +el.dataset.v; render(); },
-  addBody: el => { openSheet(el.dataset.v === 'scan' ? 'เพิ่มผลสแกน' : 'บันทึกน้ำหนัก', '', { kind: 'body', mode: el.dataset.v, v: { date: todayStr() }, ph: [], lastImg: null }); refreshSheet(bodySheetBody()); },
+  addBody: async el => {
+    const mode = el.dataset.v; let prev = null;
+    if (mode === 'meas') { const rows = await bodyRows(S.view).catch(() => []); prev = {}; for (const [k] of CIRC_FORM) for (let i = rows.length - 1; i >= 0; i--) if (num(rows[i][k]) != null) { prev[k] = num(rows[i][k]); break; } }
+    openSheet({ scan: 'เพิ่มผลสแกน', meas: 'วัดสัดส่วน', weight: 'บันทึกน้ำหนัก' }[mode] || 'บันทึกน้ำหนัก', '', { kind: 'body', mode, unit: 'cm', prev, prevHint: prev && Object.keys(prev).length > 0, v: { date: todayStr() }, ph: [], lastImg: null }); refreshSheet(bodySheetBody()); fillThumbs($('#sheetBody'));
+  },
+  measUnit: el => { readBodyForm(); sheet.unit = el.dataset.v; refreshSheet(bodySheetBody()); fillThumbs($('#sheetBody')); },
   aiInbody: async el => {
     readBodyForm(); el.disabled = true; el.textContent = 'AI กำลังอ่านใบผล…';
     try {

@@ -106,3 +106,12 @@ textarea.in{padding:10px 12px;min-height:72px;resize:vertical}
 .lb-bar{display:flex;align-items:center;justify-content:center;gap:18px;padding:10px 0 calc(14px + env(safe-area-inset-bottom));font-size:14px}
 .lb-nav{width:48px;height:44px;border-radius:12px;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:26px;line-height:1;cursor:pointer}
 .lb-nav:disabled{opacity:.3;cursor:default}
+
+/* สรุปความคืบหน้า */
+.pg-good{color:#1F7A4D} .pg-bad{color:var(--alert)}
+.card.dark .pg-good{color:#7FD3A6} .card.dark .pg-bad{color:#FDBA8C}
+.pgt{width:100%;border-collapse:collapse;font-size:14px}
+.pgt th{font-size:12px;font-weight:600;color:var(--muted);text-align:right;padding:6px 4px;border-bottom:1px solid var(--line);white-space:nowrap}
+.pgt th:first-child{text-align:left}
+.pgt td{padding:8px 4px;border-bottom:1px solid var(--soft);vertical-align:top}
+.pgt td.n{text-align:right;white-space:nowrap}

@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, MIX_GROUPS, MIX_SUM, 
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261011a';
+const VER = '20261011b';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -68,7 +68,7 @@ const CONSENT_TEXT = [
 /* ============ สถานะ ============ */
 let fb = null, app = null, auth = null, db = null, auth2 = null;
 const S = { me: null, config: {}, view: null, cache: new Map(), photoCache: new Map() };
-const ui = { tab: null, date: todayStr(), exDate: todayStr(), schedDate: todayStr(), log: null, wkSel: 0, wkMove: null, filter: 'all', sumDate: todayStr() };
+const ui = { pgA: null, pgB: null, pgK: 'waist', tab: null, date: todayStr(), exDate: todayStr(), schedDate: todayStr(), log: null, wkSel: 0, wkMove: null, filter: 'all', sumDate: todayStr() };
 let sheet = null; // ข้อมูลของหน้าต่างที่เปิดอยู่
 
 /* ============ UI พื้นฐาน ============ */
@@ -89,7 +89,7 @@ function roleTabs() {
 function renderTabs() {
   const bar = $('#tabbar'); const tabs = roleTabs();
   bar.hidden = false;
-  bar.innerHTML = `<div class="in">${tabs.map(([k, l, ic]) => `<button class="tab" data-act="tab" data-v="${k}" ${ui.tab === k ? 'aria-current="page"' : ''}>${svg(ic, 24)}<span>${l}</span></button>`).join('')}</div>`;
+  bar.innerHTML = `<div class="in">${tabs.map(([k, l, ic]) => `<button class="tab" data-act="tab" data-v="${k}" ${ui.tab === k || (k === 'body' && ui.tab === 'progress') ? 'aria-current="page"' : ''}>${svg(ic, 24)}<span>${l}</span></button>`).join('')}</div>`;
   const v = $('#viewing');
   if (viewingClient()) { v.hidden = false; v.innerHTML = `<span>กำลังดูข้อมูลของ <b>${esc(S.cache.get('p:' + S.view)?.name || '')}</b></span><button class="btn sm ghost" style="color:#fff;border-color:#C9D3DF;background:transparent" data-act="exitClient">‹ กลับ</button>`; }
   else v.hidden = true;
@@ -447,6 +447,7 @@ async function render() {
       if (t === 'exercise') return await renderExercise(pid);
       if (t === 'workouts') return await renderWorkouts(pid);
       if (t === 'body') return await renderBody(pid);
+      if (t === 'progress') return await renderProgress(pid);
       if (t === 'coach') return await renderCoach(pid);
       return await renderMore();
     }
@@ -916,38 +917,70 @@ async function renderBody(pid) {
   const w = rows.filter(r => num(r.weight)).slice(-12).map(r => ({ d: r.date, v: num(r.weight) }));
   const scans = rows.filter(r => num(r.smm) || num(r.fatPct)); const last = scans[scans.length - 1]; const prev = scans[scans.length - 2];
   const delta = (k, unit) => (last && prev && num(last[k]) != null && num(prev[k]) != null) ? `<span class="xs blue">${num(last[k]) - num(prev[k]) >= 0 ? '+' : ''}${r1(num(last[k]) - num(prev[k]))}${unit}</span>` : '';
-  const cell = (label, k, unit) => `<div><div class="xs muted">${label}</div><b style="font-size:18px">${last && num(last[k]) != null ? r1(last[k]) + unit : '—'}</b><br>${delta(k, unit)}</div>`;
+  const cell = (label, k, unit) => `<div><div class="xs muted">${label}</div><b style="font-size:18px">${last && num(last[k]) != null ? r1(last[k]) + unit : '—'}</b>${unit === ' kg' && last && num(last[k]) != null ? `<span class="xs muted"> ${lbOf(num(last[k]))} lb</span>` : ''}<br>${delta(k, unit)}</div>`;
+  const wd = w.length > 1 ? w[w.length - 1].v - w[0].v : null;
   setMain(`<h1>ร่างกาย</h1>
-    <section class="card"><div class="between"><b>น้ำหนัก</b>${w.length > 1 ? `<span class="small blue"><b>${w[w.length - 1].v - w[0].v >= 0 ? '+' : ''}${r1(w[w.length - 1].v - w[0].v)} kg</b></span>` : ''}</div>${lineChart(w, '#1D3A5C')}</section>
+    <button class="btn gold block" data-act="tab" data-v="progress">${svg('chart', 18)} สรุปความคืบหน้า · เปรียบเทียบผลวัด</button>
+    <section class="card"><div class="between"><b>น้ำหนัก</b>${wd != null ? `<span class="small blue"><b>${wd >= 0 ? '+' : ''}${r1(wd)} kg</b> <span class="xs muted">(${wd >= 0 ? '+' : ''}${lbOf(wd)} lb)</span></span>` : ''}</div>${lineChart(w, '#1D3A5C')}${w.length ? `<p class="xs muted" style="margin:0">ล่าสุด ${kgTxt(w[w.length - 1].v)}</p>` : ''}</section>
     <section class="card"><div class="between"><b>ผลสแกนล่าสุด</b><span class="xs muted">${last ? thDate(last.date) : ''}</span></div>
       ${last ? `<div class="grid3">${cell('น้ำหนัก', 'weight', ' kg')}${cell('กล้ามเนื้อ SMM', 'smm', ' kg')}${cell('ไขมัน', 'fatPct', '%')}</div>${last.ph?.length ? `<div class="thumbs">${thumbsHtml(last.ph)}</div>` : ''}` : '<p class="small muted" style="margin:0">ยังไม่มีผลสแกน กด “เพิ่มผลสแกน” แล้วแนบใบ InBody ได้เลย</p>'}</section>
     ${measCard(rows)}
     <div class="grid3"><button class="btn pri" data-act="addBody" data-v="weight">บันทึกน้ำหนัก</button><button class="btn gold" data-act="addBody" data-v="meas">วัดสัดส่วน</button><button class="btn" data-act="addBody" data-v="scan">เพิ่มผลสแกน</button></div>
-    ${rows.length ? `<section style="display:flex;flex-direction:column;gap:8px"><h2>ประวัติ</h2><div class="list">${[...rows].reverse().slice(0, 20).map(r => `<div class="li"><div class="grow"><b class="small">${thDate(r.date)}</b><div class="xs muted">${[['weight', 'น้ำหนัก', 'kg'], ['smm', 'SMM', 'kg'], ['fatPct', 'ไขมัน', '%'], ...CIRC.map(([k, , sh]) => [k, sh, 'cm'])].filter(([k]) => num(r[k]) != null).map(([k, l, u]) => `${l} ${r1(r[k])} ${u}`).join(' · ')}${clipTag(r.ph)}</div></div><button class="iconbtn" data-act="rmBody" data-id="${r.id}" aria-label="ลบรายการ">${svg('trash', 18)}</button></div>`).join('')}</div></section>` : ''}`);
+    ${rows.length ? `<section style="display:flex;flex-direction:column;gap:8px"><h2>ประวัติ</h2><div class="list">${[...rows].reverse().slice(0, 30).map(r => `<div class="li"><div class="grow"><b class="small">${thDate(r.date)}</b>${r.lu === 'in' ? ' <span class="tag grey">กรอกเป็นนิ้ว</span>' : ''}${r.wu === 'lb' ? ' <span class="tag grey">กรอกเป็น lb</span>' : ''}<div class="xs muted">${histText(r)}${clipTag(r.ph)}</div></div><button class="iconbtn" data-act="rmBody" data-id="${r.id}" aria-label="ลบรายการ">${svg('trash', 18)}</button></div>`).join('')}</div></section>` : ''}`);
   fillThumbs();
 }
-const SCAN_FIELDS = [['weight', 'น้ำหนัก (kg)'], ['smm', 'กล้ามเนื้อ SMM (kg)'], ['fatKg', 'ไขมัน (kg)'], ['fatPct', 'ไขมัน (%)'], ['bmr', 'BMR (kcal)'], ['visceral', 'ไขมันช่องท้อง (ระดับ)'], ['water', 'น้ำในร่างกาย (kg)']];
+// [key, ป้าย, หน่วย] หน่วย 'w' = น้ำหนัก เลือกกรอก kg หรือ lb ได้ (เก็บเป็น kg เสมอ)
+const SCAN_FIELDS = [['weight', 'น้ำหนัก', 'w'], ['smm', 'กล้ามเนื้อ SMM', 'w'], ['fatKg', 'ไขมัน', 'w'], ['fatPct', 'ไขมัน', '%'], ['bmr', 'BMR', 'kcal'], ['visceral', 'ไขมันช่องท้อง', 'ระดับ'], ['water', 'น้ำในร่างกาย', 'kg']];
+const W_KEYS = SCAN_FIELDS.filter(f => f[2] === 'w').map(f => f[0]);
 // สัดส่วนจากสายวัด เก็บเป็น cm เสมอ [key, ป้ายในฟอร์ม, ป้ายสั้น]
 const CIRC = [['bust', 'รอบอก (ระดับเนินอก)', 'อก'], ['chest', 'รอบอกบน / ใต้รักแร้', 'อกบน'], ['underbust', 'รอบใต้อก', 'ใต้อก'], ['waist', 'รอบเอว (ระดับสะดือ)', 'เอว'], ['belly', 'รอบหน้าท้อง (จุดที่ใหญ่สุด)', 'หน้าท้อง'], ['hip', 'รอบสะโพก (จุดที่ใหญ่สุด)', 'สะโพก'], ['armR', 'ต้นแขนขวา', 'แขน ข'], ['armL', 'ต้นแขนซ้าย', 'แขน ซ'], ['thighR', 'ต้นขาขวา', 'ขา ข'], ['thighL', 'ต้นขาซ้าย', 'ขา ซ'], ['calfR', 'น่องขวา', 'น่อง ข'], ['calfL', 'น่องซ้าย', 'น่อง ซ'], ['arm', 'รอบแขน (ข้อมูลเดิม)', 'แขน']];
 const CIRC_FORM = CIRC.filter(([k]) => k !== 'arm');
 const BODY_FIELDS = [...SCAN_FIELDS, ...CIRC];
 const IN = 2.54;
+const inchOf = cm => r1(cm / IN);
+const lbOf = kg => r1(kg / LB);
+const lenTxt = cm => `${r1(cm)} cm (${inchOf(cm)} นิ้ว)`;
+const kgTxt = kg => `${r1(kg)} kg (${lbOf(kg)} lb)`;
+function prefGet(k, d) { try { return localStorage.getItem('oc.' + k) || d; } catch (e) { return d; } }
+function prefSet(k, v) { try { localStorage.setItem('oc.' + k, v); } catch (e) { } }
+function histText(r) {
+  const out = [];
+  if (num(r.weight) != null) out.push('น้ำหนัก ' + kgTxt(num(r.weight)));
+  if (num(r.smm) != null) out.push('SMM ' + kgTxt(num(r.smm)));
+  if (num(r.fatKg) != null) out.push('ไขมัน ' + kgTxt(num(r.fatKg)));
+  if (num(r.fatPct) != null) out.push('ไขมัน ' + r1(num(r.fatPct)) + '%');
+  if (num(r.visceral) != null) out.push('ไขมันช่องท้อง ' + r1(num(r.visceral)));
+  for (const [k, , sh] of CIRC) if (num(r[k]) != null) out.push(sh + ' ' + lenTxt(num(r[k])));
+  return out.join(' · ');
+}
 function measCard(rows) {
   const ms = rows.filter(r => CIRC.some(([k]) => num(r[k]) != null)); const last = ms[ms.length - 1];
   if (!last) return '<section class="card"><b>สัดส่วน (สายวัด)</b><p class="small muted" style="margin:6px 0 0">ยังไม่มีผลวัด กด “วัดสัดส่วน” แล้วกรอกรอบอก เอว สะโพก แขน ขา ได้เลย</p></section>';
   const prevOf = k => { for (let i = rows.indexOf(last) - 1; i >= 0; i--) if (num(rows[i][k]) != null) return num(rows[i][k]); return null; };
   const firstOf = k => { for (const r of rows) if (num(r[k]) != null) return { v: num(r[k]), d: r.date }; return null; };
   const cells = CIRC.filter(([k]) => num(last[k]) != null).map(([k, , sh]) => { const v = num(last[k]), pv = prevOf(k), f = firstOf(k); const d = pv != null ? r1(v - pv) : null; const tot = f && f.d !== last.date ? r1(v - f.v) : null;
-    return `<div><div class="xs muted">${sh}</div><b style="font-size:18px">${r1(v)}</b><span class="xs muted"> cm</span><br>${d != null ? `<span class="xs ${d <= 0 ? 'blue' : 'goldt'}">${d > 0 ? '+' : ''}${d} ครั้งก่อน</span>` : ''}${tot != null ? `<br><span class="xs muted">${tot > 0 ? '+' : ''}${tot} จากครั้งแรก</span>` : ''}</div>`; }).join('');
+    return `<div><div class="xs muted">${sh}</div><b style="font-size:18px">${r1(v)}</b><span class="xs muted"> cm</span><div class="xs muted">${inchOf(v)} นิ้ว</div>${d != null ? `<span class="xs ${d <= 0 ? 'blue' : 'goldt'}">${d > 0 ? '+' : ''}${d} cm ครั้งก่อน</span>` : ''}${tot != null ? `<br><span class="xs muted">${tot > 0 ? '+' : ''}${tot} cm จากครั้งแรก</span>` : ''}</div>`; }).join('');
   return `<section class="card"><div class="between"><b>สัดส่วนล่าสุด (สายวัด)</b><span class="xs muted">${thDate(last.date)}</span></div><div class="grid3" style="margin-top:8px">${cells}</div>${last.ph?.length && !num(last.smm) ? `<div class="thumbs">${thumbsHtml(last.ph)}</div>` : ''}</section>`;
 }
+function bodyFields(s) { return s.mode === 'weight' ? SCAN_FIELDS.slice(0, 1) : s.mode === 'meas' ? CIRC_FORM : SCAN_FIELDS; }
+function unitOf(s, f) { return s.mode === 'meas' ? (s.unit === 'in' ? 'นิ้ว' : 'cm') : f[2] === 'w' ? (s.wu === 'lb' ? 'lb' : 'kg') : f[2]; }
+function bodyConv(s, k, raw) {
+  const v = num(raw); if (v == null) return '';
+  if (s.mode === 'meas') return s.unit === 'in' ? `= ${r1(v * IN)} cm` : `= ${inchOf(v)} นิ้ว`;
+  if (W_KEYS.includes(k)) return s.wu === 'lb' ? `= ${r1(v * LB)} kg` : `= ${lbOf(v)} lb`;
+  return '';
+}
 function bodySheetBody() {
-  const s = sheet; const fields = s.mode === 'weight' ? SCAN_FIELDS.slice(0, 1) : s.mode === 'meas' ? CIRC_FORM : SCAN_FIELDS; const inch = s.mode === 'meas' && s.unit === 'in';
+  const s = sheet; const fields = bodyFields(s); const inch = s.mode === 'meas' && s.unit === 'in'; const hasW = fields.some(f => f[2] === 'w');
+  const uChips = s.mode === 'meas'
+    ? `<div><div class="xs muted" style="margin-bottom:6px">หน่วยที่กรอก</div><div class="chips"><button class="chip" data-act="measUnit" data-v="cm" aria-pressed="${!inch}">เซนติเมตร (cm)</button><button class="chip" data-act="measUnit" data-v="in" aria-pressed="${inch}">นิ้ว (inch)</button></div></div><p class="xs muted" style="margin:0">กรอกหน่วยไหนก็ได้ แอปเก็บและแสดงผลเป็น cm พร้อมบอกค่านิ้วให้เสมอ · วัดตอนเช้าก่อนกินอาหาร สายวัดแนบผิวพอดี ไม่รัด กรอกเฉพาะจุดที่วัด${s.prevHint ? ' · ตัวเลขจาง ๆ ในช่องคือผลครั้งก่อน' : ''}</p>`
+    : hasW ? `<div><div class="xs muted" style="margin-bottom:6px">หน่วยน้ำหนักที่กรอก</div><div class="chips"><button class="chip" data-act="wUnit" data-v="kg" aria-pressed="${s.wu !== 'lb'}">กิโลกรัม (kg)</button><button class="chip" data-act="wUnit" data-v="lb" aria-pressed="${s.wu === 'lb'}">ปอนด์ (lb)</button></div></div>${s.wu === 'lb' ? '<p class="xs muted" style="margin:0">กรอกเป็นปอนด์ได้เลย แอปแปลงเป็น kg ให้ตอนบันทึก</p>' : ''}` : '';
   return `<label class="f">วันที่วัด<input class="in" type="date" id="bDate" value="${esc(s.v.date)}"></label>
-    ${s.mode === 'meas' ? `<div class="chips"><button class="chip" data-act="measUnit" data-v="cm" aria-pressed="${!inch}">กรอกเป็น cm</button><button class="chip" data-act="measUnit" data-v="in" aria-pressed="${inch}">กรอกเป็นนิ้ว (แปลงเป็น cm ให้)</button></div><p class="xs muted" style="margin:0">วัดตอนเช้าก่อนกินอาหาร สายวัดแนบผิวพอดี ไม่รัด กรอกเฉพาะจุดที่วัด ช่องว่างข้ามได้${s.prevHint ? ` · ตัวเลขจาง ๆ ในช่องคือผลครั้งก่อน` : ''}</p>` : ''}
+    ${uChips}
     ${s.mode === 'scan' ? `<div><div class="small" style="font-weight:600;margin-bottom:8px">ใบผลสแกน <span class="muted" style="font-weight:400">(ไม่บังคับ)</span></div>${photoPicker('แนบใบ InBody')}
       ${s.lastImg ? `<button class="btn gold block" style="margin-top:8px" data-act="aiInbody">${svg('spark', 18)} ${s.aiMsg || 'ให้ AI กรอกให้'}</button>` : ''}</div>` : ''}
-    <div class="grid2">${fields.map(([k, l]) => `<label class="f">${l}${s.mode === 'meas' ? ` (${inch ? 'นิ้ว' : 'cm'})` : ''}<input class="in" inputmode="decimal" data-bf="${k}" value="${esc(s.v[k] ?? '')}" placeholder="${s.mode === 'meas' && s.prev?.[k] != null ? esc(String(inch ? r1(s.prev[k] / IN) : s.prev[k])) : ''}" style="${s.aiKeys?.includes(k) ? 'border-color:#E0A526;border-width:2px' : ''}"></label>`).join('')}</div>
+    <div class="grid2">${fields.map(f => { const [k, l] = f; const pv = s.mode === 'meas' && s.prev?.[k] != null ? (inch ? inchOf(s.prev[k]) : r1(s.prev[k])) : '';
+      return `<label class="f">${l} (${unitOf(s, f)})<input class="in" inputmode="decimal" data-bf="${k}" value="${esc(s.v[k] ?? '')}" placeholder="${esc(String(pv))}" style="${s.aiKeys?.includes(k) ? 'border-color:#E0A526;border-width:2px' : ''}"><span class="xs muted" data-bconv="${k}" style="min-height:16px">${bodyConv(s, k, s.v[k]) || '&nbsp;'}</span></label>`; }).join('')}</div>
     ${s.aiKeys?.length ? '<p class="xs goldt" style="margin:0">ช่องกรอบทองคือค่าที่ AI อ่าน ตรวจกับใบผลอีกครั้งก่อนบันทึก</p>' : ''}
     ${s.mode === 'weight' ? photoPicker('รูปตาชั่ง') : ''}${s.mode === 'meas' ? photoPicker('รูปสายวัด / ใบจดผล') : ''}
     <button class="btn pri block" data-act="saveBody">บันทึก</button>`;
@@ -955,10 +988,234 @@ function bodySheetBody() {
 function readBodyForm() { const s = sheet; s.v.date = $('#bDate')?.value || s.v.date; document.querySelectorAll('[data-bf]').forEach(el => { s.v[el.dataset.bf] = el.value; }); }
 async function saveBody() {
   readBodyForm(); const s = sheet; const rec = { date: s.v.date, t: Date.now(), ph: s.ph || [] };
-  const fields = s.mode === 'weight' ? SCAN_FIELDS.slice(0, 1) : s.mode === 'meas' ? CIRC_FORM : SCAN_FIELDS;
-  let any = false; for (const [k] of fields) { let v = num(s.v[k]); if (v != null && s.mode === 'meas' && s.unit === 'in') v = r1(v * IN); if (v != null) { rec[k] = v; any = true; } }
+  let any = false;
+  for (const f of bodyFields(s)) {
+    const k = f[0]; let v = num(s.v[k]); if (v == null) continue;
+    if (s.mode === 'meas' && s.unit === 'in') v = r2(v * IN);
+    else if (f[2] === 'w' && s.wu === 'lb') v = r2(v * LB);
+    rec[k] = v; any = true;
+  }
   if (!any) return toast('กรอกอย่างน้อย 1 ค่า');
-  await fb.addDoc(C('people', S.view, 'body'), rec); closeSheet(); toast('บันทึกแล้ว'); render();
+  if (s.mode === 'meas' && s.unit === 'in') rec.lu = 'in';
+  if (s.mode !== 'meas' && s.wu === 'lb' && W_KEYS.some(k => rec[k] != null)) rec.wu = 'lb';
+  await fb.addDoc(C('people', S.view, 'body'), rec); closeSheet(); toast(rec.lu === 'in' ? 'บันทึกแล้ว แปลงนิ้วเป็น cm ให้แล้ว' : rec.wu === 'lb' ? 'บันทึกแล้ว แปลง lb เป็น kg ให้แล้ว' : 'บันทึกแล้ว'); render();
+}
+
+/* ---------- ลูกค้า: สรุปความคืบหน้า (เปรียบเทียบผลวัด) ---------- */
+// ทิศที่ดี: -1 = ลดลงดี, 1 = เพิ่มขึ้นดี, 0 = ดูประกอบ (แขน ขา น่อง อาจเป็นกล้ามเนื้อ)
+const PG_DIR = { weight: -1, smm: 1, fatKg: -1, fatPct: -1, visceral: -1, bust: -1, chest: -1, underbust: -1, waist: -1, belly: -1, hip: -1 };
+const PG_COMP = [['weight', 'น้ำหนัก', 'kg'], ['smm', 'กล้ามเนื้อ SMM', 'kg'], ['fatKg', 'มวลไขมัน', 'kg'], ['fatPct', 'เปอร์เซ็นต์ไขมัน', '%'], ['visceral', 'ไขมันช่องท้อง', 'ระดับ']];
+const PG_TORSO = ['bust', 'chest', 'underbust', 'waist', 'belly', 'hip'];
+function bodySnaps(rows) {
+  const m = new Map();
+  for (const r of rows) { const o = m.get(r.date) || { date: r.date }; for (const [k] of BODY_FIELDS) if (num(r[k]) != null) o[k] = num(r[k]); m.set(r.date, o); }
+  return [...m.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+function pgVal(snaps, k, a, b, end) {
+  const inR = snaps.filter(x => x.date >= a && x.date <= b && x[k] != null); if (!inR.length) return null;
+  const x = end ? inR[inR.length - 1] : inR[0]; return { v: x[k], d: x.date };
+}
+function daysBetween(a, b) { return Math.round((new Date(b + 'T12:00:00Z') - new Date(a + 'T12:00:00Z')) / 864e5); }
+function sgn(v, dp = 1) { const r = dp === 2 ? r2(v) : r1(v); return (r > 0 ? '+' : r < 0 ? '−' : '±') + Math.abs(r); }
+function pgTone(k, d) { const dir = PG_DIR[k] || 0; if (!dir || Math.abs(d) < 0.05) return 'muted'; return d * dir > 0 ? 'pg-good' : 'pg-bad'; }
+async function pgBehavior(pid, a, b) {
+  const [days, acts, ss, p] = await Promise.all([
+    list(fb.query(C('people', pid, 'days'), fb.where(fb.documentId(), '>=', a), fb.where(fb.documentId(), '<=', b))).catch(() => []),
+    actsRange(pid, a, b).catch(() => []), sessionsFor(pid).catch(() => []), person(pid)]);
+  const logged = days.map(d => ({ d, t: dayTotals(d) })).filter(x => x.t.k > 0);
+  const n = logged.length; const span = Math.max(1, daysBetween(a, b) + 1); const wk = span / 7;
+  const avg = k => n ? logged.reduce((s2, x) => s2 + x.t[k], 0) / n : null;
+  const t = p?.targets || {}; const goal = num(t.kcal);
+  const burnBy = {}; for (const x of acts) burnBy[x.date] = (burnBy[x.date] || 0) + (+x.kcal || 0);
+  const within = goal ? logged.filter(x => x.t.k <= goal + (t.addBurn === false ? 0 : (burnBy[x.d.id] || 0)) + 100).length : null;
+  const coach = ss.filter(x => x.status === 'logged' && x.date >= a && x.date <= b).length;
+  return { span, n, kcal: avg('k'), prot: avg('p'), goal, goalP: num(t.p), within, acts: acts.length, actsWk: acts.length / wk, burnWk: acts.reduce((s2, x) => s2 + (+x.kcal || 0), 0) / wk, coach, coachWk: coach / wk };
+}
+function pgInsights(A, B, get, beh, lastDate) {
+  const out = []; const add = (tone, title, txt) => out.push({ tone, title, txt });
+  const d = k => { const x = get(k); return x ? x.b.v - x.a.v : null; };
+  const dW = d('weight'), dS = d('smm'), dF = num(d('fatKg')) ?? null, dFp = d('fatPct'), dWa = d('waist') ?? d('belly');
+  const torso = PG_TORSO.map(k => d(k)).filter(v => v != null); const torsoSum = torso.reduce((x, y) => x + y, 0);
+  const wObj = get('weight'); const wk = Math.max(1, daysBetween(A, B)) / 7;
+  if (dWa != null && dWa <= -1) add('good', `รอบเอวลด ${Math.abs(r1(dWa))} cm`, 'ไขมันช่วงลำตัวลดลง แผนอาหารและการออกกำลังตอนนี้ได้ผล ทำแบบเดิมต่อ');
+  if (dWa != null && dWa >= 1) add('bad', `รอบเอวเพิ่ม ${r1(dWa)} cm`, 'ทบทวนอาหาร: แคลรวม ของทอด ของหวาน เครื่องดื่มหวาน แอลกอฮอล์ และมื้อดึก ' + (beh.goal && beh.kcal != null ? `(ช่วงนี้กินเฉลี่ย ${n0(beh.kcal)} kcal/วัน เป้า ${n0(beh.goal)})` : ''));
+  if (dW != null && wObj) {
+    const pct = dW / wObj.a.v * 100 / wk;
+    if (pct < -1) add('bad', `น้ำหนักลดเร็ว ${Math.abs(r1(dW / wk))} kg/สัปดาห์`, 'เร็วกว่า 1% ของน้ำหนักตัวต่อสัปดาห์ เสี่ยงเสียกล้ามเนื้อและโยโย่ ลองเพิ่มแคลขึ้นเล็กน้อยและคุยกับโค้ช');
+    else if (pct <= -0.25) add('good', `น้ำหนักลด ${Math.abs(r1(dW / wk))} kg/สัปดาห์`, 'อยู่ในช่วงที่เหมาะสม (ประมาณ 0.25–1% ของน้ำหนักตัวต่อสัปดาห์) ลดแบบนี้รักษากล้ามได้ดี');
+    else if (Math.abs(dW) < 0.5 && torsoSum <= -2) add('good', 'น้ำหนักนิ่ง แต่รอบตัวลด', `รอบลำตัวรวมลด ${Math.abs(r1(torsoSum))} cm แปลว่าไขมันลดและกล้ามเนื้อเพิ่ม (body recomposition) ไม่ต้องลดแคลเพิ่ม ดูสายวัดมากกว่าตาชั่ง`);
+    else if (Math.abs(dW) < 0.5 && torsoSum > -1) add('watch', 'น้ำหนักและรอบตัวยังนิ่ง', 'ถ้าเป้าหมายคือลดไขมัน ลองลดแคลวันละ 150–250 kcal หรือเพิ่มคาร์ดิโอ/ก้าวเดิน แล้ววัดซ้ำใน 2 สัปดาห์');
+    else if (dW >= 0.5 && dWa != null && dWa > 0) add('bad', `น้ำหนักเพิ่ม ${r1(dW)} kg และเอวเพิ่ม`, 'น่าจะเป็นไขมัน ตรวจแคลที่กินเทียบเป้า และความสม่ำเสมอในการบันทึกอาหาร');
+  }
+  if (dS != null && dS <= -0.5) add('bad', `กล้ามเนื้อ SMM ลด ${Math.abs(r1(dS))} kg`, 'เพิ่มโปรตีนให้ถึงเป้าทุกวัน กระจายทุกมื้อ และคงเวทเทรนนิ่งอย่างน้อย 2–3 ครั้ง/สัปดาห์ อย่าลดแคลมากเกิน');
+  if (dS != null && dS >= 0.3) add('good', `กล้ามเนื้อ SMM เพิ่ม ${r1(dS)} kg`, 'เวทเทรนนิ่งกับโปรตีนได้ผล ทำต่อ');
+  if (dF != null && dF <= -0.5) add('good', `ไขมันลด ${Math.abs(r1(dF))} kg`, dFp != null ? `เปอร์เซ็นต์ไขมัน ${sgn(dFp)}%` : 'ตามผลสแกน');
+  const limbs = [['armR', 'armL', 'ต้นแขน'], ['thighR', 'thighL', 'ต้นขา'], ['calfR', 'calfL', 'น่อง']];
+  const limbUp = limbs.some(([r, l]) => (d(r) ?? 0) >= 0.5 || (d(l) ?? 0) >= 0.5);
+  if (limbUp && dWa != null && dWa < 0) add('good', 'แขน/ขาเพิ่ม ขณะที่เอวลด', 'มีแนวโน้มเป็นกล้ามเนื้อที่เพิ่มจากการเทรน ไม่ใช่ไขมัน');
+  for (const [r, l, n] of limbs) { const x = get(r), y = get(l); if (x && y && Math.abs(x.b.v - y.b.v) >= 2) add('watch', `${n}ซ้าย-ขวาต่างกัน ${r1(Math.abs(x.b.v - y.b.v))} cm`, 'ฝึกท่าทีละข้าง (single-arm / single-leg) เริ่มจากข้างที่เล็กกว่า ให้จำนวนครั้งเท่ากัน'); }
+  if (beh.n) {
+    if (beh.goal && beh.kcal != null && beh.kcal > beh.goal + 150) add('bad', `กินเกินเป้าเฉลี่ย ${n0(beh.kcal - beh.goal)} kcal/วัน`, `ตรงเป้า ${beh.within}/${beh.n} วันที่บันทึก จุดที่ปรับง่าย: เครื่องดื่ม ขนม และน้ำมันในอาหาร`);
+    else if (beh.goal && beh.kcal != null && beh.kcal < beh.goal * 0.75) add('watch', 'กินน้อยกว่าเป้ามาก', `เฉลี่ย ${n0(beh.kcal)} จากเป้า ${n0(beh.goal)} kcal ถ้าน้อยเกินไปนาน ๆ กล้ามเนื้อจะลดและเผาผลาญช้าลง`);
+    if (beh.goalP && beh.prot != null && beh.prot < beh.goalP * 0.85) add('watch', `โปรตีนยังไม่ถึงเป้า (${n0(beh.prot)}/${n0(beh.goalP)} g)`, 'เพิ่มไข่ ปลา กุ้ง โยเกิร์ต นม หรือเต้าหู้ ในมื้อที่โปรตีนน้อย');
+    if (beh.n < beh.span * 0.6) add('watch', `บันทึกอาหาร ${beh.n} จาก ${beh.span} วัน`, 'ยิ่งบันทึกครบ การอ่านผลยิ่งแม่น ลองบันทึกให้ได้อย่างน้อย 5 วัน/สัปดาห์');
+  }
+  if (beh.actsWk + beh.coachWk < 2.5 && beh.span >= 7) add('watch', `ออกกำลังเฉลี่ย ${r1(beh.actsWk + beh.coachWk)} ครั้ง/สัปดาห์`, 'ตั้งเป้า 3–5 ครั้ง/สัปดาห์ ผสมเวทกับคาร์ดิโอ');
+  const age = daysBetween(lastDate, todayStr());
+  if (age > 14) add('watch', `วัดครั้งล่าสุด ${age} วันก่อน`, 'วัดสัดส่วนซ้ำทุก 2 สัปดาห์ ตอนเช้าก่อนกินอาหาร ตำแหน่งเดิมทุกครั้ง');
+  if (!out.length) add('watch', 'ข้อมูลยังน้อย', 'วัดสัดส่วนและบันทึกน้ำหนักอย่างน้อย 2 ครั้ง ห่างกัน 2 สัปดาห์ แล้วระบบจะอ่านผลให้');
+  return out;
+}
+async function renderProgress(pid) {
+  const rows = await bodyRows(pid); const snaps = bodySnaps(rows);
+  const back = `<button class="btn sm ghost" style="align-self:flex-start" data-act="tab" data-v="body">‹ ร่างกาย</button>`;
+  if (snaps.length < 2) return setMain(`${back}<section class="card"><h1>สรุปความคืบหน้า</h1><p class="small muted" style="margin:0">ต้องมีผลวัดอย่างน้อย 2 วันจึงจะเปรียบเทียบได้ ตอนนี้มี ${snaps.length} วัน กด “วัดสัดส่วน” หรือ “บันทึกน้ำหนัก” ที่แท็บร่างกาย</p></section>`);
+  const dates = snaps.map(x => x.date); ui.pgDates = dates;
+  let A = dates.includes(ui.pgA) ? ui.pgA : dates[0], B = dates.includes(ui.pgB) ? ui.pgB : dates[dates.length - 1];
+  if (A > B) [A, B] = [B, A];
+  const get = k => { const a = pgVal(snaps, k, A, B, false), b = pgVal(snaps, k, A, B, true); return a && b && a.d !== b.d ? { a, b } : null; };
+  const beh = await pgBehavior(pid, A, B);
+  const span = daysBetween(A, B); const wk = Math.max(1, span) / 7;
+  // หัวสรุป
+  const circKeys = CIRC.filter(([k]) => k !== 'arm' || !get('armR')).map(([k]) => k);
+  const circD = circKeys.map(k => get(k)).filter(Boolean).map(x => x.b.v - x.a.v); const circSum = circD.reduce((x, y) => x + y, 0);
+  const wG = get('weight'), waG = get('waist'), hiG = get('hip');
+  const whr = (x, y) => x && y ? r2(x / y) : null;
+  const whrA = waG && hiG ? whr(waG.a.v, hiG.a.v) : null, whrB = waG && hiG ? whr(waG.b.v, hiG.b.v) : null;
+  const head = (label, main, sub, tone) => `<div class="stat"><span class="xs muted">${label}</span><b class="${tone || ''}" style="font-size:20px">${main}</b><span class="xs muted">${sub || '&nbsp;'}</span></div>`;
+  const quick = [['first', 'ครั้งแรก → ล่าสุด'], ['prev', 'ครั้งก่อน → ล่าสุด'], ['30', '30 วันล่าสุด'], ['90', '90 วันล่าสุด']];
+  const rowHtml = (k, label, unit, isLen) => { const x = get(k); if (!x) return '';
+    const dv = x.b.v - x.a.v; const pct = x.a.v ? dv / x.a.v * 100 : 0; const tone = pgTone(k, dv);
+    const sub = v => isLen ? `<div class="xs muted">${inchOf(v)}″</div>` : unit === 'kg' ? `<div class="xs muted">${lbOf(v)} lb</div>` : '';
+    const dsub = isLen ? `<div class="xs muted">${sgn(dv / IN)}″</div>` : unit === 'kg' ? `<div class="xs muted">${sgn(dv / LB)} lb</div>` : '';
+    const note = (x.a.d !== A || x.b.d !== B) ? `<div class="xs muted">${thDate(x.a.d)} → ${thDate(x.b.d)}</div>` : '';
+    return `<tr><td><b class="small">${label}</b>${note}</td><td class="n">${r1(x.a.v)}${sub(x.a.v)}</td><td class="n">${r1(x.b.v)}${sub(x.b.v)}</td><td class="n ${tone}"><b>${sgn(dv)}</b> <span class="xs">${unit}</span>${dsub}</td><td class="n ${tone} xs">${sgn(pct)}%</td></tr>`; };
+  const compRows = PG_COMP.map(([k, l, u]) => rowHtml(k, l, u, false)).join('');
+  const circRows = CIRC.map(([k, , sh]) => rowHtml(k, sh, 'cm', true)).join('');
+  const table = (title, body) => body ? `<section class="card"><b>${title}</b><div style="overflow-x:auto"><table class="pgt"><thead><tr><th></th><th>${thDate(A)}</th><th>${thDate(B)}</th><th>เปลี่ยน</th><th>%</th></tr></thead><tbody>${body}</tbody></table></div></section>` : '';
+  // กราฟทีละจุด
+  const keysWithData = [...PG_COMP.map(([k, l]) => [k, l]), ...CIRC.map(([k, , sh]) => [k, sh])].filter(([k]) => snaps.filter(x => x[k] != null).length >= 2);
+  const gk = keysWithData.some(([k]) => k === ui.pgK) ? ui.pgK : keysWithData[0]?.[0];
+  const gpts = gk ? snaps.filter(x => x[gk] != null).slice(-12).map(x => ({ d: x.date, v: x[gk] })) : [];
+  const ins = pgInsights(A, B, get, beh, dates[dates.length - 1]);
+  const icon = { good: ['pg-good', '✓'], bad: ['pg-bad', '!'], watch: ['goldt', '•'] };
+  setMain(`${back}<h1>สรุปความคืบหน้า</h1>
+    <section class="card"><div class="chips">${quick.map(([k, l]) => `<button class="chip" data-act="pgQuick" data-v="${k}">${l}</button>`).join('')}</div>
+      <div class="grid2"><label class="f">ตั้งแต่<select class="in" data-act="pgA">${dates.map(x => `<option value="${x}" ${x === A ? 'selected' : ''}>${thDate(x, true)}</option>`).join('')}</select></label>
+      <label class="f">ถึง<select class="in" data-act="pgB">${dates.map(x => `<option value="${x}" ${x === B ? 'selected' : ''}>${thDate(x, true)}</option>`).join('')}</select></label></div>
+      <p class="xs muted" style="margin:0">ช่วง ${span} วัน (${r1(span / 7)} สัปดาห์) · ค่าที่แสดงเป็น cm และ kg พร้อมค่านิ้ว/ปอนด์ · <span class="pg-good">สีเขียว = ไปในทางที่ดี</span> <span class="pg-bad">สีส้ม = ต้องปรับ</span></p></section>
+    <div class="grid2">
+      ${head('สัดส่วนรวมทุกจุด', circD.length ? `${sgn(circSum)} cm` : '—', circD.length ? `${sgn(circSum / IN)} นิ้ว · ${circD.length} จุด` : 'ยังไม่มีผลวัดสองครั้ง', circD.length ? (circSum < 0 ? 'pg-good' : circSum > 0 ? 'pg-bad' : '') : '')}
+      ${head('น้ำหนัก', wG ? `${sgn(wG.b.v - wG.a.v)} kg` : '—', wG ? `${sgn((wG.b.v - wG.a.v) / LB)} lb · ${sgn((wG.b.v - wG.a.v) / wk, 2)} kg/สัปดาห์` : '', wG ? pgTone('weight', wG.b.v - wG.a.v) : '')}
+      ${head('รอบเอว', waG ? `${sgn(waG.b.v - waG.a.v)} cm` : '—', waG ? `${sgn((waG.b.v - waG.a.v) / IN)} นิ้ว · ตอนนี้ ${r1(waG.b.v)} cm` : '', waG ? pgTone('waist', waG.b.v - waG.a.v) : '')}
+      ${head('สัดส่วนเอว/สะโพก', whrB != null ? String(whrB) : '—', whrA != null ? `จาก ${whrA} · ยิ่งต่ำยิ่งดี` : 'ต้องมีทั้งเอวและสะโพก', whrA != null ? pgTone('waist', whrB - whrA) : '')}
+    </div>
+    <section class="card dark"><b>อ่านผล และสิ่งที่ควรปรับ</b>${ins.map(x => `<div class="row" style="align-items:flex-start;flex-wrap:nowrap;gap:10px"><b class="${icon[x.tone][0]}" style="width:22px;text-align:center;font-size:16px">${icon[x.tone][1]}</b><div><b class="small">${esc(x.title)}</b><div class="xs" style="color:#C9D3DF">${esc(x.txt)}</div></div></div>`).join('')}</section>
+    ${table('สัดส่วน (สายวัด)', circRows)}
+    ${table('น้ำหนักและองค์ประกอบร่างกาย', compRows)}
+    <section class="card"><b>พฤติกรรมช่วงนี้</b><div class="grid2">
+      ${head('บันทึกอาหาร', `${beh.n}/${beh.span} วัน`, beh.goal && beh.n ? `ตรงเป้า ${beh.within} วัน` : '')}
+      ${head('แคลเฉลี่ย/วัน', beh.kcal != null ? n0(beh.kcal) : '—', beh.goal ? `เป้า ${n0(beh.goal)} kcal` : 'ยังไม่ตั้งเป้า')}
+      ${head('โปรตีนเฉลี่ย/วัน', beh.prot != null ? n0(beh.prot) + ' g' : '—', beh.goalP ? `เป้า ${n0(beh.goalP)} g` : '')}
+      ${head('ออกกำลัง/สัปดาห์', r1(beh.actsWk + beh.coachWk) + ' ครั้ง', `เทรนกับโค้ช ${beh.coach} ครั้ง · เผา ${n0(beh.burnWk)} kcal/สัปดาห์`)}
+    </div></section>
+    ${gk ? `<section class="card"><div class="between"><b>กราฟทีละจุด</b><select class="in" style="max-width:55%;min-height:40px" data-act="pgK" aria-label="เลือกจุดที่วัด">${keysWithData.map(([k, l]) => `<option value="${k}" ${k === gk ? 'selected' : ''}>${l}</option>`).join('')}</select></div>${lineChart(gpts, '#1D3A5C')}<p class="xs muted" style="margin:0">หน่วย ${CIRC.some(([k]) => k === gk) ? 'cm' : (PG_COMP.find(([k]) => k === gk) || [])[2] || ''} · ${gpts.length} ครั้งล่าสุด</p></section>` : ''}
+    <p class="xs muted center">อ่านผลอัตโนมัติจากตัวเลขที่บันทึก ใช้ประกอบการคุยกับโค้ช ไม่ใช่คำวินิจฉัยทางการแพทย์</p>`);
+}
+
+/* ---------- สำรองข้อมูล ---------- */
+async function collectBackup(withPhotos, prog) {
+  const me = S.me; const out = { app: 'The Olympic Club by PT-Palm', version: VER, exportedAt: new Date().toISOString(), exportedBy: me.name, role: me.role, people: [], sessions: [] };
+  let people;
+  if (me.role === 'owner') people = await list(C('people'));
+  else if (me.role === 'trainer') people = [await person(me.pid, true), ...(await myMembers())].filter(Boolean);
+  else people = [await person(me.pid, true)].filter(Boolean);
+  out.scope = me.role === 'owner' ? 'ทั้งระบบ' : me.role === 'trainer' ? 'ตัวเองและลูกค้าที่ดูแล' : 'ข้อมูลของตัวเอง';
+  let i = 0;
+  for (const p of people) {
+    prog?.(`กำลังอ่าน ${p.name || p.id} (${++i}/${people.length})`);
+    const { authUid, ...safe } = p;
+    const [days, activities, body] = await Promise.all(['days', 'activities', 'body'].map(sub => list(C('people', p.id, sub)).catch(() => [])));
+    out.people.push({ ...safe, days, activities, body });
+  }
+  prog?.('กำลังอ่านนัดและผลการเทรน…');
+  if (me.role === 'owner') {
+    out.sessions = await list(C('sessions'));
+    out.config = await list(C('config')).catch(() => []);
+  } else {
+    const seen = new Set();
+    for (const p of people.filter(x => x.role === 'member')) for (const x of await sessionsFor(p.id).catch(() => [])) if (!seen.has(x.id)) { seen.add(x.id); out.sessions.push(x); }
+  }
+  if (withPhotos) {
+    const ids = new Set(); const walk = o => { if (Array.isArray(o)) o.forEach(walk); else if (o && typeof o === 'object') { if (Array.isArray(o.ph)) o.ph.forEach(id => typeof id === 'string' && ids.add(id)); Object.values(o).forEach(walk); } };
+    walk(out.people); walk(out.sessions);
+    out.photos = []; let j = 0; const arr = [...ids];
+    for (let k = 0; k < arr.length; k += 10) {
+      prog?.(`กำลังอ่านรูป ${Math.min(k + 10, arr.length)}/${arr.length}`);
+      const got = await Promise.all(arr.slice(k, k + 10).map(id => get(D('photos', id)).catch(() => null)));
+      got.filter(Boolean).forEach(x => { out.photos.push(x); j++; });
+    }
+  }
+  return out;
+}
+function bkJson(o) { return JSON.stringify(o, (k, v) => (v && typeof v === 'object' && typeof v.toDate === 'function') ? v.toDate().toISOString() : (v && typeof v === 'object' && 'seconds' in v && 'nanoseconds' in v && Object.keys(v).length <= 3) ? new Date(v.seconds * 1000).toISOString() : v, 2); }
+function bkSheets(bk) {
+  const ppl = bk.people; const nameOf = Object.fromEntries(ppl.map(p => [p.id, p.name]));
+  const sh = {};
+  sh['รายชื่อ'] = ppl.map(p => ({ ชื่อ: p.name, บทบาท: p.role, ชื่อผู้ใช้: p.username || '', เทรนเนอร์: p.trainerName || nameOf[p.trainerPid] || '', ใช้งาน: p.active === false ? 'ปิด' : 'เปิด', 'เป้า kcal': p.targets?.kcal ?? '', 'เป้าโปรตีน g': p.targets?.p ?? '', 'เป้าคาร์บ g': p.targets?.c ?? '', 'เป้าไขมัน g': p.targets?.f ?? '' }));
+  sh['น้ำหนัก+สัดส่วน'] = ppl.flatMap(p => [...p.body].sort((a, b) => (a.date + (a.t || '')).localeCompare(b.date + (b.t || ''))).map(r => {
+    const o = { ชื่อ: p.name, วันที่: r.date, 'หน่วยที่กรอก': [r.lu === 'in' ? 'นิ้ว' : '', r.wu === 'lb' ? 'lb' : ''].filter(Boolean).join(' ') || 'cm/kg' };
+    for (const [k, l, u] of SCAN_FIELDS) { const v = num(r[k]); o[`${l} (${u === 'w' ? 'kg' : u})`] = v ?? ''; if (u === 'w') o[`${l} (lb)`] = v != null ? lbOf(v) : ''; }
+    for (const [k, l] of CIRC) { const v = num(r[k]); o[`${l} (cm)`] = v != null ? r1(v) : ''; o[`${l} (นิ้ว)`] = v != null ? inchOf(v) : ''; }
+    return o; }));
+  sh['อาหารรายวัน'] = ppl.flatMap(p => p.days.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.id)).sort((a, b) => a.id.localeCompare(b.id)).map(d => { const t = dayTotals(d); return { ชื่อ: p.name, วันที่: d.id, kcal: Math.round(t.k), 'โปรตีน g': r1(t.p), 'คาร์บ g': r1(t.c), 'ไขมัน g': r1(t.f), 'น้ำ มล.': d.water || 0, รายการ: mealItems(d).length }; }));
+  sh['รายการอาหาร'] = ppl.flatMap(p => p.days.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.id)).sort((a, b) => a.id.localeCompare(b.id)).flatMap(d => mealItems(d).map(it => ({ ชื่อ: p.name, วันที่: d.id, มื้อ: it.meal, เมนู: it.n, ปริมาณ: it.qs || it.q || '', kcal: Math.round(+it.k || 0), 'โปรตีน g': r1(+it.p || 0), 'คาร์บ g': r1(+it.c || 0), 'ไขมัน g': r1(+it.f || 0) }))));
+  sh['กิจกรรม'] = ppl.flatMap(p => [...p.activities].sort((a, b) => (a.date + (a.t || '')).localeCompare(b.date + (b.t || ''))).map(a => ({ ชื่อ: p.name, วันที่: a.date, ประเภท: a.type || '', กิจกรรม: a.name || '', นาที: a.min ?? '', kcal: a.kcal ?? '', บันทึกโดย: a.source === 'staff' ? 'โค้ช' : a.source === 'coach' ? 'ผลเทรนโค้ช' : 'ลูกค้า' })));
+  sh['ผลเทรน'] = bk.sessions.filter(x => x.status === 'logged').sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).flatMap(x => (x.moves || []).flatMap(m => (m.sets || []).map((st, i) => ({ ลูกค้า: x.memberName || nameOf[x.memberPid] || '', โค้ช: x.trainerName || '', วันที่: x.date, เวลา: x.time, ประเภท: x.type || '', ท่า: m.name, เซ็ต: i + 1, ครั้ง: st.r ?? '', kg: st.kg ?? '', lb: st.lb ?? (num(st.kg) != null ? lbOf(num(st.kg)) : ''), 'หน่วยที่กรอก': m.u || 'kg' }))));
+  sh['นัดเทรน'] = bk.sessions.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).map(x => ({ ลูกค้า: x.memberName || nameOf[x.memberPid] || '', โค้ช: x.trainerName || '', วันที่: x.date, เวลา: x.time, สถานะ: x.status || '', นาที: x.min ?? '', kcal: x.kcal ?? '', โน้ต: x.note || '' }));
+  return sh;
+}
+function bkDownload(name, blob) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000); }
+function bkCsv(rows) { if (!rows.length) return ''; const cols = Object.keys(rows[0]); const q = v => { const t = String(v ?? ''); return /[",\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; }; return [cols.map(q).join(','), ...rows.map(r => cols.map(c => q(r[c])).join(','))].join('\n'); }
+async function runBackup(kind) {
+  const btn = document.querySelector(`[data-act="backup"][data-v="${kind}"]`); const msg = $('#bkMsg'); const old = btn?.textContent;
+  const prog = t => { if (msg) msg.textContent = t; };
+  if (btn) btn.disabled = true;
+  try {
+    const bk = await collectBackup(kind === 'json' && $('#bkPh')?.checked, prog);
+    const stamp = todayStr() + '_' + nowHM().replace(':', '');
+    const who = S.me.role === 'owner' ? 'all' : S.me.role === 'trainer' ? 'trainer' : 'me';
+    if (kind === 'json') bkDownload(`olympic-club-backup-${who}-${stamp}.json`, new Blob([bkJson(bk)], { type: 'application/json' }));
+    else {
+      prog('กำลังสร้างไฟล์ Excel…'); const sheets = bkSheets(bk);
+      try {
+        const X = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
+        const wb = X.utils.book_new();
+        for (const [n, rows] of Object.entries(sheets)) X.utils.book_append_sheet(wb, X.utils.json_to_sheet(rows.length ? rows : [{ ว่าง: 'ยังไม่มีข้อมูล' }]), n.slice(0, 31));
+        const buf = X.write(wb, { type: 'array', bookType: 'xlsx' });
+        bkDownload(`olympic-club-${who}-${stamp}.xlsx`, new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      } catch (e) {
+        console.error(e); // สำรอง: ถ้าโหลดตัวสร้าง Excel ไม่ได้ ให้เป็น CSV ของน้ำหนัก+สัดส่วน
+        bkDownload(`olympic-club-body-${who}-${stamp}.csv`, new Blob(['﻿' + bkCsv(sheets['น้ำหนัก+สัดส่วน'])], { type: 'text/csv' }));
+      }
+    }
+    const n = bk.people.length, nb = bk.people.reduce((a, p) => a + p.body.length, 0), nd = bk.people.reduce((a, p) => a + p.days.length, 0);
+    prog(`สำรองแล้ว ${n} คน · ผลวัด ${nb} รายการ · บันทึกอาหาร ${nd} วัน · นัด/ผลเทรน ${bk.sessions.length} รายการ${bk.photos ? ` · รูป ${bk.photos.length} รูป` : ''} · ไฟล์อยู่ในโฟลเดอร์ดาวน์โหลด`);
+    try { if (S.me.role === 'owner') { const at = Date.now(); await fb.setDoc(D('config', 'app'), { backupAt: at }, { merge: true }); S.config.backupAt = at; } else prefSet('lastBackup', String(Date.now())); } catch (e) { }
+    toast('ดาวน์โหลดไฟล์สำรองแล้ว ✅');
+  } catch (e) { console.error(e); prog('สำรองไม่สำเร็จ: ' + (e.message || e)); }
+  if (btn) { btn.disabled = false; btn.textContent = old; }
+}
+function backupCardHtml() {
+  const me = S.me; if (!me) return '';
+  const scope = me.role === 'owner' ? 'ข้อมูลทั้งระบบ ทุกคน' : me.role === 'trainer' ? 'ข้อมูลของคุณและลูกค้าที่ดูแล' : 'ข้อมูลของคุณทั้งหมด';
+  const last = me.role === 'owner' ? num(S.config?.backupAt) : num(prefGet('lastBackup', ''));
+  const age = last ? Math.floor((Date.now() - last) / 864e5) : null;
+  return `<section class="card"><div class="between"><b>สำรองข้อมูล (Backup)</b>${age != null ? `<span class="xs ${age > 30 ? 'alert' : 'muted'}">ล่าสุด ${age === 0 ? 'วันนี้' : age + ' วันก่อน'}</span>` : '<span class="xs alert">ยังไม่เคยสำรอง</span>'}</div>
+    <p class="xs muted" style="margin:0">ดาวน์โหลด${scope} เก็บไว้ในเครื่องหรือ Google Drive ข้อมูลในแอปไม่ถูกลบหรือเปลี่ยน</p>
+    <div class="grid2"><button class="btn pri" data-act="backup" data-v="xlsx">Excel อ่านง่าย</button><button class="btn" data-act="backup" data-v="json">ไฟล์สำรองเต็ม (JSON)</button></div>
+    <label class="row small" style="min-height:40px"><input type="checkbox" id="bkPh" style="width:22px;height:22px;accent-color:#14202E"> รวมรูปหลักฐานในไฟล์ JSON (ไฟล์ใหญ่ขึ้น)</label>
+    <p class="xs muted" id="bkMsg" style="margin:0" role="status"></p></section>`;
 }
 
 /* ---------- ลูกค้า: โค้ช ---------- */
@@ -993,6 +1250,7 @@ async function renderMore() {
     ${lineCardHtml()}
     ${pwCardHtml()}
     ${membersHtml}
+    ${viewingClient() ? '' : backupCardHtml()}
     <a class="btn" href="manual.html">คู่มือการใช้งาน</a>
     <button class="btn danger" data-act="logout">ออกจากระบบ</button>
     <p class="xs muted center">เวอร์ชัน ${VER}</p>`);
@@ -1513,13 +1771,23 @@ const ACTS = {
   addBody: async el => {
     const mode = el.dataset.v; let prev = null;
     if (mode === 'meas') { const rows = await bodyRows(S.view).catch(() => []); prev = {}; for (const [k] of CIRC_FORM) for (let i = rows.length - 1; i >= 0; i--) if (num(rows[i][k]) != null) { prev[k] = num(rows[i][k]); break; } }
-    openSheet({ scan: 'เพิ่มผลสแกน', meas: 'วัดสัดส่วน', weight: 'บันทึกน้ำหนัก' }[mode] || 'บันทึกน้ำหนัก', '', { kind: 'body', mode, unit: 'cm', prev, prevHint: prev && Object.keys(prev).length > 0, v: { date: todayStr() }, ph: [], lastImg: null }); refreshSheet(bodySheetBody()); fillThumbs($('#sheetBody'));
+    openSheet({ scan: 'เพิ่มผลสแกน', meas: 'วัดสัดส่วน', weight: 'บันทึกน้ำหนัก' }[mode] || 'บันทึกน้ำหนัก', '', { kind: 'body', mode, unit: prefGet('lu', 'cm'), wu: prefGet('wu', 'kg'), prev, prevHint: prev && Object.keys(prev).length > 0, v: { date: todayStr() }, ph: [], lastImg: null }); refreshSheet(bodySheetBody()); fillThumbs($('#sheetBody'));
   },
-  measUnit: el => { readBodyForm(); sheet.unit = el.dataset.v; refreshSheet(bodySheetBody()); fillThumbs($('#sheetBody')); },
+  measUnit: el => {
+    readBodyForm(); const to = el.dataset.v; if (sheet.unit === to) return;
+    for (const [k] of CIRC_FORM) { const v = num(sheet.v[k]); if (v != null) sheet.v[k] = String(to === 'in' ? r1(v / IN) : r1(v * IN)); }
+    sheet.unit = to; prefSet('lu', to); refreshSheet(bodySheetBody()); fillThumbs($('#sheetBody'));
+  },
+  wUnit: el => {
+    readBodyForm(); const to = el.dataset.v; if ((sheet.wu || 'kg') === to) return;
+    for (const k of W_KEYS) { const v = num(sheet.v[k]); if (v != null) sheet.v[k] = String(to === 'lb' ? r1(v / LB) : r1(v * LB)); }
+    sheet.wu = to; prefSet('wu', to); refreshSheet(bodySheetBody()); fillThumbs($('#sheetBody'));
+  },
   aiInbody: async el => {
     readBodyForm(); el.disabled = true; el.textContent = 'AI กำลังอ่านใบผล…';
     try {
       const r = await aiRead('inbody', sheet.lastImg); const keys = [];
+      if (sheet.wu === 'lb') { for (const k of W_KEYS) { const v = num(sheet.v[k]); if (v != null) sheet.v[k] = String(r1(v * LB)); } sheet.wu = 'kg'; } // ใบ InBody พิมพ์เป็น kg
       for (const [k] of BODY_FIELDS) if (num(r[k]) != null) { sheet.v[k] = num(r[k]); keys.push(k); }
       if (r.date && /^\d{4}-\d{2}-\d{2}$/.test(r.date)) sheet.v.date = r.date;
       sheet.aiKeys = keys; sheet.aiMsg = keys.length ? `AI กรอกให้แล้ว ${keys.length} ช่อง` : 'AI อ่านตัวเลขจากรูปนี้ไม่ได้ กรอกเองได้เลย';
@@ -1527,6 +1795,13 @@ const ACTS = {
     refreshSheet(bodySheetBody()); fillThumbs($('#sheetBody'));
   },
   saveBody,
+  pgQuick: el => {
+    const d = ui.pgDates || []; if (d.length < 2) return; const v = el.dataset.v; const B = d[d.length - 1]; let A = d[0];
+    if (v === 'prev') A = d[d.length - 2];
+    else if (v === '30' || v === '90') { const from = addDays(todayStr(), -(+v)); A = d.find(x => x >= from) || d[d.length - 2]; if (A === B) A = d[d.length - 2]; }
+    ui.pgA = A; ui.pgB = B; render();
+  },
+  backup: el => runBackup(el.dataset.v),
   rmBody: async el => { if (!confirm('ลบรายการนี้?')) return; await fb.deleteDoc(D('people', S.view, 'body', el.dataset.id)); render(); },
   rmPhoto: el => { const i = +el.dataset.i; if (sheet?.ph) { sheet.ph.splice(i, 1); $('#thumbs').outerHTML = photoPickerKeep(); fillThumbs($('#sheetBody')); } else if (ui.log) { logForm(); ui.log.ph.splice(i, 1); render(); } },
   viewPhoto: el => openViewer((el.dataset.set || el.dataset.id).split(',').filter(Boolean), +el.dataset.i || 0),
@@ -1619,6 +1894,8 @@ async function onChange(e) {
     toast('แนบรูปแล้ว'); render(); return;
   }
   if (el.dataset?.act === 'wkMove') { ui.wkMove = el.value; render(); return; }
+  if (el.dataset?.act === 'pgA' || el.dataset?.act === 'pgB') { ui[el.dataset.act] = el.value; render(); return; }
+  if (el.dataset?.act === 'pgK') { ui.pgK = el.value; render(); return; }
   if (el.dataset?.set && ui.log) { const m = ui.log.moves[+el.dataset.mi]; m.sets[+el.dataset.si][el.dataset.set] = el.value;
     if (el.dataset.set === 'w') convHint(el, m);
     return; }
@@ -1629,6 +1906,7 @@ async function onChange(e) {
 }
 function onInput(e) {
   const el = e.target;
+  if (el.dataset?.bf && sheet?.kind === 'body') { sheet.v[el.dataset.bf] = el.value; const sp = document.querySelector(`[data-bconv="${el.dataset.bf}"]`); if (sp) sp.innerHTML = bodyConv(sheet, el.dataset.bf, el.value) || '&nbsp;'; return; }
   if (el.id === 'logCustom' && ui.log) { ui.log.q = el.value; refreshMovePick(); return; }
   if (el.id === 'mxSearch' && sheet) { mxRead(); mxState().q = el.value; const pos = el.selectionStart; redrawFood(); const n = $('#mxSearch'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) { } return; }
   if (el.id === 'mxName' && sheet?.mx) { sheet.mx.name = el.value; return; }

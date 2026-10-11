@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, MIX_GROUPS, MIX_SUM, 
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261011c';
+const VER = '20261011d';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -412,6 +412,7 @@ function photoPicker(label = 'แนบรูป') {
 /* ============ AI อ่านรูป ============ */
 const AI_PROMPT = {
   watch: 'This is a screenshot from a fitness watch, fitness app or gym machine. Read only what is visible. Reply JSON: {"activity": one of "swim","walk","bike","class","weights","yoga","other" or null, "minutes": number or null, "kcal": number or null (active/total calories burned), "note": short English text or null}. Use null when not clearly visible. Never guess.',
+  label: 'These photos show ONE food product: Thai/English packaging (e.g. 7-Eleven ready meal, snack, drink, frozen food) and/or the food itself. Several photos may show the front, back or nutrition table of the same product. Copy printed numbers exactly; never invent a printed value. Reply JSON: {"name": product name as printed (Thai if printed) or a short Thai description of the food, "kind": "table" if a Nutrition Information table (ข้อมูลโภชนาการ) is readable, "gda" if only the front energy/sugar/fat/sodium label is readable, "food" if no nutrition label is readable, "serving": serving size text as printed (e.g. "1 กล่อง (250 ก.)") or null, "servings": servings per package (จำนวนหน่วยบริโภคต่อ...) as a number or null, "per_serving": {"kcal","protein","carb","fat"} per ONE serving from the nutrition table (numbers or null), "gda": {"kcal","sugar","fat","sodium"} printed on the front GDA label, which are for the WHOLE package (numbers or null), "est": {"kcal","protein","carb","fat"} your best estimate for the WHOLE package or plate from the product type, net weight and what you see (always fill all four), "weight_g": net weight in grams or null}. Energy in kcal; if only kJ is printed divide by 4.184. Carb = total carbohydrate.',
   inbody: 'This is a body composition result sheet (e.g. InBody). Read only what is printed. Reply JSON: {"date": "YYYY-MM-DD" or null, "weight": kg, "smm": skeletal muscle mass kg, "fatKg": body fat mass kg, "fatPct": percent body fat, "bmr": kcal, "visceral": visceral fat level, "water": total body water kg}. Every value is a number or null. Never guess.'
 };
 async function aiRead(kind, dataUrl) {
@@ -422,7 +423,7 @@ async function aiRead(kind, dataUrl) {
       fb.appCheck = ac.initializeAppCheck(app, { provider: new ac.ReCaptchaEnterpriseProvider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true });
     }
     const m = await import(FBV + 'firebase-ai.js'); fb.aiMod = m; fb.ai = m.getAI(app, { backend: new m.GoogleAIBackend() }); }
-  const parts = [AI_PROMPT[kind], { inlineData: { data: dataUrl.split(',')[1], mimeType: 'image/jpeg' } }];
+  const parts = [AI_PROMPT[kind], ...[].concat(dataUrl).filter(Boolean).map(d => ({ inlineData: { data: d.split(',')[1], mimeType: 'image/jpeg' } }))];
   const models = [S.config.aiModel || 'gemini-3.5-flash', 'gemini-3.5-flash-lite'].filter((m, i, a) => a.indexOf(m) === i);
   let r, lastErr;
   for (const name of models) {
@@ -522,9 +523,10 @@ function foodSheetBody() {
     <label class="f">ชื่ออาหาร<input class="in" id="mfName" value="${esc(s.mf.n || '')}"></label>
     <div class="grid2"><label class="f">แคลอรี (kcal)<input class="in" id="mfK" inputmode="decimal" value="${esc(s.mf.k ?? '')}"></label><label class="f">โปรตีน (g)<input class="in" id="mfP" inputmode="decimal" value="${esc(s.mf.p ?? '')}"></label>
     <label class="f">คาร์บ (g)<input class="in" id="mfC" inputmode="decimal" value="${esc(s.mf.c ?? '')}"></label><label class="f">ไขมัน (g)<input class="in" id="mfF" inputmode="decimal" value="${esc(s.mf.f ?? '')}"></label></div>
-    <p class="xs muted" style="margin:0">ดูค่าจากฉลากโภชนาการ ถ้าฉลากบอกต่อหน่วยบริโภค ให้คูณจำนวนที่กินจริง</p>
+    <p class="xs muted" style="margin:0">ดูค่าจากฉลากโภชนาการ ถ้าฉลากบอกต่อหน่วยบริโภค ให้คูณจำนวนที่กินจริง · มีฉลาก? ใช้ <button type="button" class="chip" style="min-height:30px" data-act="foodMode" data-v="label">📷 สแกนฉลาก</button> ให้ AI อ่านและคูณให้</p>
     ${mealSel()}${photoPicker('รูปจาน/ฉลาก')}
     <button class="btn pri block" data-act="saveFood">บันทึก</button>`;
+  if (s.mode === 'label') return labSheetBody();
   if (s.mode === 'quick') return quickSheetBody();
   if (s.mode === 'noodle') return noodleSheetBody();
   if (s.mode === 'cafe') return cafeSheetBody();
@@ -537,6 +539,8 @@ function foodSheetBody() {
   const hintQ = qn && /กเพา|ขาว|ผด|บอกโคล|ไขดาว|ตามสง|ราด|กวยเตยว|เสน|บหม|เยนตาโฟ|เกาเหลา|มามา|กวยจบ|วนเสน/.test(qn);
   const hintMp = qn && /หมูป|เหนียว|เหนยว|sticky|moo ?ping/.test(qn);
   const hintBag = qn && /แกง|ตมม|ตมยำ|ตมขา|ตมจืด|ตมโคลง|จบฉาย|พโล|พแนง|ฉฉี|ไตปลา|ถุง|นำพิก|ผกจิม|ผกลวก/.test(qn);
+  const lres = q ? (labLib() || []).map((x, i) => ({ x, i })).filter(({ x }) => x.n.toLowerCase().includes(q) || (qn && normTh(x.n).includes(qn))).slice(0, 8) : [];
+  const hintLab = q && /เซเว่น|เซเวน|7-?11|711|ข้าวกล่อง|แช่แข็ง|ฉลาก|สำเร็จรูป|ซีพี|อีซี่โก|\bcp\b|ซอง|ขวด|กระป๋อง/i.test(q);
   const hintMix = qn && /มามา|ไข|ผกขม|ผกโขม|ปวยเลง|ทำเอง|ทเอง|มกซ|mix/.test(qn);
   const f = s.pick ? FOOD[s.pick] : null;
   let pickHtml = '';
@@ -548,18 +552,20 @@ function foodSheetBody() {
   }
   return `${foodModeChips()}
     <label class="f">ค้นหาอาหาร<input class="in" id="fSearch" value="${esc(s.q || '')}" placeholder="เช่น ไข่ ปลา ข้าว อกไก่" autocomplete="off"></label>
+    ${lres.length ? `<div class="foodres">${lres.map(({ x, i }) => `<button type="button" data-act="labPick" data-i="${i}">📦 ${esc(x.n)} <span class="xs muted">· ของที่เคยสแกน · ${n0(labPack(x).k)} kcal/แพ็ก</span></button>`).join('')}</div>` : ''}
+    ${hintLab && !lres.length ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="label">📷 ของมีฉลาก (เซเว่น ข้าวกล่อง ขนม) · ถ่ายฉลากให้ AI อ่าน ›</button></div>` : ''}
     ${hintCafe ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="cafe">ประกอบแก้วเครื่องดื่ม + ขนม (คาเฟ่) ›</button></div>` : ''}
     ${hintMix ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="mix">ทำกินเอง? มิกซ์หลายวัตถุดิบเป็นจานเดียว (เช่น มาม่า + ไข่ 3 ฟอง + ผักโขม) ›</button></div>` : ''}
     ${hintBag ? `<div class="chips"><button class="chip" data-act="bagTab" data-v="curry">กับข้าวถุง + เติมเนื้อสัตว์เอง ›</button><button class="chip" data-act="bagTab" data-v="np">ชุดน้ำพริก/ผักจิ้ม ›</button></div>` : ''}
     ${hintMp ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="mp">ประกอบหมูปิ้ง + ข้าวเหนียว (ใส่ปริมาณที่กินจริง) ›</button></div>` : ''}
     ${hintQ ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="quick">ประกอบจานด่วน/ข้าวราด ›</button><button class="chip" data-act="foodMode" data-v="noodle">ประกอบชามก๋วยเตี๋ยว ›</button></div>` : ''}
-    ${res.length ? `<div class="foodres">${res.map(x => `<button type="button" data-act="pickFood" data-id="${x.id}">${esc(x.n)} <span class="xs muted">· ${x.d} ${x.u === 'g' ? 'g' : esc(x.un || '')} · ${n0(foodCalc(x, x.d).k)} kcal</span></button>`).join('')}</div>` : (q ? '<p class="small muted" style="margin:0">ไม่พบในคลัง ลองคำอื่น หรือกด “กรอกเอง”</p>' : '')}
+    ${res.length ? `<div class="foodres">${res.map(x => `<button type="button" data-act="pickFood" data-id="${x.id}">${esc(x.n)} <span class="xs muted">· ${x.d} ${x.u === 'g' ? 'g' : esc(x.un || '')} · ${n0(foodCalc(x, x.d).k)} kcal</span></button>`).join('')}</div>` : (q && !lres.length ? '<p class="small muted" style="margin:0">ไม่พบในคลัง ลองคำอื่น · ของมีฉลากกด “📷 สแกนฉลาก” · หรือกด “กรอกเอง”</p>' : '')}
     ${pickHtml}${mealSel()}${photoPicker('รูปจาน')}
     <button class="btn pri block" data-act="saveFood" ${f ? '' : 'disabled'}>บันทึก</button>`;
 }
 function foodModeChips() {
   const m = sheet.mode || 'db';
-  return `<div class="chips">${[['db', 'ค้นจากคลัง'], ['mix', 'ทำเอง/มิกซ์วัตถุดิบ'], ['quick', 'จานด่วน/ข้าวราด'], ['noodle', 'ก๋วยเตี๋ยว'], ['cafe', 'คาเฟ่/กาแฟ'], ['mp', 'หมูปิ้ง/ข้าวเหนียว'], ['bag', 'กับข้าวถุง/น้ำพริก'], ['manual', 'กรอกเอง']].map(([k, l]) => `<button class="chip" data-act="foodMode" data-v="${k}" aria-pressed="${m === k}">${l}</button>`).join('')}</div>`;
+  return `<div class="chips">${[['db', 'ค้นจากคลัง'], ['label', '📷 สแกนฉลาก'], ['mix', 'ทำเอง/มิกซ์วัตถุดิบ'], ['quick', 'จานด่วน/ข้าวราด'], ['noodle', 'ก๋วยเตี๋ยว'], ['cafe', 'คาเฟ่/กาแฟ'], ['mp', 'หมูปิ้ง/ข้าวเหนียว'], ['bag', 'กับข้าวถุง/น้ำพริก'], ['manual', 'กรอกเอง']].map(([k, l]) => `<button class="chip" data-act="foodMode" data-v="${k}" aria-pressed="${m === k}">${l}</button>`).join('')}</div>`;
 }
 /* ---------- จานด่วน / ก๋วยเตี๋ยว: เลือกเหมือนสั่งที่ร้าน แอปคำนวณ kcal ให้ ---------- */
 const QK_DEF = { style: 'krapao', protein: 'porkmince', size: 1, oil: 1, rice: 'white', riceG: 200, ate: 100, egg: 'fried', eggN: 1, prikpla: 0 };
@@ -872,6 +878,132 @@ async function saveBuilt(el) {
   closeSheet(); toast(`บันทึก ${r.name} ${n0(r.k)} kcal`); render();
 }
 function mealSel() { return `<label class="f">มื้อ<select class="in" id="fMeal">${MEALS.map(m => `<option ${m === sheet.meal ? 'selected' : ''}>${m}</option>`).join('')}</select></label>`; }
+/* ---------- 📷 สแกนฉลาก: ถ่ายฉลาก/หน้ากล่อง/อาหาร ให้ AI อ่าน kcal P C F แล้วคูณตามที่กินจริง ---------- */
+// ของที่เคยสแกนเก็บที่ people/{คนที่ดูอยู่}/days/_labels (อยู่ในข้อมูลของคนนั้นตาม Rules เดิม เหมือนสูตรของฉัน)
+const labLibRef = () => D('people', S.view, 'days', '_labels');
+const LAB_K = [['k', 'แคลอรี (kcal)'], ['p', 'โปรตีน (g)'], ['c', 'คาร์บ (g)'], ['f', 'ไขมัน (g)']];
+function labState() { if (!sheet.lab) sheet.lab = { n: '', basis: 'pack', v: {}, spp: 1, sd: '', est: [], ai: {}, ate: 1, kind: '', msg: '', busy: 0, fav: 1, lq: '' }; return sheet.lab; }
+function labLib() { return S.labLib?.pid === S.view ? S.labLib.list : null; }
+async function loadLabLib() {
+  if (labLib()) return;
+  const pid = S.view; let list = [];
+  try { list = (await get(labLibRef()))?.list || []; } catch (e) { console.warn('labLib', e); }
+  S.labLib = { pid, list };
+  if (sheet?.kind === 'food' && sheet.mode === 'label') redrawFood();
+}
+const labSpp = st => { const v = num(st.spp); return v && v > 0 ? v : 1; };
+function labPack(st) { const m = st.basis === 'serv' ? labSpp(st) : 1, o = {}; for (const [k] of LAB_K) o[k] = (num(st.v?.[k]) || 0) * m; return o; }
+function labAteText(st) {
+  const a = +st.ate || 0, spp = labSpp(st);
+  if (Math.abs(a - 1) < 1e-6) return 'ทั้งแพ็ก';
+  if (Math.abs(a - 0.5) < 1e-6) return 'ครึ่งแพ็ก';
+  if (spp > 1 && Math.abs(a - 1 / spp) < 1e-6) return `1 หน่วยบริโภค (จาก ${r1(spp)})`;
+  return `${r1(a * 100)}% ของแพ็ก`;
+}
+function labSumHtml(st) {
+  const pk = labPack(st), a = +st.ate || 0, spp = labSpp(st);
+  const est = st.est.length ? `<div class="xs" style="color:#8A5A00;margin-top:4px">มีค่าที่ AI ประมาณ (${st.est.map(k => ({ k: 'แคล', p: 'โปรตีน', c: 'คาร์บ', f: 'ไขมัน' }[k])).join(' ')}) ไม่ได้มาจากฉลาก</div>` : '';
+  return `<div class="small">ทั้งแพ็ก ≈ <b>${n0(pk.k)} kcal</b> · P ${r1(pk.p)} · C ${r1(pk.c)} · F ${r1(pk.f)} g${spp > 1 ? ` <span class="muted">(${r1(spp)} หน่วยบริโภค)</span>` : ''}</div>
+    <div style="margin-top:6px">กิน${labAteText(st)} ≈ <b class="goldt" style="font-size:18px">${n0(pk.k * a)} kcal</b></div>
+    <div class="small">โปรตีน <b>${r1(pk.p * a)}</b> · คาร์บ ${r1(pk.c * a)} · ไขมัน ${r1(pk.f * a)} g</div>${est}`;
+}
+function labAteChips(st) {
+  const spp = labSpp(st), opts = [[1, 'ทั้งแพ็ก'], [0.5, 'ครึ่ง'], [0.25, '¼']];
+  if (spp > 1 && Math.abs(spp - 2) > 1e-6 && Math.abs(spp - 4) > 1e-6) opts.splice(1, 0, [1 / spp, `1 หน่วยบริโภค`]);
+  return opts.map(([v, l]) => `<button type="button" class="chip" data-act="labAte" data-v="${v}" aria-pressed="${Math.abs((+st.ate || 0) - v) < 1e-6}">${l}</button>`).join('');
+}
+function labSheetBody() {
+  const s = sheet, st = labState(), lib = labLib(), imgs = labImgs(), aiOff = S.config.aiOn === false;
+  const lq = (st.lq || '').trim().toLowerCase(), lqn = normTh(lq);
+  const libRows = (lib || []).map((x, i) => ({ x, i })).filter(({ x }) => !lq || x.n.toLowerCase().includes(lq) || (lqn && normTh(x.n).includes(lqn))).slice(0, lq ? 20 : 8);
+  const estTag = k => st.est.includes(k) ? ' <span class="tag" style="background:#FBEFD3;color:#8A5A00;padding:1px 7px;font-size:11px">ประมาณ</span>' : '';
+  const has = st.n || LAB_K.some(([k]) => num(st.v[k]) != null);
+  return `${foodModeChips()}
+    <section class="card gold-edge" style="gap:8px">
+      <b>📷 ถ่ายฉลาก หรือหน้ากล่อง</b>
+      <p class="xs muted" style="margin:0">ได้ค่าครบที่สุด: ถ่าย <b>ตาราง “ข้อมูลโภชนาการ”</b> ด้านหลัง/ข้างกล่อง (มีโปรตีน คาร์บ ไขมัน) · ฉลากหน้ากล่องแบบ หวาน มัน เค็ม มีแค่แคล น้ำตาล ไขมัน โซเดียม · แนบได้หลายรูปของสินค้าเดียวกัน · ไม่มีฉลาก ถ่ายรูปอาหารได้ AI จะประมาณให้</p>
+      ${photoPicker('ถ่าย/เลือกรูปฉลาก')}
+      ${aiOff ? '<p class="xs muted" style="margin:0">เจ้าของระบบปิด AI ไว้ · กรอกตัวเลขจากฉลากด้านล่างเองได้ แอปคูณตามที่กินให้</p>'
+        : imgs.length ? `<button class="btn gold block" data-act="labAi" ${st.busy ? 'disabled' : ''}>${svg('spark', 18)} ${st.busy ? 'AI กำลังอ่านฉลาก…' : has ? 'ให้ AI อ่านรูปทั้งหมดใหม่' : 'ให้ AI อ่านฉลาก'}</button>` : ''}
+      ${st.msg ? `<p class="small" style="margin:0;${st.msgWarn ? 'color:#8A5A00' : ''}">${esc(st.msg)}</p>` : ''}
+    </section>
+    ${lib && lib.length ? `<details ${lq || !has ? 'open' : ''}><summary class="small" style="font-weight:600;cursor:pointer">📦 ของที่เคยสแกน (${lib.length}) · แตะเพื่อใช้ซ้ำ ไม่ต้องถ่ายใหม่</summary>
+      <input class="in" id="labLq" style="margin:8px 0" placeholder="ค้นของที่เคยสแกน" value="${esc(st.lq || '')}" autocomplete="off">
+      <div class="foodres">${libRows.map(({ x, i }) => `<div class="between" style="align-items:center"><button type="button" class="grow" style="text-align:left" data-act="labPick" data-i="${i}">${esc(x.n)} <span class="xs muted">· ${n0(labPack(x).k)} kcal/แพ็ก</span></button><button type="button" class="iconbtn" style="width:34px;height:34px;min-height:34px;padding:0;flex:none" data-act="labLibDel" data-i="${i}" aria-label="ลบ ${esc(x.n)}">×</button></div>`).join('') || '<p class="small muted" style="margin:0">ไม่พบ</p>'}</div></details>` : ''}
+    <label class="f">ชื่อสินค้า/อาหาร<input class="in" id="labN" value="${esc(st.n)}" placeholder="เช่น ข้าวกะเพราไก่ไข่ดาว (เซเว่น)"></label>
+    <div><div class="small" style="font-weight:600;margin-bottom:6px">ตัวเลขด้านล่างเป็นค่า</div>
+      <div class="chips"><button type="button" class="chip" data-act="labBasis" data-v="serv" aria-pressed="${st.basis === 'serv'}">ต่อ 1 หน่วยบริโภค</button><button type="button" class="chip" data-act="labBasis" data-v="pack" aria-pressed="${st.basis === 'pack'}">ทั้งแพ็ก/ทั้งกล่อง</button></div>
+      <p class="xs muted" style="margin:4px 0 0">เลือกให้ตรงกับที่ฉลากเขียน ตารางข้อมูลโภชนาการมักเป็น “ต่อหนึ่งหน่วยบริโภค”</p></div>
+    <div class="grid2">${LAB_K.map(([k, l]) => `<label class="f">${l}${estTag(k)}<input class="in" id="labV${k}" data-lab="1" inputmode="decimal" value="${esc(st.v[k] ?? '')}"></label>`).join('')}</div>
+    <div class="grid2"><label class="f">จำนวนหน่วยบริโภคต่อแพ็ก<input class="in" id="labSpp" data-lab="1" inputmode="decimal" value="${esc(st.spp ?? 1)}"></label>
+      <label class="f">กินไป (% ของแพ็ก)<input class="in" id="labPct" data-lab="1" inputmode="decimal" value="${r1((+st.ate || 0) * 100)}"></label></div>
+    ${st.sd ? `<p class="xs muted" style="margin:-4px 0 0">หนึ่งหน่วยบริโภคบนฉลาก: ${esc(st.sd)}</p>` : ''}
+    <div><div class="small" style="font-weight:600;margin-bottom:6px">กินไปเท่าไร</div><div class="chips" id="labAteChips">${labAteChips(st)}</div></div>
+    <section class="card sand" id="labSum">${labSumHtml(st)}</section>
+    ${mealSel()}
+    <label class="row small" style="gap:8px"><input type="checkbox" id="labFav" ${st.fav ? 'checked' : ''}> จำไว้ใน “ของที่เคยสแกน” ครั้งหน้าซื้อซ้ำแตะเลือกได้เลย</label>
+    <button class="btn pri block" data-act="saveLabel">บันทึก</button>`;
+}
+function labImgs() { const m = sheet?.imgMap || {}; return (sheet?.ph || []).map(id => m[id]).filter(Boolean).slice(-3); }
+function labRead() {
+  const st = sheet?.lab; if (!st) return;
+  const n = $('#labN'); if (n) st.n = n.value;
+  for (const [k] of LAB_K) { const el = $('#labV' + k); if (!el) continue; st.v[k] = el.value; if (st.est.includes(k) && num(el.value) !== num(st.ai[k])) st.est = st.est.filter(x => x !== k); }
+  const sp = $('#labSpp'); if (sp) st.spp = sp.value;
+  const pc = $('#labPct'); if (pc && num(pc.value) != null) st.ate = Math.max(0, num(pc.value)) / 100;
+  const fv = $('#labFav'); if (fv) st.fav = fv.checked ? 1 : 0;
+  const lq = $('#labLq'); if (lq) st.lq = lq.value;
+}
+function labLive(el) {
+  const st = sheet.lab; labRead();
+  if (el?.id === 'labSpp') { const c = $('#labAteChips'); if (c) c.innerHTML = labAteChips(st); }
+  else if (el?.id === 'labPct') document.querySelectorAll('[data-act="labAte"]').forEach(b => b.setAttribute('aria-pressed', String(Math.abs((+st.ate || 0) - +b.dataset.v) < 1e-6)));
+  const s = $('#labSum'); if (s) s.innerHTML = labSumHtml(st);
+}
+function labApply(r) {
+  const st = labState(), ps = r.per_serving || {}, g = r.gda || {}, e = r.est || {}, spp = num(r.servings) > 0 ? num(r.servings) : 1;
+  const v = {}, est = [], F = { k: 'kcal', p: 'protein', c: 'carb', f: 'fat' };
+  let kind = r.kind;
+  if (num(ps.kcal) != null) {
+    kind = 'table'; st.basis = 'serv';
+    for (const [k] of LAB_K) { const x = num(ps[F[k]]); if (x != null) v[k] = r1(x); else if (num(e[F[k]]) != null) { v[k] = r1(num(e[F[k]]) / spp); est.push(k); } }
+  } else if (num(g.kcal) != null) {
+    kind = 'gda'; st.basis = 'pack'; v.k = r1(num(g.kcal));
+    if (num(g.fat) != null) v.f = r1(num(g.fat)); else if (num(e.fat) != null) { v.f = r1(num(e.fat)); est.push('f'); }
+    for (const k of ['p', 'c']) if (num(e[F[k]]) != null) { v[k] = r1(num(e[F[k]])); est.push(k); }
+  } else {
+    kind = 'food'; st.basis = 'pack';
+    for (const [k] of LAB_K) if (num(e[F[k]]) != null) { v[k] = r1(num(e[F[k]])); est.push(k); }
+  }
+  if (!Object.keys(v).length) { st.msg = 'AI อ่านค่าจากรูปนี้ไม่ได้ ลองถ่ายตารางข้อมูลโภชนาการให้ชัด ๆ หรือกรอกเอง'; st.msgWarn = 1; return; }
+  if (r.name) st.n = String(r.name).slice(0, 80);
+  st.v = v; st.ai = { ...v }; st.est = est; st.spp = spp; st.sd = r.serving ? String(r.serving).slice(0, 60) : ''; st.kind = kind; st.ate = 1;
+  st.msgWarn = kind !== 'table' ? 1 : 0;
+  st.msg = kind === 'table' ? `อ่านจากตารางข้อมูลโภชนาการแล้ว${spp > 1 ? ` · แพ็กนี้มี ${r1(spp)} หน่วยบริโภค แอปคูณให้แล้ว` : ''} · ตรวจตัวเลขกับฉลากก่อนบันทึก`
+    : kind === 'gda' ? 'อ่านฉลากหน้ากล่องแล้ว (มีแค่แคล ไขมัน) · โปรตีนกับคาร์บ AI ประมาณให้ ถ้าจะให้แม่น ถ่ายตารางข้อมูลโภชนาการด้านหลังเพิ่มอีกรูป'
+    : 'ไม่เห็นฉลากโภชนาการ · ค่าทั้งหมด AI ประมาณจากรูป ตรวจและแก้ได้ก่อนบันทึก';
+}
+async function saveLabel() {
+  labRead(); const s = sheet, st = s.lab, meal = $('#fMeal').value;
+  const n = (st.n || '').trim(); const pk = labPack(st); const a = +st.ate || 0;
+  if (!n) return toast('ใส่ชื่อสินค้า/อาหาร');
+  if (num(st.v.k) == null) return toast('ยังไม่มีแคลอรี ถ่ายฉลากให้ AI อ่าน หรือกรอกเอง');
+  if (!(a > 0)) return toast('ใส่ว่ากินไปเท่าไร');
+  const item = { n, q: r2(a), qs: labAteText(st) + (st.est.length ? ' · ค่าประมาณ' : ''), k: Math.round(pk.k * a), p: r1(pk.p * a), c: r1(pk.c * a), f: r1(pk.f * a), src: 'label', opt: { basis: st.basis, v: { ...st.v }, spp: labSpp(st), kind: st.kind || 'manual' } };
+  if (st.est.length) item.est = st.est;
+  if (s.ph?.length) item.ph = s.ph;
+  item.t = Date.now(); item.by = S.me.role;
+  await mutateDay(S.view, ui.date, d => { (d.meals[meal] = d.meals[meal] || []).push(item); });
+  if (st.fav) await saveLabLib(st);
+  closeSheet(); toast(`บันทึก ${n} ${n0(item.k)} kcal${st.fav ? ' · จำไว้แล้ว' : ''}`, 3500); render();
+}
+async function saveLabLib(st) {
+  const key = x => normTh(x) || String(x).trim().toLowerCase();
+  const rec = { n: st.n.trim(), basis: st.basis, v: Object.fromEntries(LAB_K.map(([k]) => [k, num(st.v[k])])), spp: labSpp(st), sd: st.sd || '', est: st.est || [], kind: st.kind || 'manual', at: Date.now() };
+  const list = [rec, ...(labLib() || []).filter(x => key(x.n) !== key(rec.n))].slice(0, 80);
+  S.labLib = { pid: S.view, list };
+  try { await fb.setDoc(labLibRef(), { list, at: Date.now() }); } catch (e) { console.error(e); toast('จำสินค้าไม่สำเร็จ แต่บันทึกอาหารแล้ว'); }
+}
 async function saveFood() {
   const s = sheet; const meal = $('#fMeal').value; let item;
   if (s.mode === 'manual') {
@@ -1778,8 +1910,29 @@ const ACTS = {
   openClient: el => { closeSheet(); return openClient(el.dataset.id); },
   water: async el => { const v = +el.dataset.v; await mutateDay(S.view, ui.date, d => { d.water = Math.max(0, (+d.water || 0) + v); }); render(); },
   rmFood: async el => { if (!confirm('ลบรายการนี้?')) return; const m = el.dataset.m, i = +el.dataset.i; await mutateDay(S.view, ui.date, d => { (d.meals[m] || []).splice(i, 1); }); render(); },
-  addFood: el => { openSheet('เพิ่มอาหาร', '', { kind: 'food', meal: el.dataset.m, mode: 'db', q: '', pick: null, qty: null, mf: {}, ph: [] }); refreshSheet(foodSheetBody()); },
-  foodMode: el => { sheet.mode = el.dataset.v; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); },
+  addFood: el => { openSheet('เพิ่มอาหาร', '', { kind: 'food', meal: el.dataset.m, mode: 'db', q: '', pick: null, qty: null, mf: {}, ph: [], imgMap: {} }); refreshSheet(foodSheetBody()); loadLabLib(); },
+  foodMode: el => { if (sheet.mode === 'label') labRead(); sheet.mode = el.dataset.v; if (sheet.mode === 'label') loadLabLib(); refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); },
+  labAi: async () => {
+    labRead(); const st = labState(), imgs = labImgs(); if (!imgs.length) return toast('ถ่ายหรือเลือกรูปฉลากก่อน');
+    st.busy = 1; st.msg = ''; redrawFood();
+    try { labApply(await aiRead('label', imgs)); }
+    catch (err) { console.error(err); st.msg = 'AI อ่านไม่สำเร็จ (' + (err.message || err).toString().slice(0, 60) + ') · กรอกเองได้เลย'; st.msgWarn = 1; }
+    st.busy = 0; if (sheet?.kind === 'food' && sheet.mode === 'label') redrawFood();
+  },
+  labPick: el => {
+    const x = (labLib() || [])[+el.dataset.i]; if (!x) return; if (sheet.mode === 'label') labRead();
+    const st = labState(); sheet.mode = 'label';
+    Object.assign(st, { n: x.n, basis: x.basis || 'pack', v: { ...x.v }, ai: { ...x.v }, spp: x.spp || 1, sd: x.sd || '', est: [...(x.est || [])], kind: x.kind || '', ate: 1, msg: 'ใช้ค่าที่เคยสแกนไว้ · เลือกว่ากินไปเท่าไรแล้วกดบันทึก', msgWarn: 0, lq: '' });
+    redrawFood();
+  },
+  labAte: el => { labRead(); sheet.lab.ate = +el.dataset.v; redrawFood(); },
+  labBasis: el => { labRead(); sheet.lab.basis = el.dataset.v; redrawFood(); },
+  saveLabel,
+  labLibDel: async el => {
+    const lib = labLib() || [], x = lib[+el.dataset.i]; if (!x || !confirm(`ลบ “${x.n}” ออกจากของที่เคยสแกน? (อาหารที่บันทึกไปแล้วไม่หาย)`)) return;
+    labRead(); const list = lib.filter((_, i) => i !== +el.dataset.i); S.labLib = { pid: S.view, list }; redrawFood();
+    try { await fb.setDoc(labLibRef(), { list, at: Date.now() }); toast('ลบแล้ว'); } catch (e) { console.error(e); toast('ลบไม่สำเร็จ ลองใหม่อีกครั้ง'); }
+  },
   qkSet: el => { const st = qkState(); st[el.dataset.k] = qkNum(el.dataset.k, el.dataset.v); if (el.dataset.k === 'riceG' && +st.riceG && !+st.ate) st.ate = 100; redrawFood(); },
   ndSet: el => { const st = ndState(); st[el.dataset.k] = qkNum(el.dataset.k, el.dataset.v); redrawFood(); },
   ndTop: el => { const st = ndState(), k = el.dataset.v; st.tops = (st.tops || []).includes(k) ? st.tops.filter(x => x !== k) : [...(st.tops || []), k]; redrawFood(); },
@@ -1892,7 +2045,7 @@ const ACTS = {
   },
   backup: el => runBackup(el.dataset.v),
   rmBody: async el => { if (!confirm('ลบรายการนี้?')) return; await fb.deleteDoc(D('people', S.view, 'body', el.dataset.id)); render(); },
-  rmPhoto: el => { const i = +el.dataset.i; if (sheet?.ph) { sheet.ph.splice(i, 1); $('#thumbs').outerHTML = photoPickerKeep(); fillThumbs($('#sheetBody')); } else if (ui.log) { logForm(); ui.log.ph.splice(i, 1); render(); } },
+  rmPhoto: el => { const i = +el.dataset.i; if (sheet?.ph && sheet.kind === 'food' && sheet.mode === 'label') { labRead(); sheet.ph.splice(i, 1); redrawFood(); } else if (sheet?.ph) { sheet.ph.splice(i, 1); $('#thumbs').outerHTML = photoPickerKeep(); fillThumbs($('#sheetBody')); } else if (ui.log) { logForm(); ui.log.ph.splice(i, 1); render(); } },
   viewPhoto: el => openViewer((el.dataset.set || el.dataset.id).split(',').filter(Boolean), +el.dataset.i || 0),
   lbBg: () => {},
   lbClose: () => closeViewer(),
@@ -1970,8 +2123,9 @@ async function onChange(e) {
   if (el.id === 'fMeal' && sheet) { sheet.meal = el.value; return; }
   if (el.dataset?.act === 'pickPhoto' && el.files?.length) {
     const pid = S.view; const files = [...el.files]; toast('กำลังแนบรูป…', 8000);
-    for (const f of files) { try { const d = await compress(f); const id = await savePhoto(pid, d); sheet.ph.push(id); sheet.lastImg = d; } catch (err) { console.error(err); toast('แนบรูปไม่สำเร็จ'); } }
+    for (const f of files) { try { const d = await compress(f); const id = await savePhoto(pid, d); sheet.ph.push(id); sheet.lastImg = d; if (sheet.kind === 'food') (sheet.imgMap = sheet.imgMap || {})[id] = d; } catch (err) { console.error(err); toast('แนบรูปไม่สำเร็จ'); } }
     toast('แนบรูปแล้ว');
+    if (sheet.kind === 'food' && sheet.mode === 'label') { labRead(); redrawFood(); if (S.config.aiOn !== false && labImgs().length) await ACTS.labAi(); return; }
     if (sheet.kind === 'act') { readActForm(); refreshSheet(actSheetBody()); }
     else if (sheet.kind === 'body') { readBodyForm(); refreshSheet(bodySheetBody()); }
     else if (sheet.kind === 'food') { $('#thumbs').outerHTML = photoPickerKeep(); }
@@ -2000,6 +2154,8 @@ function onInput(e) {
   if (el.id === 'logCustom' && ui.log) { ui.log.q = el.value; refreshMovePick(); return; }
   if (el.id === 'mxSearch' && sheet) { mxRead(); mxState().q = el.value; const pos = el.selectionStart; redrawFood(); const n = $('#mxSearch'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) { } return; }
   if (el.id === 'mxName' && sheet?.mx) { sheet.mx.name = el.value; return; }
+  if (el.dataset?.lab && sheet?.lab) { labLive(el); return; }
+  if (el.id === 'labLq' && sheet?.lab) { labRead(); const pos = el.selectionStart; redrawFood(); const n = $('#labLq'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) { } } return; }
   if (el.id === 'fSearch' && sheet) { sheet.q = el.value; sheet.pick = null; const pos = el.selectionStart; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); const n = $('#fSearch'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) { } }
   if (el.dataset?.set && ui.log) { const m = ui.log.moves[+el.dataset.mi]; m.sets[+el.dataset.si][el.dataset.set] = el.value; if (el.dataset.set === 'w') convHint(el, m); }
 }
@@ -2009,7 +2165,7 @@ function onKey(e) {
   if (e.key === 'Enter' && e.target.id === 'logCustom' && ui.log && !e.isComposing) { e.preventDefault(); const q = moveKey(e.target.value); if (!q) return; const hit = [...(S.moveLib?.names || []), ...MOVES].find(n => moveKey(n) === q); addMove(hit || e.target.value); }
   if (e.key === 'Enter' && ['cpOld', 'cpNew', 'cpNew2'].includes(e.target.id)) { e.preventDefault(); if (e.target.id === 'cpNew2') savePw(); else $(e.target.id === 'cpOld' ? '#cpNew' : '#cpNew2')?.focus(); } if (e.key === 'Escape' && sheet) closeSheet(); }
 
-export const __test = { S, ui, dayTotals, foodCalc, digestText, addDays, weekStart, thDate, lineChart, render, ACTS, onInput, onChange, setFb: (f, d, a) => { fb = f; db = d; auth = a; } };
+export const __test = { S, ui, dayTotals, foodCalc, labApply, labPack, labState, ACTS, onClick, setSheet: x => { sheet = x; }, getSheet: () => sheet, foodSheetBody, digestText, addDays, weekStart, thDate, lineChart, render, ACTS, onInput, onChange, setFb: (f, d, a) => { fb = f; db = d; auth = a; } };
 if (typeof window !== 'undefined' && !window.__NO_BOOT__) {
   document.addEventListener('click', onClick); document.addEventListener('change', onChange); document.addEventListener('input', onInput); document.addEventListener('keydown', onKey);
   boot();

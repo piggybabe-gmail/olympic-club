@@ -1,10 +1,10 @@
 // The Olympic Club by PT-Palm — แอปติดตามอาหารและการเทรน (ลูกค้า / เทรนเนอร์ / เจ้าของระบบ)
 import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN, RECAPTCHA_SITE_KEY } from './firebase-config.js?v=20260929b';
-import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, MIX_GROUPS, MIX_SUM, MIX_ATE, quickCalc, noodleCalc, mpCalc, mixCalc, normTh } from './foods.js?v=20261010b';
+import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, MIX_GROUPS, MIX_SUM, MIX_ATE, BAG, NAMPRIK, NP_SETS, quickCalc, noodleCalc, mpCalc, mixCalc, bagCalc, npCalc, frac, normTh } from './foods.js?v=20261011c';
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261011b';
+const VER = '20261011c';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -529,12 +529,14 @@ function foodSheetBody() {
   if (s.mode === 'noodle') return noodleSheetBody();
   if (s.mode === 'cafe') return cafeSheetBody();
   if (s.mode === 'mp') return mpSheetBody();
+  if (s.mode === 'bag') return bagSheetBody();
   if (s.mode === 'mix') return mixSheetBody();
   const q = (s.q || '').trim().toLowerCase(), qn = normTh(q);
   const res = q ? FOODS.filter(f => f.n.toLowerCase().includes(q) || (f.cat || '').includes(q) || (f.al || '').toLowerCase().includes(q) || (qn && (normTh(f.n).includes(qn) || normTh(f.al).includes(qn)))).slice(0, 40) : [];
   const hintCafe = qn && /กาแฟ|ลาเต|อเมิกา|มอคคา|คาปู|เอสเย็น|ชาเย็น|ชานม|โกโก|มทฉ|มจฉ|มัท|ชาเขียว|สมูท|คาเฟ|เบเกอ|ควซอง|คซอง|เคก|บาวนี|มฟฟิน|คุกกี|โอเลียง|นมชมพู|ขนม|latte|mocha|coffee|americano|matcha|cafe/.test(qn);
   const hintQ = qn && /กเพา|ขาว|ผด|บอกโคล|ไขดาว|ตามสง|ราด|กวยเตยว|เสน|บหม|เยนตาโฟ|เกาเหลา|มามา|กวยจบ|วนเสน/.test(qn);
   const hintMp = qn && /หมูป|เหนียว|เหนยว|sticky|moo ?ping/.test(qn);
+  const hintBag = qn && /แกง|ตมม|ตมยำ|ตมขา|ตมจืด|ตมโคลง|จบฉาย|พโล|พแนง|ฉฉี|ไตปลา|ถุง|นำพิก|ผกจิม|ผกลวก/.test(qn);
   const hintMix = qn && /มามา|ไข|ผกขม|ผกโขม|ปวยเลง|ทำเอง|ทเอง|มกซ|mix/.test(qn);
   const f = s.pick ? FOOD[s.pick] : null;
   let pickHtml = '';
@@ -542,12 +544,13 @@ function foodSheetBody() {
     const qty = num(s.qty) ?? f.d; const v = foodCalc(f, qty);
     pickHtml = `<section class="card gold-edge"><b>${esc(f.n)}</b>
       <label class="f">${f.u === 'g' ? 'น้ำหนัก (กรัม)' : 'จำนวน (' + esc(f.un || 'หน่วย') + ')'}<input class="in" id="fQty" inputmode="decimal" value="${esc(s.qty ?? f.d)}"></label>
-      <div class="small">≈ <b>${n0(v.k)} kcal</b> · P ${v.p} · C ${v.c} · F ${v.f} g</div>${f.qk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="qkFrom" data-id="${f.id}">ปรับข้าว ไข่ น้ำมัน หรือสั่งพิเศษ ›</button>` : ''}${f.cf || f.bk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="cfFrom" data-id="${f.id}">${f.cf ? 'ปรับขนาด นม ความหวาน ท็อปปิ้ง หรือเพิ่มขนม ›' : 'เพิ่มเครื่องดื่มคู่กัน ›'}</button>` : ''}<button class="btn sm ghost" style="margin-top:8px" data-act="mxFromPick" data-id="${f.id}">ใส่ลงจานทำเอง · มิกซ์กับวัตถุดิบอื่น ›</button>${f.mp ? `<button class="btn sm ghost" style="margin-top:8px" data-act="mpFrom" data-id="${f.id}">ประกอบชุดหมูปิ้ง + ข้าวเหนียว · ใส่ว่ากินข้าวไปเท่าไร ›</button>` : ''}</section>`;
+      <div class="small">≈ <b>${n0(v.k)} kcal</b> · P ${v.p} · C ${v.c} · F ${v.f} g</div>${f.qk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="qkFrom" data-id="${f.id}">ปรับข้าว ไข่ น้ำมัน หรือสั่งพิเศษ ›</button>` : ''}${f.cf || f.bk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="cfFrom" data-id="${f.id}">${f.cf ? 'ปรับขนาด นม ความหวาน ท็อปปิ้ง หรือเพิ่มขนม ›' : 'เพิ่มเครื่องดื่มคู่กัน ›'}</button>` : ''}<button class="btn sm ghost" style="margin-top:8px" data-act="mxFromPick" data-id="${f.id}">ใส่ลงจานทำเอง · มิกซ์กับวัตถุดิบอื่น ›</button>${f.bg ? `<button class="btn sm ghost" style="margin-top:8px" data-act="bgFrom" data-id="${f.id}">เติมเนื้อสัตว์ใส่แกงนี้ (เช่น ปลาช่อน กุ้ง) · ใส่ว่ากินไปเท่าไร ›</button>` : ''}${f.np ? `<button class="btn sm ghost" style="margin-top:8px" data-act="npFrom" data-id="${f.id}">ประกอบชุดน้ำพริก + ผักจิ้ม + ของทานเล่น ›</button>` : ''}${f.mp ? `<button class="btn sm ghost" style="margin-top:8px" data-act="mpFrom" data-id="${f.id}">ประกอบชุดหมูปิ้ง + ข้าวเหนียว · ใส่ว่ากินข้าวไปเท่าไร ›</button>` : ''}</section>`;
   }
   return `${foodModeChips()}
     <label class="f">ค้นหาอาหาร<input class="in" id="fSearch" value="${esc(s.q || '')}" placeholder="เช่น ไข่ ปลา ข้าว อกไก่" autocomplete="off"></label>
     ${hintCafe ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="cafe">ประกอบแก้วเครื่องดื่ม + ขนม (คาเฟ่) ›</button></div>` : ''}
     ${hintMix ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="mix">ทำกินเอง? มิกซ์หลายวัตถุดิบเป็นจานเดียว (เช่น มาม่า + ไข่ 3 ฟอง + ผักโขม) ›</button></div>` : ''}
+    ${hintBag ? `<div class="chips"><button class="chip" data-act="bagTab" data-v="curry">กับข้าวถุง + เติมเนื้อสัตว์เอง ›</button><button class="chip" data-act="bagTab" data-v="np">ชุดน้ำพริก/ผักจิ้ม ›</button></div>` : ''}
     ${hintMp ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="mp">ประกอบหมูปิ้ง + ข้าวเหนียว (ใส่ปริมาณที่กินจริง) ›</button></div>` : ''}
     ${hintQ ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="quick">ประกอบจานด่วน/ข้าวราด ›</button><button class="chip" data-act="foodMode" data-v="noodle">ประกอบชามก๋วยเตี๋ยว ›</button></div>` : ''}
     ${res.length ? `<div class="foodres">${res.map(x => `<button type="button" data-act="pickFood" data-id="${x.id}">${esc(x.n)} <span class="xs muted">· ${x.d} ${x.u === 'g' ? 'g' : esc(x.un || '')} · ${n0(foodCalc(x, x.d).k)} kcal</span></button>`).join('')}</div>` : (q ? '<p class="small muted" style="margin:0">ไม่พบในคลัง ลองคำอื่น หรือกด “กรอกเอง”</p>' : '')}
@@ -556,7 +559,7 @@ function foodSheetBody() {
 }
 function foodModeChips() {
   const m = sheet.mode || 'db';
-  return `<div class="chips">${[['db', 'ค้นจากคลัง'], ['mix', 'ทำเอง/มิกซ์วัตถุดิบ'], ['quick', 'จานด่วน/ข้าวราด'], ['noodle', 'ก๋วยเตี๋ยว'], ['cafe', 'คาเฟ่/กาแฟ'], ['mp', 'หมูปิ้ง/ข้าวเหนียว'], ['manual', 'กรอกเอง']].map(([k, l]) => `<button class="chip" data-act="foodMode" data-v="${k}" aria-pressed="${m === k}">${l}</button>`).join('')}</div>`;
+  return `<div class="chips">${[['db', 'ค้นจากคลัง'], ['mix', 'ทำเอง/มิกซ์วัตถุดิบ'], ['quick', 'จานด่วน/ข้าวราด'], ['noodle', 'ก๋วยเตี๋ยว'], ['cafe', 'คาเฟ่/กาแฟ'], ['mp', 'หมูปิ้ง/ข้าวเหนียว'], ['bag', 'กับข้าวถุง/น้ำพริก'], ['manual', 'กรอกเอง']].map(([k, l]) => `<button class="chip" data-act="foodMode" data-v="${k}" aria-pressed="${m === k}">${l}</button>`).join('')}</div>`;
 }
 /* ---------- จานด่วน / ก๋วยเตี๋ยว: เลือกเหมือนสั่งที่ร้าน แอปคำนวณ kcal ให้ ---------- */
 const QK_DEF = { style: 'krapao', protein: 'porkmince', size: 1, oil: 1, rice: 'white', riceG: 200, ate: 100, egg: 'fried', eggN: 1, prikpla: 0 };
@@ -692,6 +695,81 @@ async function saveMp() {
   if (!st.fromLeft) lsSet('oc_mp', { cnt: st.cnt, riceG: st.riceG, ate: 100 });
   await mutateDay(S.view, ui.date, d => { (d.meals[meal] = d.meals[meal] || []).push(...items); });
   closeSheet(); toast(`บันทึก ${items.map(x => x.n).join(' + ')} · ${n0(r.tot.k)} kcal${r.left > 0 ? ` · จำข้าวเหนียวที่เหลือ ~${n0(r.left)} g ไว้แล้ว` : ''}`, 4000); render();
+}
+/* ---------- กับข้าวถุง: ถุงแกง/ต้มสำเร็จ + เติมเนื้อสัตว์เอง · ชุดน้ำพริก/ผักจิ้ม ---------- */
+const BG_DEF = { tab: 'curry', base: 'yellow', bagG: 300, ate: 100, adds: { snakehead: 230 }, addQ: {}, rice: 'riceladle', ladle: 0, np: {} };
+function bgState() { if (!sheet.bg) { sheet.bg = lsGet('oc_bag', BG_DEF); const b = sheet.bg; b.adds = { ...(b.adds || {}) }; b.addQ = { ...(b.addQ || {}) }; b.np = { ...(b.np || {}) }; b.ate = 100; } return sheet.bg; }
+// อ่านช่องกรอกในหน้า (น้ำหนักถุง % ที่กิน และน้ำหนักเนื้อแต่ละอย่าง) ก่อนวาดใหม่
+function bgRead() {
+  const st = bgState(), g = $('#bgG'), a = $('#bgAte');
+  if (g) { const v = num(g.value); if (v != null && v >= 0) st.bagG = Math.min(2000, Math.round(v)); }
+  if (a) { const v = num(a.value); if (v != null) st.ate = Math.min(100, Math.max(1, Math.round(v))); }
+  document.querySelectorAll('[data-bgq]').forEach(i => { const v = num(i.value), id = i.dataset.bgq; if (v != null && v >= 0 && st.adds[id] != null) { st.adds[id] = Math.round(v * 10) / 10; if (v > 0) st.addQ[id] = st.adds[id]; } });
+}
+function bagSheetBody() {
+  const st = bgState(), lb = t => `<div class="small"><b>${t}</b></div>`;
+  const tabs = `<div class="chips">${[['curry', 'แกง/ต้มถุง + เติมเนื้อ'], ['np', 'ชุดน้ำพริก/ผักจิ้ม']].map(([k, l]) => `<button class="chip" data-act="bagTab" data-v="${k}" aria-pressed="${st.tab === k}">${l}</button>`).join('')}</div>`;
+  const riceRow = r => `${lb('ข้าวที่กินคู่ (ไม่บังคับ · 1 ทัพพี ~60 g)')}
+    ${optChips(BAG.rices, st.rice, 'bgSet', 'rice')}
+    <div class="between" style="align-items:center"><span class="small">จำนวนทัพพี</span>
+      <div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn sm ghost" data-act="bgLadle" data-v="-1" aria-label="ลดข้าว" ${+st.ladle ? '' : 'disabled'}>−</button><b style="min-width:22px;text-align:center">${+st.ladle || 0}</b><button class="btn sm ghost" data-act="bgLadle" data-v="1" aria-label="เพิ่มข้าว">+</button></div></div>
+    ${r ? `<p class="xs muted" style="margin:0">${esc(r.name)} ≈ ${n0(r.k)} kcal</p>` : ''}`;
+  if (st.tab === 'np') {
+    const r = npCalc(st.np), rc = bagCalc(st).rice, tot = rc ? { k: r.tot.k + rc.k, p: Math.round((r.tot.p + rc.p) * 10) / 10, c: Math.round((r.tot.c + rc.c) * 10) / 10, f: Math.round((r.tot.f + rc.f) * 10) / 10 } : r.tot;
+    return `${foodModeChips()}${tabs}
+    <p class="xs muted" style="margin:0">กดชุดสำเร็จเพื่อใส่ของในชุดให้ครบ แล้วกด + / − ปรับตามที่กินจริง (ทีละครึ่งส่วนได้) · ตัวเลขเล็กคือ kcal ต่อ 1 ส่วน</p>
+    ${lb('ชุดสำเร็จ (ใส่ให้ทั้งชุด)')}<div class="chips">${NP_SETS.map(x => `<button class="chip" data-act="npSet" data-v="${x.k}">${esc(x.n)}</button>`).join('')}<button class="chip" data-act="npClear">ล้าง</button></div>
+    ${NAMPRIK.map(x => { const n = +st.np[x.id] || 0; return `<div class="between" style="align-items:center;padding:4px 0;border-bottom:1px solid var(--line)"><div><b class="small">${esc(x.n)}</b> <span class="xs muted">${esc(x.un)} · ${n0(x.k)} kcal</span></div>
+      <div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn sm ghost" data-act="npCnt" data-k="${x.id}" data-v="-0.5" aria-label="ลด ${esc(x.n)}" ${n ? '' : 'disabled'}>−</button><b style="min-width:26px;text-align:center">${n ? frac(n) : 0}</b><button class="btn sm ghost" data-act="npCnt" data-k="${x.id}" data-v="0.5" aria-label="เพิ่ม ${esc(x.n)}">+</button></div></div>`; }).join('')}
+    ${riceRow(rc)}
+    <section class="card gold-edge">${r.items.length ? r.items.map(x => `<div class="between small"><span>${esc(x.name)}</span><span>${n0(x.k)} kcal</span></div>`).join('') : '<div class="small muted">ยังไม่ได้เลือกอะไร</div>'}
+      <div style="margin-top:6px"><span class="big">${n0(tot.k)}</span> <span class="muted">kcal รวม${rc ? 'ข้าว' : ''}</span></div>
+      <div class="small">โปรตีน ${tot.p} g · คาร์บ ${tot.c} g · ไขมัน ${tot.f} g</div></section>
+    ${mealSel()}${photoPicker('รูปชุดน้ำพริก')}
+    <button class="btn pri block" data-act="saveBag" ${r.items.length || rc ? '' : 'disabled'}>บันทึกชุดน้ำพริก</button>`;
+  }
+  const r = bagCalc(st), b = r.base, bagOn = BAG.bags.find(x => x.k === +st.bagG), ateOn = BAG.ate.find(x => x.k === +st.ate);
+  const grp = g => BAG.bases.filter(x => x.g === g);
+  return `${foodModeChips()}${tabs}
+    <p class="xs muted" style="margin:0">เลือกแกงถุงที่ซื้อมา (ค่าแกงคิดเฉพาะน้ำแกง + ผักที่มากับถุง) แล้วเติมเนื้อสัตว์ที่ใส่เอง ชั่งดิบหลังละลาย/สะเด็ดน้ำ · ตัวเลขเล็กคือ kcal ต่อ 100 g</p>
+    ${lb('1. แกง/ต้ม · น้ำใส')}${optChips(grp('ใส'), st.base, 'bgBase', 'base')}
+    ${lb('แกง/ต้ม · มีกะทิ/นม (ไขมันสูงกว่า)')}${optChips(grp('กะทิ'), st.base, 'bgBase', 'base')}
+    <p class="xs muted" style="margin:0">ในถุง: ${esc(b.inc)} · ${n0(b.k2)} kcal/100 g</p>
+    ${lb('2. ขนาดถุง')}<div class="chips">${BAG.bags.map(x => `<button class="chip" data-act="bgSet" data-k="bagG" data-v="${x.k}" aria-pressed="${bagOn?.k === x.k}">${esc(x.n)}</button>`).join('')}</div>
+    <label class="f">หรือใส่น้ำหนักถุงเอง (กรัม · ดูที่ฉลาก/ชั่ง)<input class="in" id="bgG" inputmode="numeric" value="${esc(st.bagG)}"></label>
+    ${lb('3. เนื้อสัตว์ที่เติมเอง (แตะเพื่อเพิ่ม แล้วแก้น้ำหนัก)')}
+    <div class="chips">${BAG.adds.map(id => { const f = FOOD[id]; const on = st.adds[id] != null; return `<button class="chip" data-act="bgAdd" data-v="${id}" aria-pressed="${on}">${esc(f.sn || f.n.replace(/\s*\(.*\)$/, ''))}</button>`; }).join('')}</div>
+    ${Object.keys(st.adds).map(id => { const f = FOOD[id]; if (!f) return ''; const ln = r.lines.find(x => x.id === id); return `<div class="between" style="align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)"><div style="flex:1"><b class="small">${esc(f.n)}</b><div class="xs muted">${ln ? `${n0(ln.k)} kcal · P ${ln.p} g` : 'ใส่น้ำหนัก'}</div></div>
+      <input class="in" style="width:84px" data-bgq="${id}" inputmode="decimal" value="${esc(st.adds[id])}" aria-label="${f.u === 'g' ? 'กรัม' : esc(f.un || 'หน่วย')} ${esc(f.n)}"><span class="xs">${f.u === 'g' ? 'g' : esc(f.un || '')}</span>
+      <button class="btn sm ghost" data-act="bgAdd" data-v="${id}" aria-label="เอา ${esc(f.n)} ออก">×</button></div>`; }).join('')}
+    ${lb('4. กินไปเท่าไร (ทั้งแกงและเนื้อในถุงนี้)')}${optChips(BAG.ate, ateOn ? ateOn.k : '', 'bgSet', 'ate')}
+    <label class="f">หรือใส่เป็น % ที่กิน<input class="in" id="bgAte" inputmode="numeric" value="${esc(st.ate)}"></label>
+    ${riceRow(r.rice)}
+    <section class="card gold-edge"><b>${esc(r.name)}</b><div class="xs muted">${esc(r.desc)}</div>
+      ${r.lines.map(x => `<div class="between xs"><span>${esc(x.n)} · ${esc(x.qs)}</span><span>${n0(x.k)} kcal · P ${x.p} · C ${x.c} · F ${x.f}</span></div>`).join('')}
+      ${r.share < 1 ? `<div class="xs muted">ทั้งถุง ${n0(r.all.k)} kcal → กินจริง ${n0(r.eat.k)} kcal</div>` : ''}
+      ${r.rice ? `<div class="between xs"><span>${esc(r.rice.name)}</span><span>${n0(r.rice.k)} kcal</span></div>` : ''}
+      <div style="margin-top:6px"><span class="big">${n0(r.tot.k)}</span> <span class="muted">kcal รวม</span></div>
+      <div class="small">โปรตีน ${r.tot.p} g · คาร์บ ${r.tot.c} g · ไขมัน ${r.tot.f} g</div></section>
+    ${mealSel()}${photoPicker('รูปแกง/กับข้าว')}
+    <button class="btn pri block" data-act="saveBag">บันทึก${esc(b.n)}${r.rice ? ' + ข้าว' : ''}</button>`;
+}
+async function saveBag() {
+  bgRead();
+  const s = sheet, st = bgState(), meal = $('#fMeal').value, items = [], now = Date.now(), r = bagCalc(st);
+  if (st.tab === 'np') {
+    npCalc(st.np).items.forEach(x => items.push({ n: x.name, q: x.n, qs: x.desc, k: x.k, p: x.p, c: x.c, f: x.f, src: 'np', opt: { id: x.id, n: x.n } }));
+  } else {
+    items.push({ n: r.name, q: 1, qs: r.desc + ' · ' + r.lines.map(x => `${x.n.replace(/\s*\(.*\)$/, '')} ${x.qs}`).join(' + '), k: r.eat.k, p: r.eat.p, c: r.eat.c, f: r.eat.f, src: 'bag', opt: { base: st.base, bagG: +st.bagG, ate: +st.ate, adds: { ...st.adds } } });
+  }
+  if (r.rice) items.push({ n: r.rice.name, q: r.rice.n, qs: r.rice.desc, k: r.rice.k, p: r.rice.p, c: r.rice.c, f: r.rice.f, src: 'bag', opt: { rice: st.rice, ladle: +st.ladle } });
+  if (!items.length) return toast('เลือกของในชุดก่อน');
+  items.forEach((it, i) => { it.t = now + i; it.by = S.me.role; });
+  if (s.ph?.length) items[0].ph = s.ph;
+  lsSet('oc_bag', { tab: st.tab, base: st.base, bagG: st.bagG, adds: st.adds, addQ: st.addQ, rice: st.rice, ladle: st.ladle, np: st.np });
+  await mutateDay(S.view, ui.date, d => { (d.meals[meal] = d.meals[meal] || []).push(...items); });
+  const k = items.reduce((a, x) => a + x.k, 0);
+  closeSheet(); toast(`บันทึก ${items.length} รายการ · ${n0(k)} kcal`, 3500); render();
 }
 /* ---------- จานทำเอง: มิกซ์วัตถุดิบหลายอย่างเป็นจานเดียว แอปรวม kcal/P/C/F ให้ ---------- */
 // สูตรที่จำไว้เก็บที่ people/{คนที่ดูอยู่}/days/_mixes ใช้ซ้ำได้ทุกเครื่อง (อยู่ในข้อมูลของคนนั้นตาม Rules เดิม)
@@ -1719,6 +1797,17 @@ const ACTS = {
     else { st.cnt = { [f.mp]: Math.max(1, Math.round(q)) }; }
     sheet.mode = 'mp'; redrawFood(); },
   saveMp: () => saveMp(),
+  bagTab: el => { if (sheet.mode === 'bag') bgRead(); const st = bgState(); st.tab = el.dataset.v; sheet.mode = 'bag'; redrawFood(); },
+  bgBase: el => { bgRead(); const st = bgState(), b = BAG.bases.find(x => x.k === el.dataset.v); if (!b) return; if (st.base !== b.k && BAG.bags.some(x => x.k === +st.bagG)) st.bagG = b.d; st.base = b.k; redrawFood(); },
+  bgSet: el => { bgRead(); const st = bgState(), k = el.dataset.k; st[k] = k === 'rice' ? el.dataset.v : +el.dataset.v; if (k === 'rice' && !+st.ladle) st.ladle = 2; redrawFood(); },
+  bgAdd: el => { bgRead(); const st = bgState(), id = el.dataset.v, f = FOOD[id]; if (!f) return; if (st.adds[id] != null) delete st.adds[id]; else st.adds[id] = st.addQ[id] || f.d; redrawFood(); },
+  bgLadle: el => { bgRead(); const st = bgState(); st.ladle = Math.max(0, Math.min(8, (+st.ladle || 0) + (+el.dataset.v))); redrawFood(); },
+  bgFrom: el => { const f = FOOD[el.dataset.id]; if (!f?.bg) return; const st = bgState(); st.tab = 'curry'; st.base = f.bg; st.bagG = Math.round(num($('#fQty')?.value) ?? f.d); st.ate = 100; sheet.mode = 'bag'; redrawFood(); },
+  npFrom: el => { const f = FOOD[el.dataset.id]; if (!f?.np) return; const st = bgState(); st.tab = 'np'; st.np = { ...st.np, [f.id]: Math.max(0.5, num($('#fQty')?.value) ?? 1) }; sheet.mode = 'bag'; redrawFood(); },
+  npCnt: el => { const st = bgState(), k = el.dataset.k; st.np = { ...st.np }; st.np[k] = Math.max(0, Math.min(10, (+st.np[k] || 0) + (+el.dataset.v))); if (!st.np[k]) delete st.np[k]; redrawFood(); },
+  npSet: el => { const st = bgState(), x = NP_SETS.find(y => y.k === el.dataset.v); if (!x) return; st.np = { ...x.cnt }; redrawFood(); },
+  npClear: () => { const st = bgState(); st.np = {}; redrawFood(); },
+  saveBag: () => saveBag(),
   mxAdd: el => { mxRead(); mxAdd(el.dataset.id); redrawFood(); },
   mxFromPick: el => { const f = FOOD[el.dataset.id]; if (!f) return; const q = num($('#fQty')?.value) ?? f.d; const st = mxState(); mxRead();
     const it = st.items.find(x => x.id === f.id); if (it) it.q = r1(+it.q + q); else st.items.push({ id: f.id, q: r1(q) });
@@ -1900,6 +1989,7 @@ async function onChange(e) {
     if (el.dataset.set === 'w') convHint(el, m);
     return; }
   if ((el.id === 'mpRiceG' || el.id === 'mpAte') && sheet) { mpReadInputs(); redrawFood(); return; }
+  if ((el.id === 'bgG' || el.id === 'bgAte' || el.dataset?.bgq != null) && sheet?.bg) { bgRead(); redrawFood(); return; }
   if (el.dataset?.mxg != null && sheet?.mx) { mxRead(); redrawFood(); return; }
   if (el.id === 'fQty' && sheet) { sheet.qty = el.value; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); return; }
   if ((el.id === 'aMin') && sheet?.kind === 'act' && sheet.mode === 'auto') { readActForm(); refreshSheet(actSheetBody()); fillThumbs($('#sheetBody')); }

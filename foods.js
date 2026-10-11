@@ -513,6 +513,88 @@ export function mpCalc(st){
  const tot=[pork,rice].filter(Boolean).reduce((a,x)=>({k:a.k+x.k,p:R1(a.p+x.p),c:R1(a.c+x.c),f:R1(a.f+x.f)}),{k:0,p:0,c:0,f:0});
  return {pork,rice,g,left:bag-g,tot};
 }
+// ===== กับข้าวถุงสำเร็จรูป (แกง/ต้ม ซื้อมาเป็นถุง แล้วเติมเนื้อสัตว์เอง) =====
+// ค่า k/p/c/f ต่อ 100 g ของ "น้ำแกง + ผัก/เครื่อง ที่มากับถุง ไม่รวมเนื้อสัตว์" · d = น้ำหนักถุงทั่วไป (g)
+// ประมาณจากสูตรมาตรฐาน: พริกแกง 25–40 g · ผัก 120–180 g · น้ำ/กะทิ ต่อถุง ~300 g (ร้านกับข้าว/ถุงสำเร็จในซูเปอร์ฯ)
+export const BAG={
+ bases:[
+  {k:'yellow',n:'แกงเหลือง',g:'ใส',d:300,k2:27,p:1,c:4.7,f:0.5,inc:'น้ำแกง + หน่อไม้ดอง/มะละกอ/ผักบุ้ง',al:'แกงเหลือง แกงส้มใต้ แกงเหลืองปลา แกงเหลืองหน่อไม้ดอง แกงเหลืองมะละกอ'},
+  {k:'som',n:'แกงส้ม (ภาคกลาง)',g:'ใส',d:300,k2:28,p:1,c:5.3,f:0.3,inc:'น้ำแกง + ผักรวม/ผักกาดดอง/ดอกแค',al:'แกงส้ม แกงส้มผักรวม แกงส้มชะอม'},
+  {k:'mara',n:'ต้มมะระ',g:'ใส',d:300,k2:17,p:0.8,c:2.3,f:0.5,inc:'น้ำซุปใส + มะระ (ยังไม่มีหมู)',al:'ต้มมะระ มะระ มะระยัดไส้ แกงจืดมะระ ต้มมะระยัดไส้'},
+  {k:'jabchai',n:'ต้มจับฉ่าย',g:'ใส',d:300,k2:30,p:1.3,c:4,f:1,inc:'น้ำซุป + ผักรวมตุ๋น (ยังไม่มีซี่โครง)',al:'ต้มจับฉ่าย จับฉ่าย ต้มจับไฉ่ จับไฉ่'},
+  {k:'pa',n:'แกงป่า',g:'ใส',d:300,k2:20,p:0.8,c:3,f:0.7,inc:'น้ำแกง + มะเขือ/ถั่วฝักยาว/กระชาย',al:'แกงป่า'},
+  {k:'liang',n:'แกงเลียง',g:'ใส',d:300,k2:23,p:1,c:4.3,f:0.3,inc:'น้ำแกง + ฟักทอง/บวบ/ข้าวโพดอ่อน/ใบแมงลัก',al:'แกงเลียง'},
+  {k:'jued',n:'แกงจืด (ผักกาด/ผักรวม/วุ้นเส้น)',g:'ใส',d:300,k2:12,p:0.7,c:1.7,f:0.3,inc:'น้ำซุปใส + ผัก',al:'แกงจืด ต้มจืด ต้มจืดผักกาด แกงจืดวุ้นเส้น'},
+  {k:'tyclear',n:'ต้มยำน้ำใส',g:'ใส',d:300,k2:15,p:0.7,c:2.3,f:0.3,inc:'น้ำต้มยำ + เห็ด/ข่า/ตะไคร้',al:'ต้มยำ ต้มยำน้ำใส ต้มยำเห็ด'},
+  {k:'khlong',n:'ต้มโคล้ง',g:'ใส',d:300,k2:13,p:0.7,c:2.3,f:0.2,inc:'น้ำต้ม + หอมแดง/ใบมะขาม/พริกแห้ง',al:'ต้มโคล้ง ต้มโคล้งปลาย่าง'},
+  {k:'taipla',n:'แกงไตปลา',g:'ใส',d:300,k2:40,p:2.7,c:4,f:1.3,inc:'น้ำแกงไตปลา + ฟักทอง/หน่อไม้/มะเขือ',al:'แกงไตปลา ไตปลา'},
+  {k:'palo',n:'น้ำพะโล้',g:'ใส',d:300,k2:30,p:0.7,c:6,f:0.3,inc:'น้ำพะโล้ (ยังไม่มีไข่/หมู)',al:'พะโล้ ไข่พะโล้ หมูพะโล้'},
+  {k:'tycream',n:'ต้มยำน้ำข้น',g:'กะทิ',d:300,k2:43,p:1,c:3,f:3,inc:'น้ำต้มยำ + นมข้นจืด/กะทิ + เห็ด',al:'ต้มยำน้ำข้น ต้มยำ'},
+  {k:'kha',n:'ต้มข่า',g:'กะทิ',d:300,k2:73,p:0.8,c:3,f:6.7,inc:'น้ำกะทิ + ข่า/เห็ด',al:'ต้มข่า ต้มข่าไก่'},
+  {k:'green',n:'แกงเขียวหวาน',g:'กะทิ',d:300,k2:87,p:1,c:4,f:7.7,inc:'น้ำแกงกะทิ + มะเขือ',al:'แกงเขียวหวาน เขียวหวาน'},
+  {k:'red',n:'แกงเผ็ด/แกงแดง (กะทิ)',g:'กะทิ',d:300,k2:83,p:1,c:3.7,f:7.3,inc:'น้ำแกงกะทิ + มะเขือ/หน่อไม้',al:'แกงเผ็ด แกงแดง แกงเผ็ดเป็ด'},
+  {k:'panang',n:'พะแนง/ฉู่ฉี่ (กะทิข้น)',g:'กะทิ',d:200,k2:150,p:1.5,c:6,f:13.5,inc:'น้ำพะแนงกะทิข้น (ยังไม่มีเนื้อ)',al:'พะแนง ฉู่ฉี่'}
+ ],
+ bags:[{k:150,n:'ครึ่งถุง ~150 g'},{k:200,n:'ถุงเล็ก ~200 g'},{k:300,n:'ถุงมาตรฐาน ~300 g'},{k:400,n:'ถุงใหญ่/ซองสำเร็จ ~400 g'}],
+ // เนื้อสัตว์ที่เติมเอง: ใช้ค่าจากคลัง (ดิบ ชั่งหลังละลาย/สะเด็ดน้ำ) · d = ค่าเริ่มต้น
+ adds:['snakehead','snakeheadbone','shrimpraw','tilapia','seabass','dory','salmon','squid','chickbr','chickthigh','porktl','porkmince','beeflean','porkribbone','maraball','chaomegg','egg','tofu','fishball','porkball'],
+ ate:[{k:100,n:'หมดถุง'},{k:75,n:'¾'},{k:50,n:'ครึ่ง'},{k:33,n:'⅓'},{k:25,n:'¼'}],
+ rices:[{k:'riceladle',n:'ข้าวสวย'},{k:'brownladle',n:'ข้าวกล้อง'},{k:'riceberryladle',n:'ไรซ์เบอร์รี่'}]
+};
+// ชุดน้ำพริก/ผักจิ้ม (เช่น ชุดน้ำพริกลงเรือแบบซูเปอร์ฯ) · ค่าต่อ 1 ส่วนตามที่เขียนในวงเล็บ
+export const NAMPRIK=[
+ {id:'np_longruea',n:'น้ำพริกลงเรือ',un:'ถ้วย ~60 g',k:150,p:6,c:15,f:7,al:'น้ำพริกลงเรือ ชุดน้ำพริก'},
+ {id:'np_kapi',n:'น้ำพริกกะปิ',un:'ถ้วย ~40 g',k:50,p:2.5,c:7,f:1.5,al:'น้ำพริกกะปิ'},
+ {id:'np_noom',n:'น้ำพริกหนุ่ม',un:'ถ้วย ~50 g',k:45,p:1.5,c:8,f:1,al:'น้ำพริกหนุ่ม'},
+ {id:'np_ong',n:'น้ำพริกอ่อง',un:'ถ้วย ~80 g',k:120,p:7,c:8,f:6.5,al:'น้ำพริกอ่อง'},
+ {id:'np_platoo',n:'น้ำพริกปลาทู',un:'ถ้วย ~60 g',k:90,p:7,c:6,f:4,al:'น้ำพริกปลาทู'},
+ {id:'np_narok',n:'น้ำพริกตาแดง/นรก/เผา (แบบแห้งมีน้ำมัน)',un:'ช้อน ~30 g',k:120,p:3,c:7,f:9,al:'น้ำพริกตาแดง น้ำพริกนรก น้ำพริกเผา'},
+ {id:'np_moowan',n:'หมูหวาน',un:'ส่วน ~50 g',k:190,p:10,c:18,f:9,al:'หมูหวาน หมูเค็ม'},
+ {id:'np_pladukfoo',n:'ปลาดุกฟู',un:'ส่วน ~40 g',k:230,p:7,c:8,f:19,al:'ปลาดุกฟู ยำปลาดุกฟู'},
+ {id:'np_eggsalted',n:'ไข่เค็ม',un:'ฟอง',k:125,p:9,c:2,f:9,al:'ไข่เค็ม'},
+ {id:'np_platootod',n:'ปลาทูทอด',un:'ตัว (~80 g เนื้อ)',k:220,p:18,c:0,f:16,al:'ปลาทูทอด ปลาทู'},
+ {id:'np_platoonueng',n:'ปลาทูนึ่ง',un:'ตัว (~80 g เนื้อ)',k:130,p:16,c:0,f:7,al:'ปลาทูนึ่ง ปลาทู'},
+ {id:'np_chaom',n:'ชะอมทอดไข่',un:'ชิ้น ~50 g',k:130,p:5.5,c:1.5,f:11.5,al:'ชะอมทอดไข่ ชะอมไข่ ไข่ชะอม'},
+ {id:'np_eggboil',n:'ไข่ต้ม',un:'ฟอง',k:72,p:6.3,c:0.4,f:4.8,al:'ไข่ต้ม'},
+ {id:'np_veg',n:'ผักสด/ผักลวก',un:'ส่วน ~150 g',k:40,p:2,c:8,f:0.3,al:'ผักสด ผักลวก ผักจิ้ม แตงกวา ถั่วฝักยาว กะหล่ำ'},
+ {id:'np_vegfried',n:'ผักชุบแป้งทอด',un:'ส่วน ~80 g',k:240,p:3,c:20,f:16,al:'ผักชุบแป้งทอด ผักทอด มะเขือชุบไข่'},
+ {id:'np_kaeb',n:'แคบหมู',un:'ส่วน ~20 g',k:110,p:12,c:0,f:6.5,al:'แคบหมู'}
+];
+// ชุดสำเร็จ: กดแล้วใส่จำนวนให้ทั้งชุด (แก้เพิ่ม/ลดได้)
+export const NP_SETS=[
+ {k:'longruea',n:'ชุดน้ำพริกลงเรือ',cnt:{np_longruea:1,np_moowan:1,np_eggsalted:0.5,np_pladukfoo:1,np_veg:1}},
+ {k:'kapi',n:'ชุดน้ำพริกกะปิ ปลาทู ผักลวก',cnt:{np_kapi:1,np_platootod:1,np_veg:1,np_chaom:1}},
+ {k:'noom',n:'ชุดน้ำพริกหนุ่ม แคบหมู',cnt:{np_noom:1,np_kaeb:1,np_veg:1}}
+];
+// สเตต: {base, bagG, ate, adds:{id:q}, rice:'riceladle', ladle:n}
+export function bagCalc(st){
+ const b=BAG.bases.find(x=>x.k===st.base)||BAG.bases[0], g=Math.max(0,+st.bagG||0), share=Math.min(100,Math.max(1,+st.ate||100))/100;
+ const base=qAdd({k:0,p:0,c:0,f:0},b,g/100);
+ const lines=[{n:`${b.n} (ไม่รวมเนื้อ)`,qs:`${g} g`,...qFinish(base)}];
+ let t={...base}; const names=[];
+ for(const [id,q0] of Object.entries(st.adds||{})){ const f=FOOD[id], q=+q0; if(!f||!(q>0)) continue;
+  const x=f.u==='g'?q/100:q, v={k:f.k*x,p:f.p*x,c:f.c*x,f:f.f*x};
+  t={k:t.k+v.k,p:t.p+v.p,c:t.c+v.c,f:t.f+v.f};
+  const sn=f.sn||f.n.replace(/\s*\(.*\)$/,'');
+  names.push(`${sn} ${f.u==='g'?q+' g':q+' '+(f.un||'')}`.trim());
+  lines.push({id,n:f.n,qs:f.u==='g'?`${q} g`:`${q} ${f.un||''}`.trim(),...qFinish(v)});
+ }
+ const al=BAG.ate.find(x=>x.k===Math.round(share*100));
+ const name=`${b.n}${names.length?' + '+names.join(' + '):''}`;
+ const desc=`กับข้าวถุง ${g} g${names.length?' · เติมเนื้อเอง':''} · ${share>=1?'กินหมด':al?'กิน '+al.n:'กิน '+Math.round(share*100)+'%'}`;
+ const all=qFinish(t), eat=qFinish({k:t.k*share,p:t.p*share,c:t.c*share,f:t.f*share});
+ const rf=FOOD[st.rice]||FOOD.riceladle, ln=Math.max(0,+st.ladle||0);
+ const rice=ln>0?{name:`${rf.n.replace(/\s*\(.*\)$/,'')} ${ln} ทัพพี`,n:ln,desc:`~${Math.round(ln*60)} g`,...qFinish({k:rf.k*ln,p:rf.p*ln,c:rf.c*ln,f:rf.f*ln})}:null;
+ const tot=[eat,rice].filter(Boolean).reduce((a,x)=>({k:a.k+x.k,p:R1(a.p+x.p),c:R1(a.c+x.c),f:R1(a.f+x.f)}),{k:0,p:0,c:0,f:0});
+ return {base:b,name,desc,lines,all,eat,share,rice,tot};
+}
+export const frac=n=>{ const w=Math.floor(n), h=Math.round((n-w)*2)/2; return h===0.5?(w?w+'½':'½'):String(Math.round(n*10)/10); };
+export function npCalc(cnt){
+ const rows=NAMPRIK.map(x=>({x,n:Math.max(0,+(cnt||{})[x.id]||0)})).filter(r=>r.n>0);
+ const items=rows.map(r=>({id:r.x.id,name:`${r.x.n} ${frac(r.n)} ${r.x.un.split(' ')[0]}`,n:r.n,desc:r.x.un,...qFinish({k:r.x.k*r.n,p:r.x.p*r.n,c:r.x.c*r.n,f:r.x.f*r.n})}));
+ const tot=items.reduce((a,x)=>({k:a.k+x.k,p:R1(a.p+x.p),c:R1(a.c+x.c),f:R1(a.f+x.f)}),{k:0,p:0,c:0,f:0});
+ return {items,tot};
+}
 // ===== ก๋วยเตี๋ยว · ชามร้านทั่วไป =====
 export const NOODLE={
  types:[
@@ -631,6 +713,15 @@ export function normTh(s){ return String(s||'').toLowerCase().replace(/บ[ร�
 
 // คาเฟ่: เครื่องดื่มทุกแบบ + เบเกอรี่ ให้ค้นเจอในคลัง
 FOODS.push(...cafeFoods());
+// กับข้าวถุง: เนื้อที่มักเติมเอง/มากับถุง + ชุดน้ำพริก + ตัวแกงแต่ละถุง ให้ค้นในคลังเจอ
+FOODS.push(
+ {id:'snakeheadbone',n:'ปลาช่อนหั่นชิ้นติดก้าง (ดิบ ชั่งรวมก้าง · เนื้อ ~70%)',sn:'ปลาช่อนติดก้าง',u:'g',d:300,k:68,p:13.3,c:0,f:1.4,cat:'ปลา',al:'ปลาช่อน ปลาช่อนหั่นแว่น ติดก้าง'},
+ {id:'porkribbone',n:'ซี่โครงหมูอ่อน (ดิบ ชั่งรวมกระดูก)',sn:'ซี่โครงหมู',u:'g',d:150,k:180,p:12,c:0,f:14.5,cat:'หมู',al:'ซี่โครงหมู กระดูกอ่อน ซี่โครงอ่อน'},
+ {id:'maraball',n:'มะระยัดไส้หมูสับ (ชิ้น ~60 g หมู ~25 g)',sn:'มะระยัดไส้',u:'pc',un:'ชิ้น',d:3,k:60,p:5,c:1.5,f:4,cat:'หมู',al:'มะระยัดไส้ ต้มมะระ'},
+ {id:'chaomegg',n:'ชะอมทอดไข่ (ชิ้น ~50 g)',sn:'ชะอมทอดไข่',u:'pc',un:'ชิ้น',d:2,k:130,p:5.5,c:1.5,f:11.5,cat:'ไข่',al:'ชะอมทอดไข่ ชะอมไข่ แกงส้มชะอม'}
+);
+FOODS.push(...NAMPRIK.map(x=>({id:x.id,n:`${x.n} (${x.un})`,u:'pc',un:x.un.split(' ')[0],d:1,k:x.k,p:x.p,c:x.c,f:x.f,cat:'น้ำพริก/ผักจิ้ม',al:x.al+' น้ำพริก ชุดน้ำพริก',np:1})));
+FOODS.push(...BAG.bases.map(b=>({id:'bg_'+b.k,n:`${b.n} · กับข้าวถุง ไม่รวมเนื้อสัตว์ (${b.inc})`,u:'g',d:b.d,k:b.k2,p:b.p,c:b.c,f:b.f,cat:'กับข้าวถุง (แกง/ต้ม)',al:b.al+' กับข้าวถุง แกงถุง อาหารถุง',bg:b.k})));
 export const FOOD=Object.fromEntries(FOODS.map(f=>[f.id,f]));
 
 export const WORKOUT_TYPES=[['push','Push (ดัน) · อก ไหล่ หลังแขน'],['pull','Pull (ดึง) · หลัง สะบัก หน้าแขน'],['legs','Legs (ขา) + ทรงตัว'],['other','อื่น ๆ']];

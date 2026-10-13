@@ -1,10 +1,10 @@
 // The Olympic Club by PT-Palm — แอปติดตามอาหารและการเทรน (ลูกค้า / เทรนเนอร์ / เจ้าของระบบ)
 import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN, RECAPTCHA_SITE_KEY } from './firebase-config.js?v=20260929b';
-import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, MIX_GROUPS, MIX_SUM, MIX_ATE, BAG, NAMPRIK, NP_SETS, quickCalc, noodleCalc, mpCalc, mixCalc, bagCalc, npCalc, frac, normTh } from './foods.js?v=20261011c';
+import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX_SUM, MIX_ATE, BAG, NAMPRIK, NP_SETS, quickCalc, noodleCalc, mpCalc, ktCalc, mixCalc, bagCalc, npCalc, frac, normTh } from './foods.js?v=20261013a';
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261011d';
+const VER = '20261013a';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -531,6 +531,7 @@ function foodSheetBody() {
   if (s.mode === 'noodle') return noodleSheetBody();
   if (s.mode === 'cafe') return cafeSheetBody();
   if (s.mode === 'mp') return mpSheetBody();
+  if (s.mode === 'kt') return ktSheetBody();
   if (s.mode === 'bag') return bagSheetBody();
   if (s.mode === 'mix') return mixSheetBody();
   const q = (s.q || '').trim().toLowerCase(), qn = normTh(q);
@@ -538,6 +539,7 @@ function foodSheetBody() {
   const hintCafe = qn && /กาแฟ|ลาเต|อเมิกา|มอคคา|คาปู|เอสเย็น|ชาเย็น|ชานม|โกโก|มทฉ|มจฉ|มัท|ชาเขียว|สมูท|คาเฟ|เบเกอ|ควซอง|คซอง|เคก|บาวนี|มฟฟิน|คุกกี|โอเลียง|นมชมพู|ขนม|latte|mocha|coffee|americano|matcha|cafe/.test(qn);
   const hintQ = qn && /กเพา|ขาว|ผด|บอกโคล|ไขดาว|ตามสง|ราด|กวยเตยว|เสน|บหม|เยนตาโฟ|เกาเหลา|มามา|กวยจบ|วนเสน/.test(qn);
   const hintMp = qn && /หมูป|เหนียว|เหนยว|sticky|moo ?ping/.test(qn);
+  const hintKt = q && /กล้วย|เผือก|มันทอด|มันเทศทอด|ข้าวเม่า|ฟักทอง|ไข่นกกระทา|ปั่นทอด|ปั้นทอด|ของทอด|banana/.test(q);
   const hintBag = qn && /แกง|ตมม|ตมยำ|ตมขา|ตมจืด|ตมโคลง|จบฉาย|พโล|พแนง|ฉฉี|ไตปลา|ถุง|นำพิก|ผกจิม|ผกลวก/.test(qn);
   const lres = q ? (labLib() || []).map((x, i) => ({ x, i })).filter(({ x }) => x.n.toLowerCase().includes(q) || (qn && normTh(x.n).includes(qn))).slice(0, 8) : [];
   const hintLab = q && /เซเว่น|เซเวน|7-?11|711|ข้าวกล่อง|แช่แข็ง|ฉลาก|สำเร็จรูป|ซีพี|อีซี่โก|\bcp\b|ซอง|ขวด|กระป๋อง/i.test(q);
@@ -548,7 +550,7 @@ function foodSheetBody() {
     const qty = num(s.qty) ?? f.d; const v = foodCalc(f, qty);
     pickHtml = `<section class="card gold-edge"><b>${esc(f.n)}</b>
       <label class="f">${f.u === 'g' ? 'น้ำหนัก (กรัม)' : 'จำนวน (' + esc(f.un || 'หน่วย') + ')'}<input class="in" id="fQty" inputmode="decimal" value="${esc(s.qty ?? f.d)}"></label>
-      <div class="small">≈ <b>${n0(v.k)} kcal</b> · P ${v.p} · C ${v.c} · F ${v.f} g</div>${f.qk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="qkFrom" data-id="${f.id}">ปรับข้าว ไข่ น้ำมัน หรือสั่งพิเศษ ›</button>` : ''}${f.cf || f.bk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="cfFrom" data-id="${f.id}">${f.cf ? 'ปรับขนาด นม ความหวาน ท็อปปิ้ง หรือเพิ่มขนม ›' : 'เพิ่มเครื่องดื่มคู่กัน ›'}</button>` : ''}<button class="btn sm ghost" style="margin-top:8px" data-act="mxFromPick" data-id="${f.id}">ใส่ลงจานทำเอง · มิกซ์กับวัตถุดิบอื่น ›</button>${f.bg ? `<button class="btn sm ghost" style="margin-top:8px" data-act="bgFrom" data-id="${f.id}">เติมเนื้อสัตว์ใส่แกงนี้ (เช่น ปลาช่อน กุ้ง) · ใส่ว่ากินไปเท่าไร ›</button>` : ''}${f.np ? `<button class="btn sm ghost" style="margin-top:8px" data-act="npFrom" data-id="${f.id}">ประกอบชุดน้ำพริก + ผักจิ้ม + ของทานเล่น ›</button>` : ''}${f.mp ? `<button class="btn sm ghost" style="margin-top:8px" data-act="mpFrom" data-id="${f.id}">ประกอบชุดหมูปิ้ง + ข้าวเหนียว · ใส่ว่ากินข้าวไปเท่าไร ›</button>` : ''}</section>`;
+      <div class="small">≈ <b>${n0(v.k)} kcal</b> · P ${v.p} · C ${v.c} · F ${v.f} g</div>${f.qk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="qkFrom" data-id="${f.id}">ปรับข้าว ไข่ น้ำมัน หรือสั่งพิเศษ ›</button>` : ''}${f.cf || f.bk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="cfFrom" data-id="${f.id}">${f.cf ? 'ปรับขนาด นม ความหวาน ท็อปปิ้ง หรือเพิ่มขนม ›' : 'เพิ่มเครื่องดื่มคู่กัน ›'}</button>` : ''}<button class="btn sm ghost" style="margin-top:8px" data-act="mxFromPick" data-id="${f.id}">ใส่ลงจานทำเอง · มิกซ์กับวัตถุดิบอื่น ›</button>${f.bg ? `<button class="btn sm ghost" style="margin-top:8px" data-act="bgFrom" data-id="${f.id}">เติมเนื้อสัตว์ใส่แกงนี้ (เช่น ปลาช่อน กุ้ง) · ใส่ว่ากินไปเท่าไร ›</button>` : ''}${f.np ? `<button class="btn sm ghost" style="margin-top:8px" data-act="npFrom" data-id="${f.id}">ประกอบชุดน้ำพริก + ผักจิ้ม + ของทานเล่น ›</button>` : ''}${f.kt ? `<button class="btn sm ghost" style="margin-top:8px" data-act="ktFrom" data-id="${f.id}">ประกอบถุงของทอด ผสมหลายอย่าง · ใส่ว่ากินไปเท่าไร ›</button>` : ''}${f.mp ? `<button class="btn sm ghost" style="margin-top:8px" data-act="mpFrom" data-id="${f.id}">ประกอบชุดหมูปิ้ง + ข้าวเหนียว · ใส่ว่ากินข้าวไปเท่าไร ›</button>` : ''}</section>`;
   }
   return `${foodModeChips()}
     <label class="f">ค้นหาอาหาร<input class="in" id="fSearch" value="${esc(s.q || '')}" placeholder="เช่น ไข่ ปลา ข้าว อกไก่" autocomplete="off"></label>
@@ -557,6 +559,7 @@ function foodSheetBody() {
     ${hintCafe ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="cafe">ประกอบแก้วเครื่องดื่ม + ขนม (คาเฟ่) ›</button></div>` : ''}
     ${hintMix ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="mix">ทำกินเอง? มิกซ์หลายวัตถุดิบเป็นจานเดียว (เช่น มาม่า + ไข่ 3 ฟอง + ผักโขม) ›</button></div>` : ''}
     ${hintBag ? `<div class="chips"><button class="chip" data-act="bagTab" data-v="curry">กับข้าวถุง + เติมเนื้อสัตว์เอง ›</button><button class="chip" data-act="bagTab" data-v="np">ชุดน้ำพริก/ผักจิ้ม ›</button></div>` : ''}
+    ${hintKt ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="kt">ประกอบถุงกล้วยทอด/มันทอด/เผือกทอด (นับชิ้น ใส่ว่ากินไปเท่าไร) ›</button></div>` : ''}
     ${hintMp ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="mp">ประกอบหมูปิ้ง + ข้าวเหนียว (ใส่ปริมาณที่กินจริง) ›</button></div>` : ''}
     ${hintQ ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="quick">ประกอบจานด่วน/ข้าวราด ›</button><button class="chip" data-act="foodMode" data-v="noodle">ประกอบชามก๋วยเตี๋ยว ›</button></div>` : ''}
     ${res.length ? `<div class="foodres">${res.map(x => `<button type="button" data-act="pickFood" data-id="${x.id}">${esc(x.n)} <span class="xs muted">· ${x.d} ${x.u === 'g' ? 'g' : esc(x.un || '')} · ${n0(foodCalc(x, x.d).k)} kcal</span></button>`).join('')}</div>` : (q && !lres.length ? '<p class="small muted" style="margin:0">ไม่พบในคลัง ลองคำอื่น · ของมีฉลากกด “📷 สแกนฉลาก” · หรือกด “กรอกเอง”</p>' : '')}
@@ -565,7 +568,7 @@ function foodSheetBody() {
 }
 function foodModeChips() {
   const m = sheet.mode || 'db';
-  return `<div class="chips">${[['db', 'ค้นจากคลัง'], ['label', '📷 สแกนฉลาก'], ['mix', 'ทำเอง/มิกซ์วัตถุดิบ'], ['quick', 'จานด่วน/ข้าวราด'], ['noodle', 'ก๋วยเตี๋ยว'], ['cafe', 'คาเฟ่/กาแฟ'], ['mp', 'หมูปิ้ง/ข้าวเหนียว'], ['bag', 'กับข้าวถุง/น้ำพริก'], ['manual', 'กรอกเอง']].map(([k, l]) => `<button class="chip" data-act="foodMode" data-v="${k}" aria-pressed="${m === k}">${l}</button>`).join('')}</div>`;
+  return `<div class="chips">${[['db', 'ค้นจากคลัง'], ['label', '📷 สแกนฉลาก'], ['mix', 'ทำเอง/มิกซ์วัตถุดิบ'], ['quick', 'จานด่วน/ข้าวราด'], ['noodle', 'ก๋วยเตี๋ยว'], ['cafe', 'คาเฟ่/กาแฟ'], ['mp', 'หมูปิ้ง/ข้าวเหนียว'], ['kt', 'กล้วยทอด/ของทอด'], ['bag', 'กับข้าวถุง/น้ำพริก'], ['manual', 'กรอกเอง']].map(([k, l]) => `<button class="chip" data-act="foodMode" data-v="${k}" aria-pressed="${m === k}">${l}</button>`).join('')}</div>`;
 }
 /* ---------- จานด่วน / ก๋วยเตี๋ยว: เลือกเหมือนสั่งที่ร้าน แอปคำนวณ kcal ให้ ---------- */
 const QK_DEF = { style: 'krapao', protein: 'porkmince', size: 1, oil: 1, rice: 'white', riceG: 200, ate: 100, egg: 'fried', eggN: 1, prikpla: 0 };
@@ -701,6 +704,36 @@ async function saveMp() {
   if (!st.fromLeft) lsSet('oc_mp', { cnt: st.cnt, riceG: st.riceG, ate: 100 });
   await mutateDay(S.view, ui.date, d => { (d.meals[meal] = d.meals[meal] || []).push(...items); });
   closeSheet(); toast(`บันทึก ${items.map(x => x.n).join(' + ')} · ${n0(r.tot.k)} kcal${r.left > 0 ? ` · จำข้าวเหนียวที่เหลือ ~${n0(r.left)} g ไว้แล้ว` : ''}`, 4000); render();
+}
+/* ---------- กล้วยทอด/ของทอดรถเข็น: นับชิ้นหลายอย่าง · ความมัน · กินไปเท่าไร ---------- */
+const KT_DEF = { cnt: { banana: 4 }, oil: 100, ate: 100 };
+function ktState() { if (!sheet.kt) { sheet.kt = lsGet('oc_kt', KT_DEF); sheet.kt.cnt = { ...(sheet.kt.cnt || {}) }; sheet.kt.ate = 100; } return sheet.kt; }
+function ktRead() { const st = ktState(), a = $('#ktAte'); if (a) { const v = num(a.value); if (v != null) st.ate = Math.min(100, Math.max(1, Math.round(v))); } }
+function ktSheetBody() {
+  const st = ktState(), r = ktCalc(st), lb = t => `<div class="small"><b>${t}</b></div>`, ateOn = KTOD.ate.find(x => x.k === +st.ate);
+  return `${foodModeChips()}
+    <p class="xs muted" style="margin:0">ของทอดรถเข็น นับชิ้นที่ซื้อมา ผสมหลายอย่างในถุงเดียวได้ · ตัวเลขเล็กคือ kcal ต่อชิ้น · ถุง 20 บาท มัก 4–6 ชิ้น</p>
+    ${lb('1. ในถุงมีอะไรบ้าง (กด + / − นับชิ้น)')}
+    ${KTOD.types.map(x => { const n = +(st.cnt || {})[x.k] || 0; return `<div class="between" style="align-items:center;padding:4px 0;border-bottom:1px solid var(--line)"><div><b class="small">${esc(x.n)}</b> <span class="xs muted">${esc(x.d)} · ${n0(x.k2)} kcal</span></div>
+      <div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn sm ghost" data-act="ktCnt" data-k="${x.k}" data-v="-1" aria-label="ลด ${esc(x.n)}" ${n ? '' : 'disabled'}>−</button><b style="min-width:22px;text-align:center">${n}</b><button class="btn sm ghost" data-act="ktCnt" data-k="${x.k}" data-v="1" aria-label="เพิ่ม ${esc(x.n)}">+</button></div></div>`; }).join('')}
+    ${lb('2. ความมัน')}${optChips(KTOD.oil, +st.oil || 100, 'ktSet', 'oil')}
+    ${lb('3. กินไปเท่าไรของที่ซื้อมา (แบ่งกันกินก็ใส่ตรงนี้)')}${optChips(KTOD.ate, ateOn ? ateOn.k : '', 'ktSet', 'ate')}
+    <label class="f">หรือใส่เป็น % ที่กิน<input class="in" id="ktAte" inputmode="numeric" value="${esc(st.ate)}"></label>
+    <section class="card gold-edge">${r.item ? `<div><b>${esc(r.item.name)}</b><div class="xs muted">${esc(r.item.desc)}</div></div>` : '<div class="small muted">ยังไม่ได้เลือกของทอด</div>'}
+      <div style="margin-top:6px"><span class="big">${n0(r.tot.k)}</span> <span class="muted">kcal รวม</span></div>
+      <div class="small">โปรตีน ${r.tot.p} g · คาร์บ ${r.tot.c} g · ไขมัน ${r.tot.f} g</div></section>
+    ${mealSel()}${photoPicker('รูปถุงของทอด')}
+    <button class="btn pri block" data-act="saveKt" ${r.item ? '' : 'disabled'}>บันทึกของทอด</button>`;
+}
+async function saveKt() {
+  ktRead();
+  const s = sheet, st = ktState(), r = ktCalc(st), meal = $('#fMeal').value;
+  if (!r.item) return toast('เลือกของทอดก่อน');
+  const it = { n: r.item.name, q: r.item.ne, qs: r.item.desc, k: r.item.k, p: r.item.p, c: r.item.c, f: r.item.f, src: 'kt', opt: { cnt: { ...st.cnt }, oil: +st.oil || 100, ate: +st.ate }, t: Date.now(), by: S.me.role };
+  if (s.ph?.length) it.ph = s.ph;
+  lsSet('oc_kt', { cnt: st.cnt, oil: +st.oil || 100, ate: 100 });
+  await mutateDay(S.view, ui.date, d => { (d.meals[meal] = d.meals[meal] || []).push(it); });
+  closeSheet(); toast(`บันทึก ${it.n} · ${n0(it.k)} kcal`); render();
 }
 /* ---------- กับข้าวถุง: ถุงแกง/ต้มสำเร็จ + เติมเนื้อสัตว์เอง · ชุดน้ำพริก/ผักจิ้ม ---------- */
 const BG_DEF = { tab: 'curry', base: 'yellow', bagG: 300, ate: 100, adds: { snakehead: 230 }, addQ: {}, rice: 'riceladle', ladle: 0, np: {} };
@@ -1950,6 +1983,10 @@ const ACTS = {
     else { st.cnt = { [f.mp]: Math.max(1, Math.round(q)) }; }
     sheet.mode = 'mp'; redrawFood(); },
   saveMp: () => saveMp(),
+  ktCnt: el => { ktRead(); const st = ktState(), k = el.dataset.k; st.cnt = { ...(st.cnt || {}) }; st.cnt[k] = Math.max(0, Math.min(30, (+st.cnt[k] || 0) + (+el.dataset.v))); if (!st.cnt[k]) delete st.cnt[k]; redrawFood(); },
+  ktSet: el => { ktRead(); const st = ktState(); st[el.dataset.k] = +el.dataset.v; redrawFood(); },
+  ktFrom: el => { const f = FOOD[el.dataset.id]; if (!f?.kt) return; const st = ktState(), q = num($('#fQty')?.value) ?? f.d; st.cnt = { [f.kt]: Math.max(1, Math.round(q)) }; st.ate = 100; sheet.mode = 'kt'; redrawFood(); },
+  saveKt: () => saveKt(),
   bagTab: el => { if (sheet.mode === 'bag') bgRead(); const st = bgState(); st.tab = el.dataset.v; sheet.mode = 'bag'; redrawFood(); },
   bgBase: el => { bgRead(); const st = bgState(), b = BAG.bases.find(x => x.k === el.dataset.v); if (!b) return; if (st.base !== b.k && BAG.bags.some(x => x.k === +st.bagG)) st.bagG = b.d; st.base = b.k; redrawFood(); },
   bgSet: el => { bgRead(); const st = bgState(), k = el.dataset.k; st[k] = k === 'rice' ? el.dataset.v : +el.dataset.v; if (k === 'rice' && !+st.ladle) st.ladle = 2; redrawFood(); },

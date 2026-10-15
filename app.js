@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261015b';
+const VER = '20261015c';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -104,7 +104,7 @@ function roleTabs() {
 function renderTabs() {
   const bar = $('#tabbar'); const tabs = roleTabs();
   bar.hidden = false;
-  bar.innerHTML = `<div class="in">${tabs.map(([k, l, ic]) => `<button class="tab" data-act="tab" data-v="${k}" ${ui.tab === k || (k === 'body' && ui.tab === 'progress') ? 'aria-current="page"' : ''}>${svg(ic, 24)}<span>${l}</span></button>`).join('')}</div>`;
+  bar.innerHTML = `<div class="in">${tabs.map(([k, l, ic]) => `<button class="tab" data-act="tab" data-v="${k}" ${ui.tab === k || (k === 'body' && (ui.tab === 'progress' || ui.tab === 'plan')) ? 'aria-current="page"' : ''}>${svg(ic, 24)}<span>${l}</span></button>`).join('')}</div>`;
   const v = $('#viewing');
   if (viewingClient()) { v.hidden = false; v.innerHTML = `<span>กำลังดูข้อมูลของ <b>${esc(S.cache.get('p:' + S.view)?.name || '')}</b></span><button class="btn sm ghost" style="color:#fff;border-color:#C9D3DF;background:transparent" data-act="exitClient">‹ กลับ</button>`; }
   else v.hidden = true;
@@ -465,6 +465,7 @@ async function render() {
       if (t === 'workouts') return await renderWorkouts(pid);
       if (t === 'body') return await renderBody(pid);
       if (t === 'progress') return await renderProgress(pid);
+      if (t === 'plan') return await renderPlan(pid);
       if (t === 'coach') return await renderCoach(pid);
       return await renderMore();
     }
@@ -1274,7 +1275,7 @@ async function renderBody(pid) {
   const cell = (label, k, unit) => `<div><div class="xs muted">${label}</div><b style="font-size:18px">${last && num(last[k]) != null ? r1(last[k]) + unit : '—'}</b>${unit === ' kg' && last && num(last[k]) != null ? `<span class="xs muted"> ${lbOf(num(last[k]))} lb</span>` : ''}<br>${delta(k, unit)}</div>`;
   const wd = w.length > 1 ? w[w.length - 1].v - w[0].v : null;
   setMain(`<h1>ร่างกาย</h1>
-    <button class="btn gold block" data-act="tab" data-v="progress">${svg('chart', 18)} สรุปความคืบหน้า · เปรียบเทียบผลวัด</button>
+    <div class="grid2"><button class="btn gold" data-act="tab" data-v="progress">${svg('chart', 18)} สรุปความคืบหน้า</button><button class="btn pri" data-act="tab" data-v="plan">${svg('spark', 18)} วิเคราะห์ InBody · แผนเดือนหน้า</button></div>
     <section class="card"><div class="between"><b>น้ำหนัก</b>${wd != null ? `<span class="small blue"><b>${wd >= 0 ? '+' : ''}${r1(wd)} kg</b> <span class="xs muted">(${wd >= 0 ? '+' : ''}${lbOf(wd)} lb)</span></span>` : ''}</div>${lineChart(w, '#1D3A5C')}${w.length ? `<p class="xs muted" style="margin:0">ล่าสุด ${kgTxt(w[w.length - 1].v)}</p>` : ''}</section>
     <section class="card"><div class="between"><b>ผลสแกนล่าสุด</b><span class="xs muted">${last ? thDate(last.date) : ''}</span></div>
       ${last ? `<div class="grid3">${cell('น้ำหนัก', 'weight', ' kg')}${cell('กล้ามเนื้อ SMM', 'smm', ' kg')}${cell('ไขมัน', 'fatPct', '%')}</div>${last.ph?.length ? `<div class="thumbs">${thumbsHtml(last.ph)}</div>` : ''}` : '<p class="small muted" style="margin:0">ยังไม่มีผลสแกน กด “เพิ่มผลสแกน” แล้วแนบใบ InBody ได้เลย</p>'}</section>
@@ -1383,7 +1384,8 @@ async function pgBehavior(pid, a, b) {
   const burnBy = {}; for (const x of acts) burnBy[x.date] = (burnBy[x.date] || 0) + (+x.kcal || 0);
   const within = goal ? logged.filter(x => x.t.k <= goal + (t.addBurn === false ? 0 : (burnBy[x.d.id] || 0)) + 100).length : null;
   const coach = ss.filter(x => x.status === 'logged' && x.date >= a && x.date <= b).length;
-  return { span, n, kcal: avg('k'), prot: avg('p'), goal, goalP: num(t.p), within, acts: acts.length, actsWk: acts.length / wk, burnWk: acts.reduce((s2, x) => s2 + (+x.kcal || 0), 0) / wk, coach, coachWk: coach / wk };
+  const own = acts.filter(x => x.type !== 'coach').length;
+  return { span, n, kcal: avg('k'), prot: avg('p'), goal, goalP: num(t.p), within, acts: own, actsWk: own / wk, burnWk: acts.reduce((s2, x) => s2 + (+x.kcal || 0), 0) / wk, coach, coachWk: coach / wk };
 }
 function pgInsights(A, B, get, beh, lastDate) {
   const out = []; const add = (tone, title, txt) => out.push({ tone, title, txt });
@@ -1475,6 +1477,310 @@ async function renderProgress(pid) {
     </div></section>
     ${gk ? `<section class="card"><div class="between"><b>กราฟทีละจุด</b><select class="in" style="max-width:55%;min-height:40px" data-act="pgK" aria-label="เลือกจุดที่วัด">${keysWithData.map(([k, l]) => `<option value="${k}" ${k === gk ? 'selected' : ''}>${l}</option>`).join('')}</select></div>${lineChart(gpts, '#1D3A5C')}<p class="xs muted" style="margin:0">หน่วย ${CIRC.some(([k]) => k === gk) ? 'cm' : (PG_COMP.find(([k]) => k === gk) || [])[2] || ''} · ${gpts.length} ครั้งล่าสุด</p></section>` : ''}
     <p class="xs muted center">อ่านผลอัตโนมัติจากตัวเลขที่บันทึก ใช้ประกอบการคุยกับโค้ช ไม่ใช่คำวินิจฉัยทางการแพทย์</p>`);
+}
+
+/* ---------- ลูกค้า: วิเคราะห์ InBody + แผนเดือนถัดไป ---------- */
+// แผนและข้อมูลประกอบเก็บที่ people/{pid}/days/_plans (อยู่ในสิทธิ์ข้อมูลรายวันเดิม ไม่ต้องแก้ Rules)
+// { info: { sex: 'f'|'m', height, goalSmm, goalFatPct }, list: [แผนแต่ละรอบ { start, base (วันที่สแกนที่ใช้ตั้งแผน), nextScan, kcal, p, c, f, water, strengthWk, cardioMin, target{} }] }
+const planRef = pid => D('people', pid, 'days', '_plans');
+const CARDIO_T = ['swim', 'walk', 'bike', 'class'];
+const STRENGTH_T = ['coach', 'weights'];
+const E_FAT = 9440, E_FFM = 1816; // พลังงานที่สะสม/ปล่อยออก ต่อไขมัน 1 kg และมวลไร้ไขมัน 1 kg (Hall 2008)
+const SEX_TH = { f: 'หญิง', m: 'ชาย' };
+function scanSnaps(rows) {
+  let lastW = null; // ผลสแกนที่ไม่มีน้ำหนัก ใช้น้ำหนักที่ชั่งล่าสุดก่อนหน้า
+  return bodySnaps(rows).map(x => { if (x.weight != null) lastW = x.weight; return { ...x, weightAuto: x.weight == null && lastW != null, weight: x.weight ?? lastW }; }).filter(x => x.smm != null || x.fatKg != null || x.fatPct != null).map(x => {
+    const w = x.weight ?? null;
+    const fatKg = x.fatKg ?? (w != null && x.fatPct != null ? w * x.fatPct / 100 : null);
+    const fatPct = x.fatPct ?? (w && fatKg != null ? fatKg / w * 100 : null);
+    return { ...x, fatKg, fatPct, ffm: w != null && fatKg != null ? w - fatKg : null };
+  });
+}
+async function planBehavior(pid, a, b) {
+  const [days, acts, ss] = await Promise.all([
+    list(fb.query(C('people', pid, 'days'), fb.where(fb.documentId(), '>=', a), fb.where(fb.documentId(), '<=', b))).catch(() => []),
+    actsRange(pid, a, b).catch(() => []), sessionsFor(pid).catch(() => [])]);
+  return planBehCalc(a, b, days, acts, ss);
+}
+function planBehCalc(a, b, days, acts, ss) {
+  const span = Math.max(1, daysBetween(a, b) + 1); const wk = span / 7;
+  const dd = days.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.id) && d.id >= a && d.id <= b);
+  const logged = dd.map(d => ({ d, t: dayTotals(d) })).filter(x => x.t.k > 0); const n = logged.length;
+  const avg = k => n ? logged.reduce((s, x) => s + x.t[k], 0) / n : null;
+  const meal = {};
+  for (const m of MEALS) {
+    const v = logged.filter(x => (x.d.meals?.[m] || []).length).map(x => x.d.meals[m].reduce((s, it) => s + (+it.p || 0), 0));
+    if (v.length) meal[m] = { p: v.reduce((s, x) => s + x, 0) / v.length, n: v.length };
+  }
+  const wd = dd.filter(d => +d.water > 0);
+  const by = {};
+  for (const x of acts) { if (x.date < a || x.date > b) continue; const o = by[x.type || 'other'] || (by[x.type || 'other'] = { n: 0, min: 0, kcal: 0 }); o.n++; o.min += +x.min || 0; o.kcal += +x.kcal || 0; }
+  const sum = (ks, f) => ks.reduce((s, k) => s + (by[k]?.[f] || 0), 0);
+  const coach = ss.filter(x => x.status === 'logged' && x.date >= a && x.date <= b).sort((x, y) => (x.date + (x.time || '')).localeCompare(y.date + (y.time || '')));
+  const grp = {}; for (const s of coach) for (const t of typeList(s)) grp[t] = (grp[t] || 0) + 1;
+  // ท่าที่น้ำหนักขึ้น: น้ำหนักสูงสุดครั้งแรกกับครั้งล่าสุดของแต่ละท่าในช่วงนี้
+  const tops = {};
+  for (const s of coach) for (const m of s.moves || []) { const top = Math.max(0, ...(m.sets || []).map(x => setKg(m.u, x.w))); if (top > 0) (tops[m.name] || (tops[m.name] = [])).push(top); }
+  const rep = Object.values(tops).filter(v => v.length >= 2);
+  return {
+    a, b, span, wk, n, kcal: avg('k'), p: avg('p'), c: avg('c'), f: avg('f'), meal,
+    water: wd.length ? wd.reduce((s, d) => s + (+d.water), 0) / wd.length : null, waterN: wd.length,
+    by, burnDay: sum(Object.keys(by), 'kcal') / span, strengthWk: sum(STRENGTH_T, 'n') / wk,
+    cardioMinWk: sum(CARDIO_T, 'min') / wk, cardioWk: sum(CARDIO_T, 'n') / wk,
+    coachN: coach.length, grp, movesRep: rep.length, movesUp: rep.filter(v => v[v.length - 1] > v[0]).length
+  };
+}
+// วิเคราะห์ล้วน ๆ (ไม่แตะฐานข้อมูล) L = สแกนล่าสุด, P = สแกนก่อนหน้า, beh = พฤติกรรมช่วงระหว่างสองสแกน
+function planAnalyze({ L, P, info = {}, beh, t = {}, evalPlan }) {
+  const sex = info.sex; const W = L.weight; const ffm = L.ffm; const fp = L.fatPct;
+  const hiFat = fp != null && fp >= (sex === 'm' ? 25 : sex === 'f' ? 35 : 30);
+  const midFat = fp != null && fp >= (sex === 'm' ? 20 : sex === 'f' ? 28 : 24);
+  const fatRange = sex === 'm' ? [10, 20] : sex === 'f' ? [18, 28] : null;
+  const bmr = L.bmr ?? (ffm != null ? 370 + 21.6 * ffm : null); const bmrEst = L.bmr == null && bmr != null;
+  // 1) ผลเทียบครั้งก่อน
+  let res = null;
+  if (P) {
+    const days = Math.max(1, daysBetween(P.date, L.date)); const k = 28 / days;
+    const d = key => L[key] != null && P[key] != null ? L[key] - P[key] : null;
+    const dS = d('smm'), dF = d('fatKg'), dW = d('weight'), dM = d('ffm'), dFp = d('fatPct'), dV = d('visceral');
+    const sUp = dS != null && dS >= 0.2, sDn = dS != null && dS <= -0.3, fDn = dF != null && dF <= -0.3, fUp = dF != null && dF >= 0.3;
+    let r;
+    if (fDn && sUp) r = ['good', 'ไขมันลด กล้ามเพิ่ม (Body recomposition)', 'ผลที่ดีที่สุดสำหรับเป้าเพิ่มกล้ามลดไขมัน แผนช่วงที่ผ่านมาได้ผล ทำต่อ และค่อย ๆ เพิ่มน้ำหนักที่ยก'];
+    else if (fDn && !sDn) r = ['good', 'ไขมันลด รักษากล้ามไว้ได้', 'ลดไขมันได้โดยไม่เสียกล้าม เดือนหน้าเน้นเพิ่มน้ำหนักยกหรือจำนวนเซ็ต เพื่อให้กล้ามขึ้นด้วย'];
+    else if (fDn && sDn) r = ['bad', 'ไขมันลด แต่กล้ามเนื้อลดด้วย', 'ขาดพลังงานมากเกินไป หรือโปรตีนและเวทยังไม่พอ เดือนหน้าลดส่วนที่ขาดลง เพิ่มโปรตีน และคงเวทอย่างน้อย 3 ครั้ง/สัปดาห์'];
+    else if (sUp && !fUp) r = ['good', 'กล้ามเพิ่ม ไขมันยังนิ่ง', 'เวทกับโปรตีนได้ผลแล้ว ถ้าอยากให้ไขมันลดด้วย ลดแคลลงเล็กน้อยหรือเพิ่มคาร์ดิโอ'];
+    else if (sUp && fUp) r = ['watch', 'กล้ามเพิ่ม แต่ไขมันเพิ่มด้วย', 'กินมากกว่าที่ใช้จริง ถ้าเป้าคือลดไขมัน ปรับแคลให้ต่ำกว่าที่ใช้จริง'];
+    else if (fUp) r = ['bad', 'ไขมันเพิ่ม', 'กินมากกว่าที่ใช้จริง ตรวจแคลที่บันทึกเทียบเป้า และของที่อาจไม่ได้บันทึก (เครื่องดื่ม ขนม น้ำมัน)'];
+    else if (sDn) r = ['bad', 'กล้ามเนื้อลด', 'เพิ่มโปรตีนให้ถึงเป้าทุกวัน และเพิ่มความถี่เวท'];
+    else r = ['watch', 'ไขมันและกล้ามยังเปลี่ยนไม่ชัด', 'ปรับทีละอย่าง: ลดแคล 150–250 kcal/วัน หรือเพิ่มคาร์ดิโอ 30–60 นาที/สัปดาห์ พร้อมเพิ่มน้ำหนักยก'];
+    const leanShare = dW != null && dW <= -0.5 && dM != null ? Math.max(0, -dM) / -dW : null;
+    let tdeeReal = null, tdeeWhy = '';
+    if (beh.kcal == null) tdeeWhy = 'ยังไม่มีบันทึกอาหารในช่วงนี้';
+    else if (dF == null || dM == null) tdeeWhy = 'ผลสแกนไม่มีมวลไขมัน';
+    else if (beh.n / beh.span < 0.6) tdeeWhy = `บันทึกอาหาร ${beh.n} จาก ${beh.span} วัน น้อยเกินไปที่จะคำนวณ`;
+    else if (days < 14) tdeeWhy = 'ผลสแกนห่างกันไม่ถึง 14 วัน';
+    else {
+      const v = beh.kcal - (E_FAT * dF + E_FFM * dM) / days;
+      if (bmr && (v < bmr * 1.05 || v > bmr * 2.4)) tdeeWhy = `คำนวณได้ ${n0(v)} kcal ซึ่งไม่สมเหตุสมผล อาจมีอาหารที่ไม่ได้บันทึก`; else tdeeReal = v;
+    }
+    res = { days, k, dS, dF, dW, dM, dFp, dV, tone: r[0], title: r[1], txt: r[2], leanShare, tdeeReal, tdeeWhy, sDn };
+  }
+  // 2) พลังงานและเป้าอาหาร
+  const tdeeEst = bmr ? bmr * 1.25 + beh.burnDay : null;
+  const tdee = res?.tdeeReal ?? tdeeEst;
+  const why = [];
+  // ส่วนที่ขาดต่อวัน: ไขมันมากขาดได้มากกว่า (≈0.5–0.7% ของน้ำหนักตัว/สัปดาห์) ไขมันน้อยขาดน้อยเพื่อรักษากล้าม
+  let deficit = hiFat ? 750 : midFat ? 500 : 350;
+  const wkPct = res && res.dW != null && P?.weight ? -res.dW / P.weight * 100 * 7 / res.days : 0;
+  if (res?.sDn) { deficit -= 200; why.push('กล้ามลดในรอบที่แล้ว'); }
+  else if (wkPct > 1) { deficit -= 150; why.push('น้ำหนักลดเร็วกว่า 1%/สัปดาห์'); }
+  else if (res?.tone === 'good' && res.tdeeReal != null && beh.kcal != null && res.tdeeReal - beh.kcal > deficit) { deficit = Math.min(1000, res.tdeeReal - beh.kcal); why.push('แคลที่กินช่วงที่ผ่านมาได้ผลดี จึงคงไว้ใกล้เดิม'); }
+  else if (res && res.dF != null && res.dF > -0.3 && beh.n / beh.span >= 0.6) why.push('ไขมันยังไม่ลด');
+  deficit = Math.max(200, deficit);
+  const floor = Math.max(bmr || 0, sex === 'm' ? 1500 : 1200);
+  const total = tdee ? Math.max(floor, Math.round((tdee - deficit) / 10) * 10) : null;
+  if (total != null && tdee) deficit = Math.max(0, tdee - total); // ถ้าชนขั้นต่ำ BMR ส่วนที่ขาดจริงจะน้อยลง
+  const addBurn = t.addBurn !== false;
+  const kcal = total == null ? null : addBurn ? Math.max(Math.round((bmr || 0) / 10) * 10, Math.round((total - beh.burnDay) / 10) * 10) : total;
+  const pLo = Math.max(1.2 * W, ffm != null ? 2.0 * ffm : 0), pHi = Math.max(pLo, Math.min(2.2 * W, Math.max(1.6 * W, ffm != null ? 2.6 * ffm : 0)));
+  const prot = Math.round((res?.sDn ? pHi : (pLo + pHi) / 2) / 5) * 5;
+  const fatG = kcal ? Math.round(kcal * 0.27 / 9) : null;
+  const carb = kcal ? Math.max(0, Math.round((kcal - prot * 4 - fatG * 9) / 4)) : null;
+  const water = Math.min(4000, Math.max(2000, Math.round(W * 33 / 100) * 100));
+  // 3) เป้าการออกกำลังกาย
+  const sW = beh.strengthWk, cM = beh.cardioMinWk;
+  const strengthT = sW >= 3 ? Math.min(4, Math.round(sW)) : 3;
+  let cardioT = cM < 150 ? 150 : cM > 300 && res?.sDn ? 240 : Math.round(cM / 10) * 10;
+  if (res && !res.sDn && res.dF != null && res.dF > -0.3 && cM >= 150 && cM <= 300) cardioT = Math.round((cM + 45) / 10) * 10;
+  // 4) เป้า InBody ครั้งหน้า (4 สัปดาห์)
+  // ไขมันที่ลดได้ใน 4 สัปดาห์ = ส่วนที่ขาด × 28 วัน ÷ 9,440 kcal (ถ้ายังคำนวณพลังงานไม่ได้ ใช้ 0.5% ของน้ำหนักตัว/สัปดาห์)
+  const fatLoss = L.fatKg != null ? r1(total != null ? deficit * 28 / E_FAT : W * 0.005 * 4) : null;
+  const smmGain = L.smm != null ? r1((sex === 'm' ? 0.5 : 0.3) * (sW >= 2 ? 1 : 0.7)) : null;
+  const ratio = L.smm && ffm ? L.smm / ffm : 0.55;
+  const tg = {};
+  if (smmGain != null) tg.smm = r1(L.smm + smmGain);
+  if (fatLoss != null) tg.fatKg = r1(L.fatKg - fatLoss);
+  if (W != null) tg.weight = r1(W - (fatLoss || 0) + (smmGain || 0) / ratio);
+  if (tg.fatKg != null && tg.weight) tg.fatPct = r1(tg.fatKg / tg.weight * 100);
+  const goalSmm = num(info.goalSmm); const monthsToGoal = goalSmm && L.smm != null && smmGain ? Math.max(0, Math.ceil((goalSmm - L.smm) / smmGain)) : null;
+  const goalFp = num(info.goalFatPct); const monthsToFp = goalFp && fp != null && tg.fatPct != null && fp - tg.fatPct > 0 ? Math.max(0, Math.ceil((fp - goalFp) / (fp - tg.fatPct))) : null;
+  // 5) คำแนะนำทีละข้อ
+  const food = [], ex = [], add = (arr, tone, title, txt) => arr.push({ tone, title, txt });
+  if (kcal) add(food, 'plan', `พลังงาน ${n0(kcal)} kcal/วัน${addBurn ? ' + แคลที่ออกกำลังกาย' : ''}`,
+    `${res?.tdeeReal != null ? `ใช้พลังงานจริงประมาณ ${n0(tdee)} kcal/วัน (คำนวณจากไขมันและกล้ามที่เปลี่ยนจริง)` : `ประมาณจาก BMR ${n0(bmr)} kcal${bmrEst ? ' (ประมาณจากมวลไร้ไขมัน)' : ''} รวมการออกกำลังกาย ≈ ${n0(tdee)} kcal/วัน`} ตั้งให้ขาด ${n0(deficit)} kcal/วัน (ไขมันลดราว ${r1(deficit * 28 / E_FAT)} kg ใน 4 สัปดาห์)${why.length ? ' · ' + why.join(' · ') : ''}${addBurn ? ` · แอปนับแคลที่เผาคืนให้ (เฉลี่ย ${n0(beh.burnDay)} kcal/วัน) รวมแล้วกินได้ราว ${n0(total)} kcal/วัน` : ''} · ไม่ต่ำกว่า BMR เพื่อรักษากล้าม`);
+  if (t.kcal && kcal && Math.abs(t.kcal - kcal) >= 100) add(food, 'watch', `เป้าเดิม ${n0(t.kcal)} → แนะนำ ${n0(kcal)} kcal`,
+    kcal > t.kcal ? 'เพิ่มเป้าขึ้นเพื่อไม่ให้เสียกล้าม'
+      : beh.kcal != null && beh.kcal < t.kcal - 150 ? `ช่วงที่ผ่านมากินจริงเฉลี่ย ${n0(beh.kcal)} kcal/วัน ต่ำกว่าเป้าเดิมอยู่แล้ว จึงตั้งเป้าให้ตรงกับที่กินจริงและได้ผล` : 'ลดเป้าลงเพื่อให้ไขมันลดต่อเนื่อง');
+  if (beh.kcal != null && kcal && beh.kcal > kcal + (addBurn ? beh.burnDay : 0) + 150) add(food, 'bad', `ช่วงที่ผ่านมากินเฉลี่ย ${n0(beh.kcal)} kcal/วัน เกินเป้า`, 'จุดที่ปรับง่าย: เครื่องดื่มหวาน/กาแฟใส่นม ขนม เบเกอรี่ และน้ำมันในอาหาร');
+  add(food, 'plan', `โปรตีน ${prot} g/วัน (${r1(prot / W)} g/kg)`, `ขั้นต่ำ ${n0(pLo)} g · มื้อหลักละ ${n0(prot / 3.5)}–${n0(prot / 3)} g แบ่งให้ใกล้เคียงกันทุกมื้อ ดีต่อการสร้างกล้ามมากกว่ากินมากมื้อเดียว`);
+  if (beh.p != null && beh.p < pLo * 0.9) add(food, 'bad', `โปรตีนช่วงที่ผ่านมาเฉลี่ย ${n0(beh.p)} g/วัน ยังต่ำ`, 'เพิ่ม ไข่ ปลา กุ้ง อกไก่ เต้าหู้ กรีกโยเกิร์ต หรือนม ในมื้อที่โปรตีนน้อย');
+  const mealLow = MEALS.filter(m => m !== 'ว่าง' && beh.meal[m] && beh.meal[m].p < prot / 4).map(m => `${m} ${n0(beh.meal[m].p)} g`);
+  if (mealLow.length) add(food, 'watch', 'มื้อที่โปรตีนน้อย', `${mealLow.join(' · ')} (เฉลี่ยต่อมื้อ) เพิ่มโปรตีนในมื้อนี้ให้ได้ ${n0(prot / 3.5)} g ขึ้นไป`);
+  if (carb != null) add(food, 'plan', `คาร์บ ${carb} g · ไขมัน ${fatG} g`, 'คาร์บเน้นข้าวกล้อง/ไรซ์เบอร์รี่ มันเทศ ผลไม้ จัดไว้มื้อก่อนหรือหลังเทรน ไขมันจากปลา ไข่ ถั่ว น้ำมันมะกอก · ผักครึ่งจานทุกมื้อหลัก');
+  add(food, beh.water != null && beh.water < water - 300 ? 'watch' : 'plan', `น้ำ ${n0(water)} มล./วัน`, `${beh.water != null ? `ช่วงที่ผ่านมาเฉลี่ย ${n0(beh.water)} มล. · ` : ''}วันที่ออกกำลังกายเพิ่มอีก 500 มล.`);
+  if (beh.n / beh.span < 0.7) add(food, 'watch', `บันทึกอาหาร ${beh.n} จาก ${beh.span} วัน`, 'บันทึกให้ได้อย่างน้อย 6 วัน/สัปดาห์ ระบบจะคำนวณพลังงานที่ใช้จริงได้แม่นขึ้นเมื่อ InBody ครั้งหน้าเข้ามา');
+  add(ex, sW < 3 ? 'watch' : 'plan', `เวทเทรนนิ่ง ${strengthT} ครั้ง/สัปดาห์`, `ช่วงที่ผ่านมา ${r1(sW)} ครั้ง/สัปดาห์ (เทรนกับโค้ช + เวทเอง) ${sW < 3 ? '· เพิ่มเวทเองอีก 1 วัน ใช้ท่าหลักที่โค้ชสอน' : '· คงความถี่นี้ไว้'} พักกลุ่มกล้ามเดิมอย่างน้อย 48 ชม.`);
+  if (beh.movesRep) add(ex, beh.movesUp / beh.movesRep >= 0.5 ? 'good' : 'watch', `ท่าที่น้ำหนักขึ้น ${beh.movesUp} จาก ${beh.movesRep} ท่า`, beh.movesUp / beh.movesRep >= 0.5 ? 'มีการพัฒนาดี ทำ progressive overload ต่อ: ถ้าทำครบทุกเซ็ตตามจำนวนครั้ง ครั้งหน้าเพิ่มน้ำหนัก 2.5–5%' : 'น้ำหนักยกยังไม่ขึ้น เดือนหน้าเพิ่มทีละน้อย (2.5–5%) หรือเพิ่ม 1–2 ครั้งต่อเซ็ต เพื่อให้กล้ามได้แรงกระตุ้นใหม่');
+  else add(ex, 'plan', 'เพิ่มน้ำหนักยกทีละน้อย (Progressive overload)', 'ทำ 3–4 เซ็ต เซ็ตละ 8–12 ครั้ง ให้เหลือแรงอีก 1–2 ครั้งตอนจบเซ็ต ทำครบแล้วครั้งหน้าเพิ่มน้ำหนัก 2.5–5%');
+  const g = beh.grp; const fb2 = g['Full body'] || 0; const push = (g.Push || 0) + fb2, pull = (g.Pull || 0) + fb2, legs = (g.Legs || 0) + fb2;
+  if (beh.coachN >= 3 && legs < Math.max(push, pull) * 0.6) add(ex, 'watch', `ขาเทรนน้อยกว่าส่วนอื่น (ขา ${legs} · ดัน ${push} · ดึง ${pull})`, 'ขาและก้นเป็นกล้ามเนื้อมัดใหญ่ ช่วยเพิ่ม SMM และการเผาผลาญได้มากที่สุด เพิ่มท่าขา 1–2 ท่าทุกครั้งที่เทรน');
+  else if (beh.coachN >= 3 && pull < push * 0.6) add(ex, 'watch', `ดึง/หลังน้อยกว่าดัน (ดึง ${pull} · ดัน ${push})`, 'เพิ่มท่าดึง เช่น Lat Pulldown, Seated Row ให้สมดุล ช่วยท่าทางและไหล่');
+  add(ex, cM < 150 ? 'watch' : 'plan', `คาร์ดิโอ ${cardioT} นาที/สัปดาห์`, `ช่วงที่ผ่านมา ${n0(cM)} นาที/สัปดาห์${Object.keys(beh.by).filter(k => CARDIO_T.includes(k)).map(k => ` · ${ACT[k][0]} ${n0(beh.by[k].min / beh.wk)} นาที`).join('')} · เน้นระดับเหนื่อยปานกลาง (ยังพูดเป็นประโยคได้) ถ้าวันเดียวกับเวท ให้เวทก่อน`);
+  if (L.visceral != null && L.visceral >= 10) add(ex, 'watch', `ไขมันช่องท้องระดับ ${r1(L.visceral)} (ควรต่ำกว่า 10)`, 'คาร์ดิโอสม่ำเสมอ ลดน้ำตาลและแอลกอฮอล์ และนอนให้ได้ 7–8 ชม. ช่วยลดไขมันช่องท้องได้ดี');
+  add(ex, 'plan', 'เดินเพิ่มในชีวิตประจำวัน', 'เดินให้ได้ 7,000–8,000 ก้าว/วัน หรือเดินเบา ๆ 10–15 นาทีหลังมื้อ ช่วยเผาผลาญโดยไม่กระทบการฟื้นตัวของกล้าม');
+  // 6) ประเมินแผนรอบที่แล้ว
+  let ev = null;
+  if (evalPlan && res) {
+    const rows = [];
+    const cmp = (label, k, unit, dir) => { const tg0 = num(evalPlan.target?.[k]), a0 = P[k], a1 = L[k]; if (tg0 == null || a0 == null || a1 == null) return;
+      const want = tg0 - a0, got = a1 - a0; const ok = want === 0 ? Math.abs(got) < 0.3 : got / want >= 0.8; const part = want !== 0 && got * dir > 0 && !ok;
+      rows.push({ label, unit, start: a0, target: tg0, actual: a1, ok, part }); };
+    cmp('กล้ามเนื้อ SMM', 'smm', 'kg', 1); cmp('มวลไขมัน', 'fatKg', 'kg', -1); cmp('น้ำหนัก', 'weight', 'kg', -1); cmp('เปอร์เซ็นต์ไขมัน', 'fatPct', '%', -1);
+    const adh = [];
+    const ad = (label, plan, act, unit, better) => { if (plan == null || act == null) return; const ok = better === 'le' ? act <= plan * 1.07 : act >= plan * 0.9; adh.push({ label, plan, act, unit, ok }); };
+    ad('แคลเฉลี่ย/วัน', evalPlan.kcal != null ? evalPlan.kcal + (evalPlan.addBurn !== false ? beh.burnDay : 0) : null, beh.kcal, 'kcal', 'le');
+    ad('โปรตีน/วัน', evalPlan.p, beh.p, 'g', 'ge');
+    ad('เวท/สัปดาห์', evalPlan.strengthWk, beh.strengthWk, 'ครั้ง', 'ge');
+    ad('คาร์ดิโอ/สัปดาห์', evalPlan.cardioMin, beh.cardioMinWk, 'นาที', 'ge');
+    ad('บันทึกอาหาร', 6, beh.n / beh.wk, 'วัน/สัปดาห์', 'ge');
+    const hit = rows.filter(x => x.ok).length;
+    ev = { plan: evalPlan, rows, adh, hit, adhOk: adh.filter(x => x.ok).length };
+  }
+  return { sex, fatRange, hiFat, bmr, bmrEst, res, tdee, tdeeEst, deficit, total, kcal, addBurn, prot, pLo, pHi, fatG, carb, water, strengthT, cardioT, fatLoss, smmGain, tg, goalSmm, monthsToGoal, goalFp, monthsToFp, food, ex, ev };
+}
+function planText(name, L, an, nextScan) {
+  const lines = [`แผนเดือนถัดไป · ${name || ''}`, `จาก InBody ${thDate(L.date, true)}: น้ำหนัก ${r1(L.weight)} kg · SMM ${r1(L.smm)} kg · ไขมัน ${r1(L.fatKg)} kg (${r1(L.fatPct)}%)`];
+  if (an.res) lines.push(`เทียบครั้งก่อน: ${an.res.title} (SMM ${sgn(an.res.dS ?? 0)} kg · ไขมัน ${sgn(an.res.dF ?? 0)} kg ใน ${an.res.days} วัน)`);
+  lines.push('', 'อาหาร');
+  if (an.kcal) lines.push(`• พลังงาน ${n0(an.kcal)} kcal/วัน${an.addBurn ? ' + แคลที่ออกกำลังกาย' : ''}`);
+  lines.push(`• โปรตีน ${an.prot} g · คาร์บ ${an.carb ?? '—'} g · ไขมัน ${an.fatG ?? '—'} g`, `• น้ำ ${n0(an.water)} มล./วัน`, '', 'ออกกำลังกาย', `• เวทเทรนนิ่ง ${an.strengthT} ครั้ง/สัปดาห์ เพิ่มน้ำหนักทีละ 2.5–5%`, `• คาร์ดิโอ ${an.cardioT} นาที/สัปดาห์`, '', `เป้า InBody ครั้งหน้า (${thDate(nextScan, true)})`);
+  if (an.tg.smm != null) lines.push(`• SMM ${an.tg.smm} kg (+${an.smmGain})`);
+  if (an.tg.fatKg != null) lines.push(`• ไขมัน ${an.tg.fatKg} kg (−${an.fatLoss}) · ${an.tg.fatPct}%`);
+  if (an.tg.weight != null) lines.push(`• น้ำหนักประมาณ ${an.tg.weight} kg`);
+  return lines.join('\n');
+}
+async function renderPlan(pid) {
+  const back = `<button class="btn sm ghost" style="align-self:flex-start" data-act="tab" data-v="body">‹ ร่างกาย</button>`;
+  const [rows, pdoc, p] = await Promise.all([bodyRows(pid), get(planRef(pid)).catch(() => null), person(pid)]);
+  const info = pdoc?.info || {}; const plans = (pdoc?.list || []).slice().sort((a, b) => String(a.start).localeCompare(String(b.start)));
+  const scans = scanSnaps(rows); const L = scans[scans.length - 1], P = scans[scans.length - 2];
+  if (!L) return setMain(`${back}<section class="card"><h1>วิเคราะห์ InBody</h1><p class="small muted" style="margin:0">ยังไม่มีผล InBody ไปที่แท็บร่างกาย กด “เพิ่มผลสแกน” แนบรูปใบ InBody แล้วให้ AI กรอกให้ จากนั้นกลับมาที่หน้านี้</p></section>`);
+  if (L.weight == null) return setMain(`${back}<section class="card"><h1>วิเคราะห์ InBody</h1><p class="small muted" style="margin:0">ผลสแกนวันที่ ${thDate(L.date, true)} ยังไม่มีน้ำหนัก เพิ่มน้ำหนักในผลสแกน หรือกด “บันทึกน้ำหนัก” ที่แท็บร่างกาย</p></section>`);
+  const today = todayStr();
+  const a = P ? P.date : addDays(L.date, -27), b = P ? addDays(L.date, -1) : L.date;
+  const beh = await planBehavior(pid, a, b < a ? a : b);
+  const evalPlan = P ? [...plans].reverse().find(x => x.base === P.date || (x.start > P.date && x.start <= L.date)) : null;
+  const t = p?.targets || {};
+  const an = planAnalyze({ L, P, info, beh, t, evalPlan });
+  const active = plans.filter(x => x.base === L.date).pop() || null;
+  const nextScan = active?.nextScan || (addDays(L.date, 28) > today ? addDays(L.date, 28) : addDays(today, 28));
+  ui.planCur = { pid, L, an, nextScan, name: p?.name };
+  // ติดตามแผนปัจจุบัน
+  let trackHtml = '';
+  if (active) {
+    const tb = await planBehavior(pid, active.start, today);
+    const left = daysBetween(today, active.nextScan);
+    const bar = (label, act, plan, unit, mode) => { if (plan == null) return ''; const pct = act == null ? 0 : Math.min(100, Math.round(act / plan * 100)); const ok = act != null && (mode === 'le' ? act <= plan * 1.07 : act >= plan * 0.9);
+      return `<div><div class="between small"><span>${label}</span><b class="${act == null ? 'muted' : ok ? 'pg-good' : 'pg-bad'}">${act == null ? '—' : n0(act)} / ${n0(plan)} ${unit}</b></div><div style="height:8px;border-radius:4px;background:#EFEAE0;overflow:hidden"><div style="height:100%;width:${pct}%;background:${ok ? '#2E8B57' : '#E0A526'}"></div></div></div>`; };
+    trackHtml = `<section class="card"><div class="between"><b>ติดตามแผนรอบนี้</b><span class="xs muted">เริ่ม ${thDate(active.start)} · ${active.by ? 'ตั้งโดย ' + esc(active.by) : ''}</span></div>
+      <p class="small" style="margin:0">${left > 0 ? `อีก <b>${left} วัน</b> ถึงวัด InBody ครั้งหน้า (${thDate(active.nextScan, true)})` : left === 0 ? '<b>วันนี้</b> ครบกำหนดวัด InBody ครั้งหน้า' : `<b class="pg-bad">เลยกำหนดวัด InBody มา ${-left} วัน</b> วัดแล้วเพิ่มผลสแกนที่แท็บร่างกาย`}</p>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${bar('แคลเฉลี่ย/วัน', tb.kcal, active.kcal != null ? active.kcal + (active.addBurn !== false ? tb.burnDay : 0) : null, 'kcal', 'le')}
+        ${bar('โปรตีนเฉลี่ย/วัน', tb.p, active.p, 'g', 'ge')}
+        ${bar('เวท/สัปดาห์', tb.span >= 7 ? tb.strengthWk : tb.strengthWk * tb.wk, tb.span >= 7 ? active.strengthWk : r1(active.strengthWk * tb.wk), 'ครั้ง', 'ge')}
+        ${bar('คาร์ดิโอ/สัปดาห์', tb.span >= 7 ? tb.cardioMinWk : tb.cardioMinWk * tb.wk, tb.span >= 7 ? active.cardioMin : active.cardioMin * tb.wk, 'นาที', 'ge')}
+        ${bar('น้ำเฉลี่ย/วัน', tb.water, active.water, 'มล.', 'ge')}
+      </div><p class="xs muted" style="margin:0">บันทึกอาหาร ${tb.n}/${tb.span} วัน${tb.span < 7 ? ' · สัปดาห์แรก ตัวเลขเวทและคาร์ดิโอนับตามจำนวนวันที่ผ่านมา' : ''} · เขียว = ตามแผน ส้ม = ยังไม่ถึง</p></section>`;
+  }
+  const tone = { good: ['pg-good', '✓'], bad: ['pg-bad', '!'], watch: ['goldt', '•'], plan: ['goldt', '→'] };
+  const item = x => `<div class="row" style="align-items:flex-start;flex-wrap:nowrap;gap:10px"><b class="${tone[x.tone][0]}" style="width:22px;text-align:center;font-size:16px;flex:none">${tone[x.tone][1]}</b><div><b class="small">${esc(x.title)}</b><div class="xs muted">${esc(x.txt)}</div></div></div>`;
+  const stat = (label, val, sub, cls) => `<div class="stat"><span class="xs muted">${label}</span><b class="${cls || ''}" style="font-size:19px">${val}</b><span class="xs muted">${sub || '&nbsp;'}</span></div>`;
+  const fr = an.fatRange; const fp = L.fatPct;
+  const fpCls = fp == null || !fr ? '' : fp <= fr[1] ? 'pg-good' : 'pg-bad';
+  const bmi = num(info.height) && L.weight ? L.weight / Math.pow(num(info.height) / 100, 2) : null;
+  const R = an.res; const dl = (v, dir, u = 'kg') => v == null ? '—' : `<b class="${Math.abs(v) < 0.05 ? 'muted' : v * dir > 0 ? 'pg-good' : 'pg-bad'}">${sgn(v)}</b> <span class="xs">${u}</span>`;
+  const resHtml = R ? `<section class="card dark"><div class="between"><b>เทียบกับครั้งก่อน</b><span class="xs" style="color:#C9D3DF">${thDate(P.date)} → ${thDate(L.date)} · ${R.days} วัน</span></div>
+      <div class="row" style="align-items:flex-start;flex-wrap:nowrap;gap:10px"><b class="${tone[R.tone][0]}" style="width:22px;text-align:center;font-size:18px;flex:none">${tone[R.tone][1]}</b><div><b>${esc(R.title)}</b><div class="xs" style="color:#C9D3DF">${esc(R.txt)}</div></div></div>
+      <div style="overflow-x:auto"><table class="pgt"><thead><tr><th></th><th>เปลี่ยน</th><th>ต่อ 4 สัปดาห์</th></tr></thead><tbody>
+        <tr><td class="small">กล้ามเนื้อ SMM</td><td class="n">${dl(R.dS, 1)}</td><td class="n">${R.dS == null ? '—' : sgn(R.dS * R.k)}</td></tr>
+        <tr><td class="small">มวลไขมัน</td><td class="n">${dl(R.dF, -1)}</td><td class="n">${R.dF == null ? '—' : sgn(R.dF * R.k)}</td></tr>
+        <tr><td class="small">มวลไร้ไขมัน</td><td class="n">${dl(R.dM, 1)}</td><td class="n">${R.dM == null ? '—' : sgn(R.dM * R.k)}</td></tr>
+        <tr><td class="small">น้ำหนัก</td><td class="n">${dl(R.dW, -1)}</td><td class="n">${R.dW == null ? '—' : sgn(R.dW * R.k)}</td></tr>
+        <tr><td class="small">เปอร์เซ็นต์ไขมัน</td><td class="n">${dl(R.dFp, -1, '%')}</td><td class="n">${R.dFp == null ? '—' : sgn(R.dFp * R.k)}</td></tr>
+        ${R.dV != null ? `<tr><td class="small">ไขมันช่องท้อง</td><td class="n">${dl(R.dV, -1, 'ระดับ')}</td><td class="n">—</td></tr>` : ''}
+      </tbody></table></div>
+      ${R.leanShare != null ? `<p class="xs" style="margin:0;color:#C9D3DF">น้ำหนักที่ลดเป็นมวลไร้ไขมัน (กล้าม น้ำ) ${Math.round(R.leanShare * 100)}% ${R.leanShare > 0.25 ? '<b class="pg-bad">· สูงเกิน 25% ควรเพิ่มโปรตีนและเวท</b>' : '<b class="pg-good">· ดี ส่วนใหญ่เป็นไขมัน</b>'}</p>` : ''}</section>` : `<section class="card"><b>เทียบกับครั้งก่อน</b><p class="small muted" style="margin:0">มี InBody ครั้งเดียว ระบบวางแผนจากผลนี้และพฤติกรรม 4 สัปดาห์ก่อนวันสแกน เมื่อเพิ่มผลครั้งถัดไป จะเทียบผลและประเมินแผนให้อัตโนมัติ</p></section>`;
+  const E = an.ev;
+  const evHtml = E ? `<section class="card"><div class="between"><b>ผลตามแผนรอบที่แล้ว</b><span class="xs muted">แผนเริ่ม ${thDate(E.plan.start)}</span></div>
+      ${E.rows.length ? `<div style="overflow-x:auto"><table class="pgt"><thead><tr><th></th><th>เริ่ม</th><th>เป้า</th><th>ได้จริง</th><th></th></tr></thead><tbody>${E.rows.map(x => `<tr><td class="small">${x.label}</td><td class="n">${r1(x.start)}</td><td class="n">${r1(x.target)}</td><td class="n"><b>${r1(x.actual)}</b></td><td class="n ${x.ok ? 'pg-good' : x.part ? 'goldt' : 'pg-bad'} xs">${x.ok ? '✓ ถึงเป้า' : x.part ? 'ไปถูกทาง' : 'ยังไม่ถึง'}</td></tr>`).join('')}</tbody></table></div>` : ''}
+      ${E.adh.length ? `<b class="small">ทำตามแผนได้แค่ไหน</b><div class="list">${E.adh.map(x => `<div class="between small"><span>${x.label}</span><span><span class="muted">แผน ${n0(x.plan)}</span> · <b class="${x.ok ? 'pg-good' : 'pg-bad'}">ทำได้ ${x.label === 'บันทึกอาหาร' ? r1(x.act) : n0(x.act)} ${x.unit}</b></span></div>`).join('')}</div>` : ''}
+      <p class="xs muted" style="margin:0">ถึงเป้า ${E.hit}/${E.rows.length} ข้อ · ทำตามแผน ${E.adhOk}/${E.adh.length} ข้อ ${E.hit < E.rows.length && E.adhOk < E.adh.length ? '· ผลยังไม่ถึงเป้าเพราะทำตามแผนได้ไม่ครบ ลองทำให้ครบก่อนปรับตัวเลข' : E.hit < E.rows.length ? '· ทำตามแผนครบแต่ผลยังไม่ถึง แผนใหม่ด้านล่างปรับตัวเลขให้แล้ว' : '· ทำได้ดีมาก'}</p></section>` : '';
+  const g = beh.grp; const grpTxt = Object.keys(g).length ? Object.entries(g).sort((x, y) => y[1] - x[1]).map(([k, v]) => `${k} ${v}`).join(' · ') : 'ยังไม่มีผลเทรนกับโค้ช';
+  const mealTxt = MEALS.filter(m => beh.meal[m]).map(m => `${m} ${n0(beh.meal[m].p)} g`).join(' · ');
+  const tgRow = (label, k, now, unit) => an.tg[k] == null || now == null ? '' : `<tr><td class="small">${label}</td><td class="n">${r1(now)}</td><td class="n"><b>${r1(an.tg[k])}</b></td><td class="n ${pgTone(k, an.tg[k] - now)}">${sgn(an.tg[k] - now)} <span class="xs">${unit}</span></td></tr>`;
+  const staff = isStaff();
+  setMain(`${back}<h1>วิเคราะห์ InBody · แผนเดือนถัดไป</h1>
+    ${!info.sex ? `<div class="warn small">ระบุเพศและส่วนสูงก่อน ระบบจะใช้ช่วงไขมันปกติและเป้าการเพิ่มกล้ามที่ตรงขึ้น <button class="btn sm gold" style="margin-left:6px" data-act="planInfo">ระบุข้อมูล</button></div>` : ''}
+    <section class="card"><div class="between"><b>ผล InBody ล่าสุด</b><span class="xs muted">${thDate(L.date, true)}</span></div>
+      <div class="grid3">
+        ${stat('น้ำหนัก', L.weight != null ? r1(L.weight) : '—', L.weight != null ? `kg · ${lbOf(L.weight)} lb` : '')}
+        ${stat('กล้ามเนื้อ SMM', L.smm != null ? r1(L.smm) : '—', L.smm != null && L.weight ? `kg · ${r1(L.smm / L.weight * 100)}% ของน้ำหนัก` : 'kg')}
+        ${stat('ไขมัน', fp != null ? r1(fp) + '%' : '—', L.fatKg != null ? `${r1(L.fatKg)} kg${fr ? ` · ปกติ ${fr[0]}–${fr[1]}%` : ''}` : '', fpCls)}
+        ${stat('มวลไร้ไขมัน', L.ffm != null ? r1(L.ffm) : '—', 'kg (กล้าม กระดูก น้ำ)')}
+        ${stat('BMR', an.bmr != null ? n0(an.bmr) : '—', an.bmrEst ? 'kcal · ประมาณ' : 'kcal/วัน')}
+        ${stat('ไขมันช่องท้อง', L.visceral != null ? r1(L.visceral) : '—', 'ควรต่ำกว่า 10', L.visceral == null ? '' : L.visceral < 10 ? 'pg-good' : 'pg-bad')}
+      </div>
+      ${bmi ? `<p class="xs muted" style="margin:0">BMI ${r1(bmi)} · ส่วนสูง ${r1(num(info.height))} cm</p>` : ''}
+      ${an.goalSmm || an.goalFp ? `<p class="small" style="margin:0">${an.goalSmm ? `เป้าระยะยาว SMM ${r1(an.goalSmm)} kg (อีก ${r1(Math.max(0, an.goalSmm - (L.smm || 0)))} kg)${an.monthsToGoal != null ? ` · ประมาณ <b>${an.monthsToGoal} เดือน</b> ถ้าเพิ่มได้ ${an.smmGain} kg/เดือน` : ''}` : ''}${an.goalSmm && an.goalFp ? '<br>' : ''}${an.goalFp ? `เป้าไขมัน ${r1(an.goalFp)}%${an.monthsToFp != null ? ` · ประมาณ <b>${an.monthsToFp} เดือน</b> ตามอัตรานี้` : ''}` : ''}</p>` : ''}
+    </section>
+    ${resHtml}
+    ${evHtml}
+    <section class="card"><div class="between"><b>พฤติกรรมช่วงนั้น</b><span class="xs muted">${thDate(beh.a)} – ${thDate(beh.b)} · ${beh.span} วัน</span></div>
+      <div class="grid2">
+        ${stat('แคลเฉลี่ย/วัน', beh.kcal != null ? n0(beh.kcal) : '—', `บันทึก ${beh.n}/${beh.span} วัน${t.kcal ? ` · เป้า ${n0(t.kcal)}` : ''}`)}
+        ${stat('โปรตีนเฉลี่ย/วัน', beh.p != null ? n0(beh.p) + ' g' : '—', beh.p != null && L.weight ? `${r1(beh.p / L.weight)} g/kg · ควร ≥ ${n0(an.pLo)} g` : '', beh.p == null ? '' : beh.p >= an.pLo * 0.9 ? 'pg-good' : 'pg-bad')}
+        ${stat('เวท/สัปดาห์', r1(beh.strengthWk) + ' ครั้ง', `เทรนกับโค้ช ${beh.coachN} ครั้ง`, beh.strengthWk >= 3 ? 'pg-good' : beh.strengthWk >= 2 ? '' : 'pg-bad')}
+        ${stat('คาร์ดิโอ/สัปดาห์', n0(beh.cardioMinWk) + ' นาที', `${r1(beh.cardioWk)} ครั้ง · เผา ${n0(beh.burnDay * 7)} kcal/สัปดาห์`, beh.cardioMinWk >= 150 ? 'pg-good' : '')}
+      </div>
+      ${beh.kcal != null ? `<p class="xs muted" style="margin:0">สัดส่วนเฉลี่ย โปรตีน ${n0(beh.p)} g · คาร์บ ${n0(beh.c)} g · ไขมัน ${n0(beh.f)} g${mealTxt ? `<br>โปรตีนต่อมื้อ: ${mealTxt}` : ''}${beh.water != null ? `<br>น้ำเฉลี่ย ${n0(beh.water)} มล./วัน (บันทึก ${beh.waterN} วัน)` : ''}</p>` : ''}
+      <p class="xs muted" style="margin:0">กลุ่มกล้ามที่เทรนกับโค้ช: ${grpTxt}${beh.movesRep ? ` · ท่าที่น้ำหนักขึ้น ${beh.movesUp}/${beh.movesRep}` : ''}</p>
+    </section>
+    <section class="card"><b>พลังงานที่ใช้ต่อวัน</b>
+      <div class="grid2">${stat('จากการเปลี่ยนแปลงจริง', R?.tdeeReal != null ? n0(R.tdeeReal) : '—', R?.tdeeReal != null ? 'kcal · แม่นที่สุด' : esc(R?.tdeeWhy || 'ต้องมี InBody 2 ครั้ง'), R?.tdeeReal != null ? 'pg-good' : '')}${stat('ประมาณจาก BMR + ออกกำลัง', an.tdeeEst != null ? n0(an.tdeeEst) : '—', 'kcal')}</div>
+      <p class="xs muted" style="margin:0">วิธีแรกใช้แคลที่บันทึก หักพลังงานที่ร่างกายสะสมหรือดึงออกมาใช้ (ไขมัน 1 kg ≈ 9,400 kcal · มวลไร้ไขมัน 1 kg ≈ 1,800 kcal) ยิ่งบันทึกอาหารครบ ยิ่งแม่น</p></section>
+    <section class="card" style="border:2px solid #E0A526"><div class="between"><b>แผนเดือนถัดไป</b><span class="xs muted">${active ? 'บันทึกแผนนี้แล้ว' : 'ยังไม่ได้บันทึก'}</span></div>
+      <div class="grid3">${stat('พลังงาน', an.kcal ? n0(an.kcal) : '—', an.addBurn ? 'kcal + แคลที่เผา' : 'kcal/วัน')}${stat('โปรตีน', an.prot + ' g', `คาร์บ ${an.carb ?? '—'} · ไขมัน ${an.fatG ?? '—'} g`)}${stat('น้ำ', n0(an.water), 'มล./วัน')}
+        ${stat('เวท', an.strengthT + ' ครั้ง', 'ต่อสัปดาห์')}${stat('คาร์ดิโอ', an.cardioT + ' นาที', 'ต่อสัปดาห์')}${stat('วัด InBody', thDate(nextScan), 'ครั้งหน้า')}</div>
+      <b class="small">อาหาร</b><div style="display:flex;flex-direction:column;gap:8px">${an.food.map(item).join('')}</div>
+      <b class="small">ออกกำลังกาย</b><div style="display:flex;flex-direction:column;gap:8px">${an.ex.map(item).join('')}</div>
+      <b class="small">เป้า InBody ครั้งหน้า</b>
+      <div style="overflow-x:auto"><table class="pgt"><thead><tr><th></th><th>ตอนนี้</th><th>เป้า</th><th>เปลี่ยน</th></tr></thead><tbody>
+        ${tgRow('กล้ามเนื้อ SMM', 'smm', L.smm, 'kg')}${tgRow('มวลไขมัน', 'fatKg', L.fatKg, 'kg')}${tgRow('เปอร์เซ็นต์ไขมัน', 'fatPct', L.fatPct, '%')}${tgRow('น้ำหนัก (ประมาณ)', 'weight', L.weight, 'kg')}
+      </tbody></table></div>
+      <p class="xs muted" style="margin:0">อัตราที่ตั้ง: ไขมันลด ${an.fatLoss ?? '—'} kg และกล้ามเพิ่ม ${an.smmGain ?? '—'} kg ต่อ 4 สัปดาห์ ซึ่งทำได้จริงโดยไม่เสียกล้าม · วัดครั้งหน้าให้เงื่อนไขเหมือนเดิม: เครื่องเดิม ช่วงเช้า ก่อนกินอาหาร เข้าห้องน้ำแล้ว ยังไม่ออกกำลังกาย</p>
+      <div class="grid2"><button class="btn gold" data-act="planSave">${active ? 'บันทึกแผนนี้ใหม่' : 'บันทึกเป็นแผนเดือนนี้'}</button><button class="btn" data-act="planCopy">คัดลอกสรุปส่งโค้ช</button></div>
+      ${staff ? `<button class="btn pri block" data-act="planApply">ใช้ตัวเลขนี้เป็นเป้าอาหารของลูกค้า</button>` : '<p class="xs muted" style="margin:0">เป้าอาหารในแอปเปลี่ยนได้โดยโค้ช กด “คัดลอกสรุปส่งโค้ช” แล้วส่งให้โค้ชพิจารณา</p>'}
+    </section>
+    ${trackHtml}
+    <section class="card"><div class="between"><b>ข้อมูลประกอบการวิเคราะห์</b><button class="btn sm" data-act="planInfo">แก้ไข</button></div>
+      <p class="small muted" style="margin:0">เพศ ${SEX_TH[info.sex] || 'ยังไม่ระบุ'} · ส่วนสูง ${num(info.height) ? r1(num(info.height)) + ' cm' : '—'} · เป้า SMM ${num(info.goalSmm) ? r1(num(info.goalSmm)) + ' kg' : '—'} · เป้าไขมัน ${num(info.goalFatPct) ? r1(num(info.goalFatPct)) + '%' : '—'}</p>
+      ${plans.length ? `<p class="xs muted" style="margin:0">ประวัติแผน: ${plans.slice(-6).map(x => `${thDate(x.start)} (${n0(x.kcal)} kcal · โปรตีน ${x.p} g)`).join(' · ')}</p>` : ''}</section>
+    <p class="xs muted center">วิเคราะห์อัตโนมัติจากผล InBody อาหาร และกิจกรรมที่บันทึก ใช้ประกอบการคุยกับโค้ช ไม่ใช่คำวินิจฉัยทางการแพทย์ ถ้ามีโรคประจำตัวหรือตั้งครรภ์ ปรึกษาแพทย์ก่อนปรับแคลหรือการออกกำลังกาย</p>`);
+}
+async function savePlanDoc(pid, fn) {
+  const cur = (await get(planRef(pid)).catch(() => null)) || {};
+  const next = fn({ info: cur.info || {}, list: cur.list || [] });
+  await fb.setDoc(planRef(pid), next);
+}
+function openPlanInfo() {
+  get(planRef(S.view)).catch(() => null).then(d => {
+    const i = d?.info || {};
+    openSheet('ข้อมูลประกอบการวิเคราะห์', `<div><div class="xs muted" style="margin-bottom:6px">เพศ (ใช้กำหนดช่วงไขมันปกติและอัตราเพิ่มกล้าม)</div><div class="chips">${['f', 'm'].map(s => `<button class="chip" data-act="planSex" data-v="${s}" aria-pressed="${i.sex === s}">${SEX_TH[s]}</button>`).join('')}</div></div>
+      <div class="grid2"><label class="f">ส่วนสูง (cm)<input class="in" id="piH" inputmode="decimal" value="${esc(i.height ?? '')}"></label>
+      <label class="f">เป้ากล้ามเนื้อ SMM (kg)<input class="in" id="piS" inputmode="decimal" value="${esc(i.goalSmm ?? '')}" placeholder="เช่น 26"></label>
+      <label class="f">เป้าเปอร์เซ็นต์ไขมัน (%)<input class="in" id="piF" inputmode="decimal" value="${esc(i.goalFatPct ?? '')}"></label></div>
+      <button class="btn pri block" data-act="planInfoSave">บันทึก</button>`, { kind: 'planInfo', sex: i.sex || null });
+  });
 }
 
 /* ---------- สำรองข้อมูล ---------- */
@@ -2249,6 +2555,32 @@ const ACTS = {
     if (v === 'prev') A = d[d.length - 2];
     else if (v === '30' || v === '90') { const from = addDays(todayStr(), -(+v)); A = d.find(x => x >= from) || d[d.length - 2]; if (A === B) A = d[d.length - 2]; }
     ui.pgA = A; ui.pgB = B; render();
+  },
+  planInfo: () => openPlanInfo(),
+  planSex: el => { sheet.sex = el.dataset.v; document.querySelectorAll('[data-act="planSex"]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === sheet.sex))); },
+  planInfoSave: async () => {
+    const info = { sex: sheet.sex || null, height: num($('#piH').value), goalSmm: num($('#piS').value), goalFatPct: num($('#piF').value) };
+    Object.keys(info).forEach(k => info[k] == null && delete info[k]);
+    await savePlanDoc(S.view, d => ({ ...d, info })); closeSheet(); toast('บันทึกข้อมูลแล้ว'); render();
+  },
+  planSave: async () => {
+    const c = ui.planCur; if (!c || c.pid !== S.view) return; const an = c.an;
+    const plan = { start: todayStr(), base: c.L.date, nextScan: c.nextScan, by: S.me.name || '', t: Date.now(), kcal: an.kcal, addBurn: an.addBurn, total: an.total, p: an.prot, c: an.carb, f: an.fatG, water: an.water, strengthWk: an.strengthT, cardioMin: an.cardioT, target: an.tg };
+    Object.keys(plan).forEach(k => plan[k] == null && delete plan[k]);
+    await savePlanDoc(S.view, d => ({ ...d, list: [...d.list.filter(x => x.base !== plan.base), plan].slice(-24) }));
+    toast('บันทึกแผนแล้ว ระบบจะติดตามจนถึงวันวัด InBody ครั้งหน้า', 3500); render();
+  },
+  planApply: async () => {
+    const c = ui.planCur; if (!c || c.pid !== S.view || !isStaff()) return; const an = c.an;
+    if (!an.kcal) return toast('ยังคำนวณพลังงานไม่ได้ ต้องมีค่า BMR หรือมวลไขมันในผล InBody');
+    if (!confirm(`ตั้งเป้าอาหารใหม่: ${n0(an.kcal)} kcal · โปรตีน ${an.prot} g · คาร์บ ${an.carb} g · ไขมัน ${an.fatG} g · น้ำ ${n0(an.water)} มล.?`)) return;
+    const p = await person(S.view, true); const t = { ...(p.targets || {}), kcal: an.kcal, p: an.prot, c: an.carb, f: an.fatG, water: an.water, addBurn: an.addBurn };
+    await fb.updateDoc(D('people', S.view), { targets: t }); S.cache.delete('p:' + S.view); toast('ตั้งเป้าอาหารใหม่แล้ว'); render();
+  },
+  planCopy: async () => {
+    const c = ui.planCur; if (!c) return; const txt = planText(c.name, c.L, c.an, c.nextScan);
+    try { await navigator.clipboard.writeText(txt); toast('คัดลอกแล้ว วางในแชท LINE ส่งโค้ชได้เลย'); }
+    catch (e) { openSheet('สรุปแผน', `<textarea class="in" style="min-height:320px" readonly>${esc(txt)}</textarea><p class="xs muted" style="margin:0">กดค้างที่ข้อความเพื่อคัดลอก</p>`); }
   },
   backup: el => runBackup(el.dataset.v),
   rmBody: async el => { if (!confirm('ลบรายการนี้?')) return; await fb.deleteDoc(D('people', S.view, 'body', el.dataset.id)); render(); },

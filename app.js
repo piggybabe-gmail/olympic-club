@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261015a';
+const VER = '20261015b';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -33,9 +33,24 @@ const ACT = {
   swim: ['ว่ายน้ำ', 7], coach: ['เทรนกับโค้ช', 5], class: ['เข้าคลาส', 7], walk: ['เดิน / วิ่ง', 5],
   bike: ['ปั่นจักรยาน', 6], yoga: ['โยคะ / พิลาทิส', 3], weights: ['เวทเทรนนิ่งเอง', 5], other: ['อื่นๆ', 5]
 };
-const SESSION_TYPES = ['Push', 'Pull', 'Legs', 'Full body', 'คาร์ดิโอ'];
-const MOVES = ['Lat Pulldown', 'Seated Cable Row', 'Face Pull', 'Dumbbell Curl', 'Bench Press', 'Chest Press', 'Shoulder Press',
-  'Lateral Raise', 'Triceps Pushdown', 'Squat', 'Leg Press', 'Romanian Deadlift', 'Hip Thrust', 'Leg Curl', 'Leg Extension', 'Plank'];
+// ประเภทการเทรน: 1 วันเลือกได้หลายอย่าง (เช่น Push + Pull + Legs) เก็บเป็น types[] และ type = 'Push + Pull + Legs' (ข้อความเดิมยังใช้ได้ทุกที่)
+const SESSION_TYPES = ['Full body', 'Push', 'Pull', 'Legs', 'Shoulders', 'Arms', 'Core', 'คาร์ดิโอ'];
+const TYPE_TH = { 'Full body': 'ทั้งตัว', Push: 'ดัน · อก', Pull: 'ดึง · หลัง', Legs: 'ขา · ก้น', Shoulders: 'ไหล่', Arms: 'แขน', Core: 'แกนกลาง', 'คาร์ดิโอ': '' };
+const typeList = x => { const a = Array.isArray(x?.types) && x.types.length ? x.types : String(x?.type || '').split(/\s*\+\s*/); return [...new Set(a.map(t => String(t).trim()).filter(Boolean))]; };
+const typeText = a => (a && a.length ? a : ['Full body']).join(' + ');
+const typeChip = (t, on, act) => `<button type="button" class="chip" data-act="${act}" data-v="${esc(t)}" aria-pressed="${on}">${on ? '✓ ' : ''}${esc(t)}${TYPE_TH[t] ? ` <span class="xs" style="opacity:.7">${TYPE_TH[t]}</span>` : ''}</button>`;
+// คลังท่ามาตรฐานแยกหมวด (ท่าเดิมทุกท่ายังอยู่)
+const MOVE_GROUPS = {
+  Push: ['Bench Press', 'Dumbbell Bench Press', 'Incline Dumbbell Press', 'Chest Press', 'Pec Deck Fly', 'Cable Fly', 'Push-up', 'Chest Dip'],
+  Pull: ['Lat Pulldown', 'Seated Cable Row', 'One-arm Dumbbell Row', 'Barbell Row', 'Assisted Pull-up', 'Pull-up', 'Straight-arm Pulldown', 'Deadlift', 'Back Extension'],
+  Legs: ['Squat', 'Goblet Squat', 'Leg Press', 'Romanian Deadlift', 'Hip Thrust', 'Lunge', 'Bulgarian Split Squat', 'Step-up', 'Leg Curl', 'Leg Extension', 'Hip Abduction', 'Hip Adduction', 'Glute Kickback', 'Calf Raise'],
+  Shoulders: ['Shoulder Press', 'Arnold Press', 'Lateral Raise', 'Front Raise', 'Face Pull', 'Rear Delt Fly', 'Upright Row'],
+  Arms: ['Dumbbell Curl', 'Hammer Curl', 'Barbell Curl', 'Cable Curl', 'Triceps Pushdown', 'Overhead Triceps Extension', 'Skull Crusher', 'Bench Dip'],
+  Core: ['Plank', 'Side Plank', 'Dead Bug', 'Bird Dog', 'Crunch', 'Cable Crunch', 'Russian Twist', 'Hanging Knee Raise', 'Pallof Press']
+};
+const MOVE_GROUP_KEYS = Object.keys(MOVE_GROUPS);
+const MOVES = [...new Set(Object.values(MOVE_GROUPS).flat())];
+const MOVE_GROUP = Object.fromEntries(Object.entries(MOVE_GROUPS).flatMap(([g, a]) => a.map(m => [m, g])));
 const P = {
   plate: 'M4 12a8 8 0 1 0 16 0a8 8 0 1 0 -16 0 M8.5 12a3.5 3.5 0 1 0 7 0a3.5 3.5 0 1 0 -7 0',
   dumb: 'M3 10v4 M6.5 7v10 M17.5 7v10 M21 10v4 M6.5 12h11',
@@ -1650,15 +1665,15 @@ async function openNewSession() {
   if (!ms.length) return toast('สร้างบัญชีลูกค้าก่อน แล้วค่อยเพิ่มนัด');
   openSheet('เพิ่มนัดเทรน', `<label class="f">ลูกค้า<select class="in" id="nsMember">${ms.map(m => `<option value="${m.id}">${esc(m.name)}</option>`).join('')}</select></label>
     <div class="grid2"><label class="f">วันที่<input class="in" type="date" id="nsDate" value="${ui.schedDate}"></label><label class="f">เวลา<input class="in" type="time" id="nsTime" value="18:00"></label></div>
-    <label class="f">ประเภท<select class="in" id="nsType">${SESSION_TYPES.map(t => `<option>${t}</option>`).join('')}</select></label>
+    <div><div class="small" style="font-weight:600;margin-bottom:8px">ประเภท <span class="muted" style="font-weight:400">(ติ๊กได้หลายอย่างในวันเดียว)</span></div><div class="chips" id="nsTypes">${SESSION_TYPES.map(t => typeChip(t, t === 'Full body', 'nsType')).join('')}</div></div>
     <label class="row small" style="min-height:44px"><input type="checkbox" id="nsRepeat" style="width:22px;height:22px;accent-color:#14202E"> ทำซ้ำทุกสัปดาห์ วันและเวลาเดิม (8 สัปดาห์)</label>
-    <button class="btn pri block" data-act="saveSession">บันทึกนัด</button><p class="xs muted" style="margin:0">ลูกค้าจะเห็นนัดนี้ในแท็บออกกำลังกายและแท็บโค้ช</p>`, { kind: 'session', ms });
+    <button class="btn pri block" data-act="saveSession">บันทึกนัด</button><p class="xs muted" style="margin:0">ลูกค้าจะเห็นนัดนี้ในแท็บออกกำลังกายและแท็บโค้ช</p>`, { kind: 'session', ms, types: ['Full body'] });
 }
 async function saveSession() {
-  const mid = $('#nsMember').value; const m = sheet.ms.find(x => x.id === mid); const date = $('#nsDate').value; const time = $('#nsTime').value || '18:00'; const type = $('#nsType').value; const rep = $('#nsRepeat').checked;
+  const mid = $('#nsMember').value; const m = sheet.ms.find(x => x.id === mid); const date = $('#nsDate').value; const time = $('#nsTime').value || '18:00'; const types = [...sheet.types]; const type = typeText(types); const rep = $('#nsRepeat').checked;
   if (!date) return toast('เลือกวันที่');
   const b = fb.writeBatch(db); const grp = rep ? 'g' + Date.now().toString(36) : null;
-  for (let i = 0; i < (rep ? 8 : 1); i++) b.set(fb.doc(C('sessions')), { trainerPid: S.me.pid, trainerName: S.me.name, memberPid: mid, memberName: m.name, date: addDays(date, 7 * i), time, type, status: 'planned', repeat: rep, group: grp, moves: [], createdAt: fb.serverTimestamp() });
+  for (let i = 0; i < (rep ? 8 : 1); i++) b.set(fb.doc(C('sessions')), { trainerPid: S.me.pid, trainerName: S.me.name, memberPid: mid, memberName: m.name, date: addDays(date, 7 * i), time, type, types: types.length ? types : ['Full body'], status: 'planned', repeat: rep, group: grp, moves: [], createdAt: fb.serverTimestamp() });
   await b.commit(); ui.schedDate = date; closeSheet(); toast(rep ? 'เพิ่มนัด 8 สัปดาห์แล้ว' : 'เพิ่มนัดแล้ว'); render();
 }
 
@@ -1676,18 +1691,18 @@ async function renderLog() {
   L.moves.forEach(m => m.sets.forEach(x => { vol += (+x.r || 0) * setKg(m.u, x.w); sets++; }));
   setMain(`<div class="between"><h1>บันทึกการเทรน</h1><button class="btn sm ghost" data-act="logCancel">ยกเลิก</button></div>
     <section class="card"><b>${esc(L.memberName)}</b><span class="small muted">${thDate(L.date, true)} · ${esc(L.time)}</span></section>
-    <div class="chips">${SESSION_TYPES.map(t => `<button class="chip" data-act="logType" data-v="${t}" aria-pressed="${L.type === t}">${t}</button>`).join('')}</div>
+    <div><div class="small" style="font-weight:600;margin-bottom:8px">ประเภทวันนี้ <span class="muted" style="font-weight:400">(ติ๊กได้หลายอย่าง เช่น Push + Pull + Legs)</span></div><div class="chips">${SESSION_TYPES.map(t => typeChip(t, L.types.includes(t), 'logType')).join('')}</div></div>
     <div class="between"><h2>ท่าที่เล่น</h2><span class="small muted">${L.moves.length} ท่า · ${sets} เซ็ต · ${n0(vol)} kg</span></div>
     ${L.moves.map((m, mi) => { const top = Math.max(0, ...m.sets.map(x => setKg(m.u, x.w))); const v = m.sets.reduce((a, x) => a + (+x.r || 0) * setKg(m.u, x.w), 0); const ou = m.u === 'lb' ? 'kg' : 'lb';
-      return `<section class="card"><div class="between" style="align-items:center"><div><b>${mi + 1}. ${esc(m.name)}</b><div class="xs muted">${m.sets.length} เซ็ต · หนักสุด ${wText(top, m.u)} · Volume ${n0(v)} kg</div></div><button class="iconbtn" data-act="logRmMove" data-i="${mi}" aria-label="ลบท่า ${esc(m.name)}">${svg('trash', 18)}</button></div>
+      return `<section class="card"><div class="between" style="align-items:center"><div><b>${mi + 1}. ${esc(m.name)}</b><div class="xs muted">${moveGroupOf(m.name) ? `<span class="tag" style="padding:1px 8px;margin-right:4px">${esc(moveGroupOf(m.name))}</span>` : ''}${m.sets.length} เซ็ต · หนักสุด ${wText(top, m.u)} · Volume ${n0(v)} kg</div></div><button class="iconbtn" data-act="logRmMove" data-i="${mi}" aria-label="ลบท่า ${esc(m.name)}">${svg('trash', 18)}</button></div>
         <div class="row" style="gap:6px;align-items:center"><span class="xs muted">หน่วยน้ำหนัก</span>${['kg', 'lb'].map(u => `<button class="chip" style="min-height:32px;padding:0 14px" data-act="logUnit" data-i="${mi}" data-v="${u}" aria-pressed="${(m.u || 'kg') === u}">${u === 'kg' ? 'kg กิโลกรัม' : 'lb ปอนด์'}</button>`).join('')}</div>
         <div class="sets xs muted"><span>เซ็ต</span><span>ครั้ง</span><span>น้ำหนัก (${m.u === 'lb' ? 'lb' : 'kg'})</span><span></span></div>
         ${m.sets.map((x, si) => { const w = num(x.w); return `<div class="sets" style="align-items:start"><b class="small" style="line-height:44px">เซ็ต ${si + 1}</b><input inputmode="numeric" data-set="r" data-mi="${mi}" data-si="${si}" value="${esc(x.r)}" aria-label="${esc(m.name)} เซ็ต ${si + 1} ครั้ง"><div style="display:flex;flex-direction:column;gap:2px"><input inputmode="decimal" data-set="w" data-mi="${mi}" data-si="${si}" value="${esc(x.w)}" aria-label="${esc(m.name)} เซ็ต ${si + 1} น้ำหนัก (${m.u === 'lb' ? 'ปอนด์' : 'กิโลกรัม'})"><span class="xs muted" data-conv="${mi}-${si}" style="padding-left:4px">${w ? `≈ ${r1(m.u === 'lb' ? w * LB : w / LB)} ${ou}` : '&nbsp;'}</span></div><button class="iconbtn" style="width:36px" data-act="logRmSet" data-mi="${mi}" data-si="${si}" aria-label="ลบเซ็ต ${si + 1}">×</button></div>`; }).join('')}
         <button class="btn sm ghost" style="border-style:dashed" data-act="logAddSet" data-i="${mi}">+ เพิ่มเซ็ต (ก๊อปค่าเซ็ตล่าสุด)</button></section>`; }).join('')}
-    ${L.picking ? `<section class="card gold-edge"><b>เลือกท่า</b>
+    ${L.picking ? `<section class="card gold-edge"><div class="between"><b>เลือกท่า</b><span class="xs muted">แตะได้หลายท่า แล้วกดเพิ่มทีเดียว</span></div>
       <input class="in" id="logCustom" placeholder="ค้นหา หรือพิมพ์ชื่อท่าใหม่" value="${esc(L.q || '')}" autocomplete="off" autocapitalize="words" enterkeyhint="done">
       <div id="movePick" style="display:flex;flex-direction:column;gap:8px">${movePickHtml()}</div></section>` : ''}
-    <button class="btn" data-act="logPicking">${L.picking ? 'ปิดรายการท่า' : '+ เพิ่มท่า'}</button>
+    <button class="btn" data-act="logPicking">${L.picking ? 'ปิดรายการท่า' : '+ เพิ่มท่า (เลือกได้หลายท่า)'}</button>
     <div class="grid2"><label class="f">ระยะเวลา (นาที)<input class="in" id="lgMin" inputmode="numeric" value="${esc(L.min)}"></label><label class="f">เผาผลาญ kcal<input class="in" id="lgKcal" inputmode="numeric" value="${esc(L.kcal)}" placeholder="${n0(L.est)}"></label></div>
     <div><div class="small" style="font-weight:600;margin-bottom:8px">รูป / วิดีโอท่า <span class="muted" style="font-weight:400">(ไม่บังคับ · รูปเท่านั้นในรอบนี้)</span></div><div class="thumbs" id="logThumbs">${thumbsHtml(L.ph, true)}<label class="addthumb">${svg('cam', 22)}แนบรูป<input type="file" accept="image/*" multiple hidden data-act="pickLogPhoto"></label></div></div>
     <label class="f">โน้ตถึงลูกค้า<textarea class="in" id="lgNote">${esc(L.note)}</textarea></label>
@@ -1700,7 +1715,7 @@ async function startLog(s) {
   loadMoveLib().catch(() => {});
   const m = await person(s.memberPid); const rows = await bodyRows(s.memberPid).catch(() => []);
   const w = latestWeight(rows) || 65;
-  ui.log = { sid: s.id || null, memberPid: s.memberPid, memberName: s.memberName || m?.name || '', date: s.date, time: s.time, type: s.type || 'Full body', moves: (s.moves || []).map(x => { const u = x.u === 'lb' ? 'lb' : 'kg'; return { name: x.name, u, sets: x.sets.map(y => ({ r: y.r, w: u === 'lb' ? (y.lb ?? r1((+y.kg || 0) / LB)) : y.kg })) }; }), min: s.min ?? 60, kcal: s.kcal ?? '', note: s.note || '', ph: [...(s.ph || [])], picking: false, weight: w, est: Math.round(5 * w) };
+  ui.log = { sid: s.id || null, memberPid: s.memberPid, memberName: s.memberName || m?.name || '', date: s.date, time: s.time, types: typeList(s).length ? typeList(s) : ['Full body'], moves: (s.moves || []).map(x => { const u = x.u === 'lb' ? 'lb' : 'kg'; return { name: x.name, u, sets: x.sets.map(y => ({ r: y.r, w: u === 'lb' ? (y.lb ?? r1((+y.kg || 0) / LB)) : y.kg })) }; }), min: s.min ?? 60, kcal: s.kcal ?? '', note: s.note || '', ph: [...(s.ph || [])], picking: false, sel: [], filt: 'day', weight: w, est: Math.round(5 * w) };
   ui.tab = 'log'; render();
 }
 /* ---------- คลังท่าของเทรนเนอร์: ชื่อท่าที่พิมพ์เองถูกจำไว้ เลือกใช้ซ้ำกับลูกค้าทุกคนได้ทันที ---------- */
@@ -1718,39 +1733,84 @@ async function loadMoveLib() {
   hist.filter(x => x.status === 'logged').sort((a, b) => ((b.date || '') + (b.time || '')).localeCompare((a.date || '') + (a.time || ''))).forEach(x => (x.moves || []).forEach(m => all.push(m.name)));
   const seen = new Set(), names = [];
   all.forEach(n => { const k = moveKey(n); if (!k || seen.has(k) || std.has(k) || hidden.has(k)) return; seen.add(k); names.push(moveClean(n)); });
-  return (S.moveLib = { names, hidden: [...hidden] });
+  return (S.moveLib = { names, hidden: [...hidden], groups: { ...(doc?.groups || {}) } });
 }
 async function saveMoveLib() {
-  try { await fb.setDoc(moveLibRef(), { names: S.moveLib.names.slice(0, 300), hidden: S.moveLib.hidden.slice(-300), at: Date.now() }); }
+  const names = S.moveLib.names.slice(0, 300), keep = new Set(names.map(moveKey));
+  const groups = Object.fromEntries(Object.entries(S.moveLib.groups || {}).filter(([k, g]) => keep.has(k) && MOVE_GROUPS[g]));
+  try { await fb.setDoc(moveLibRef(), { names, hidden: S.moveLib.hidden.slice(-300), groups, at: Date.now() }); }
   catch (e) { console.error(e); toast('จำชื่อท่าไม่สำเร็จ ลองใหม่อีกครั้ง'); }
 }
 // คืนชื่อที่ใช้จริง (สะกดตามคลังถ้าตรงกัน) และย้ายท่าที่พิมพ์เองขึ้นบนสุดของ "ท่าที่จำไว้"
-function rememberMove(raw) {
+function rememberMove(raw, save = true, group = '') {
   const name = moveClean(raw), k = moveKey(name); if (!k) return '';
   const std = MOVES.find(m => moveKey(m) === k); if (std) return std;
-  const lib = S.moveLib || (S.moveLib = { names: [], hidden: [] });
+  const lib = S.moveLib || (S.moveLib = { names: [], hidden: [], groups: {} });
+  lib.groups = lib.groups || {};
   const cur = lib.names.find(n => moveKey(n) === k) || name;
   lib.names = [cur, ...lib.names.filter(n => moveKey(n) !== k)];
   lib.hidden = lib.hidden.filter(h => h !== k);
-  saveMoveLib(); return cur;
+  if (group && MOVE_GROUPS[group] && !lib.groups[k]) lib.groups[k] = group;
+  if (save) saveMoveLib(); return cur;
+}
+// หมวดของท่า: ท่ามาตรฐานตามคลัง · ท่าที่พิมพ์เองตามหมวดที่เปิดอยู่ตอนเพิ่ม
+const moveGroupOf = n => MOVE_GROUP[n] || S.moveLib?.groups?.[moveKey(n)] || '';
+// หมวดที่ใช้กรองรายการท่า: 'day' = ตามประเภทที่ติ๊กวันนี้ (Full body/คาร์ดิโอ = ทุกหมวด)
+function pickGroups() {
+  const L = ui.log, f = L.filt || 'day';
+  if (f === 'all') return MOVE_GROUP_KEYS;
+  if (f !== 'day') return [f];
+  const g = L.types.filter(t => MOVE_GROUPS[t]);
+  return !g.length || L.types.includes('Full body') ? MOVE_GROUP_KEYS : g;
 }
 function movePickHtml() {
-  const L = ui.log, q = moveKey(L.q), lib = S.moveLib?.names || [];
+  const L = ui.log, q = moveKey(L.q), lib = S.moveLib?.names || [], sel = L.sel || (L.sel = []);
+  const grp = pickGroups(), f = L.filt || 'day';
   const has = n => !q || moveKey(n).includes(q);
-  const mine = lib.filter(has), std = MOVES.filter(has);
+  const inLog = new Set(L.moves.map(m => moveKey(m.name))), isSel = n => sel.some(x => moveKey(x) === moveKey(n));
+  // ค้นหาด้วยคำ = ค้นทุกหมวด · ไม่ได้ค้น = แสดงตามหมวดที่เลือก
+  const inGrp = n => q || !moveGroupOf(n) || grp.includes(moveGroupOf(n));
+  const mine = lib.filter(n => has(n) && inGrp(n));
+  const pick = n => { const done = inLog.has(moveKey(n)), on = isSel(n);
+    return done ? `<button class="chip" disabled style="opacity:.45;cursor:default" title="อยู่ในรายการแล้ว">✓ ${esc(n)}</button>` : `<button class="chip" data-act="logPick" data-v="${esc(n)}" aria-pressed="${on}">${on ? '✓ ' : ''}${esc(n)}</button>`; };
+  const groupsShown = (q ? MOVE_GROUP_KEYS : grp).map(g => [g, MOVE_GROUPS[g].filter(has)]).filter(([, a]) => a.length);
   const exact = q && [...lib, ...MOVES].some(n => moveKey(n) === q);
-  const add = q && !exact ? `<button class="btn ${mine.length || std.length ? '' : 'pri'} block" data-act="logCustom">+ เพิ่มท่าใหม่ “${esc(moveClean(L.q))}” และจำไว้ใช้ครั้งหน้า</button>` : '';
-  return `${mine.length || std.length ? '' : add}
+  const any = mine.length || groupsShown.length;
+  const add = q && !exact ? `<button class="btn ${any ? '' : 'pri'} block" data-act="logCustom">+ เพิ่มท่าใหม่ “${esc(moveClean(L.q))}” และจำไว้ใช้ครั้งหน้า</button>` : '';
+  const dayLbl = L.types.filter(t => MOVE_GROUPS[t]).length && !L.types.includes('Full body') ? 'ตามประเภทวันนี้' : 'ตามประเภทวันนี้ (ทุกหมวด)';
+  const filt = `<div class="chips" style="gap:4px">${[['day', dayLbl], ['all', 'ทุกหมวด'], ...MOVE_GROUP_KEYS.map(g => [g, g])].map(([v, t]) => `<button type="button" class="chip" style="min-height:32px;padding:0 12px;font-size:13px" data-act="logFilt" data-v="${v}" aria-pressed="${f === v}">${esc(t)}</button>`).join('')}</div>`;
+  const bar = sel.length ? `<div class="card dark" style="position:sticky;bottom:calc(84px + env(safe-area-inset-bottom));z-index:5;gap:8px;padding:12px">
+      <div class="small" style="color:#fff">เลือกแล้ว ${sel.length} ท่า: <span style="opacity:.8">${sel.map(esc).join(' · ')}</span></div>
+      <div class="row" style="gap:8px"><button class="btn gold" style="flex:1" data-act="logAddSel">เพิ่ม ${sel.length} ท่าเข้ารายการ</button><button class="btn sm ghost" style="color:#fff;border-color:#C9D3DF;background:transparent" data-act="logSelClear">ล้าง</button></div></div>` : '';
+  return `${filt}${any ? '' : add}
     ${lib.length ? `<div class="between" style="margin-top:4px"><b class="small">ท่าที่จำไว้ของฉัน</b><span class="xs muted">${lib.length} ท่า · กด × เพื่อลืมชื่อที่พิมพ์ผิด</span></div>
-      <div class="chips">${mine.map(n => `<span class="chip" style="display:inline-flex;align-items:center;gap:2px;padding:0 4px 0 14px"><button data-act="logPick" data-v="${esc(n)}" style="all:unset;cursor:pointer;line-height:40px">${esc(n)}</button><button data-act="moveForget" data-v="${esc(n)}" aria-label="ลืมท่า ${esc(n)}" style="all:unset;cursor:pointer;width:28px;text-align:center;font-size:18px;color:#8A94A3">×</button></span>`).join('') || '<span class="xs muted">ไม่มีท่าที่ตรงกับคำค้น</span>'}</div>` : ''}
-    <b class="small" style="margin-top:4px">คลังท่ามาตรฐาน</b>
-    <div class="chips">${std.map(m => `<button class="chip" data-act="logPick" data-v="${esc(m)}">${esc(m)}</button>`).join('') || '<span class="xs muted">ไม่มีท่าที่ตรงกับคำค้น</span>'}</div>
-    ${mine.length || std.length ? add : ''}`;
+      <div class="chips">${mine.map(n => { const on = isSel(n), done = inLog.has(moveKey(n)); return `<span class="chip" ${on ? 'aria-pressed="true"' : ''} style="display:inline-flex;align-items:center;gap:2px;padding:0 4px 0 14px${done ? ';opacity:.45' : ''}"><button ${done ? 'disabled' : `data-act="logPick" data-v="${esc(n)}"`} style="all:unset;cursor:pointer;line-height:40px">${on || done ? '✓ ' : ''}${esc(n)}${moveGroupOf(n) ? ` <span class="xs" style="opacity:.6">${esc(moveGroupOf(n))}</span>` : ''}</button><button data-act="moveForget" data-v="${esc(n)}" aria-label="ลืมท่า ${esc(n)}" style="all:unset;cursor:pointer;width:28px;text-align:center;font-size:18px;color:${on ? '#C9D3DF' : '#8A94A3'}">×</button></span>`; }).join('') || '<span class="xs muted">ไม่มีท่าในหมวดนี้ หรือไม่ตรงคำค้น</span>'}</div>` : ''}
+    ${groupsShown.map(([g, a]) => `<b class="small" style="margin-top:4px">${esc(g)}${TYPE_TH[g] ? ` <span class="muted" style="font-weight:400">${TYPE_TH[g]}</span>` : ''}</b><div class="chips">${a.map(pick).join('')}</div>`).join('') || (q ? '' : '<span class="xs muted">ไม่มีท่าในหมวดนี้</span>')}
+    ${any ? add : ''}${bar}`;
 }
 function refreshMovePick() { const b = $('#movePick'); if (b) b.innerHTML = movePickHtml(); }
-function addMove(raw) {
-  logForm(); const name = rememberMove(raw); if (!name) return;
-  ui.log.moves.push({ name, u: ui.log.unit || 'kg', sets: [{ r: 10, w: 0 }] }); ui.log.picking = false; ui.log.q = ''; render();
+// แตะท่า = ติ๊ก/เอาติ๊กออก (ยังไม่เพิ่ม) · พิมพ์ท่าใหม่ = จำชื่อ + ติ๊กให้ทันที
+function toggleMove(raw) {
+  const L = ui.log, k = moveKey(raw); if (!k) return; L.sel = L.sel || [];
+  const i = L.sel.findIndex(x => moveKey(x) === k);
+  if (i >= 0) L.sel.splice(i, 1); else L.sel.push(raw);
+  refreshMovePick();
+}
+function addCustomMove(raw) {
+  const L = ui.log, f = L.filt || 'day', g = MOVE_GROUPS[f] ? f : (pickGroups().length === 1 ? pickGroups()[0] : '');
+  const name = rememberMove(raw, true, g); if (!name) return;
+  L.sel = L.sel || []; if (!L.sel.some(x => moveKey(x) === moveKey(name)) && !L.moves.some(m => moveKey(m.name) === moveKey(name))) L.sel.push(name);
+  L.q = ''; const inp = $('#logCustom'); if (inp) inp.value = ''; refreshMovePick(); toast(`จำท่า “${name}” แล้ว · ติ๊กไว้ให้แล้ว`);
+}
+function addSelectedMoves() {
+  logForm(); const L = ui.log; const sel = L.sel || []; if (!sel.length) return toast('แตะเลือกท่าก่อน');
+  let custom = false;
+  sel.forEach(raw => { const name = rememberMove(raw, false); if (!name) return; if (!MOVE_GROUP[name]) custom = true;
+    if (!L.moves.some(m => moveKey(m.name) === moveKey(name))) L.moves.push({ name, u: L.unit || 'kg', sets: [{ r: 10, w: 0 }] });
+    // ติ๊กประเภทวันนี้ให้ตามหมวดของท่า (ถ้าเลือก Full body ไว้ ไม่แตะ)
+    const g = moveGroupOf(name); if (g && !L.types.includes('Full body') && !L.types.includes(g)) L.types.push(g); });
+  if (custom) saveMoveLib();
+  const n = sel.length; L.sel = []; L.picking = false; L.q = ''; render(); toast(`เพิ่ม ${n} ท่าแล้ว`);
 }
 
 async function saveLog() {
@@ -1760,10 +1820,10 @@ async function saveLog() {
   const prev = L.sid ? await get(ref) : null;
   // แก้ผลก่อนถึงเวลาส่ง: ใช้เวลาส่งเดิม (ระบบส่งฉบับล่าสุด) · ส่งไปแล้ว: ไม่ส่งซ้ำ
   const keepNotify = prev && prev.status === 'logged' && prev.notifyAfter;
-  const data = { trainerPid: S.me.pid, trainerName: S.me.name, memberPid: L.memberPid, memberName: L.memberName, date: L.date, time: L.time, type: L.type, status: 'logged', moves, min, kcal: Math.round(kcal), note: L.note.trim(), ph: L.ph, loggedAt: fb.serverTimestamp(), notifyAfter: keepNotify ? prev.notifyAfter : Date.now() + (S.config.workoutDelayMin || 60) * 60000, notified: keepNotify ? !!prev.notified : false };
+  const data = { trainerPid: S.me.pid, trainerName: S.me.name, memberPid: L.memberPid, memberName: L.memberName, date: L.date, time: L.time, type: typeText(L.types), types: L.types.length ? L.types : ['Full body'], status: 'logged', moves, min, kcal: Math.round(kcal), note: L.note.trim(), ph: L.ph, loggedAt: fb.serverTimestamp(), notifyAfter: keepNotify ? prev.notifyAfter : Date.now() + (S.config.workoutDelayMin || 60) * 60000, notified: keepNotify ? !!prev.notified : false };
   const b = fb.writeBatch(db);
   b.set(ref, data, { merge: true });
-  b.set(D('people', L.memberPid, 'activities', 's_' + ref.id), { date: L.date, type: 'coach', name: `เทรนกับ ${S.me.name} · ${L.type}`, min, kcal: Math.round(kcal), source: 'coach', sid: ref.id, ph: L.ph, t: Date.now(), byUid: auth.currentUser.uid });
+  b.set(D('people', L.memberPid, 'activities', 's_' + ref.id), { date: L.date, type: 'coach', name: `เทรนกับ ${S.me.name} · ${typeText(L.types)}`, min, kcal: Math.round(kcal), source: 'coach', sid: ref.id, ph: L.ph, t: Date.now(), byUid: auth.currentUser.uid });
   const who = L.memberName; await b.commit(); ui.log = null; toast(`บันทึกผลของ ${who} แล้ว · LINE ส่งถึง ${who} คนเดียว`, 3500); ui.tab = 'schedule'; render();
 }
 
@@ -2203,14 +2263,19 @@ const ACTS = {
   logSession: async el => { const s = await get(D('sessions', el.dataset.id)); await startLog(s); },
   logAdhoc: async () => { const mid = $('#lgMember').value; const m = await person(mid); await startLog({ memberPid: mid, memberName: m.name, date: $('#lgDate').value, time: $('#lgTime').value || nowHM(), type: 'Full body' }); },
   logCancel: () => { if (confirm('ยกเลิกการบันทึกนี้?')) { ui.log = null; render(); } },
-  logType: el => { logForm(); ui.log.type = el.dataset.v; render(); },
-  logPicking: async () => { logForm(); ui.log.picking = !ui.log.picking; ui.log.q = ''; if (ui.log.picking) await loadMoveLib(); render(); if (ui.log?.picking) $('#logCustom')?.focus(); },
+  logType: el => { logForm(); const L = ui.log, t = el.dataset.v; L.types = L.types.includes(t) ? L.types.filter(x => x !== t) : [...L.types, t]; render(); },
+  nsType: el => { const t = el.dataset.v; sheet.types = sheet.types.includes(t) ? sheet.types.filter(x => x !== t) : [...sheet.types, t]; const b = $('#nsTypes'); if (b) b.innerHTML = SESSION_TYPES.map(x => typeChip(x, sheet.types.includes(x), 'nsType')).join(''); },
+  logPicking: async () => { logForm(); ui.log.picking = !ui.log.picking; ui.log.q = ''; if (ui.log.picking) { ui.log.filt = 'day'; await loadMoveLib(); } render(); if (ui.log?.picking) $('#logCustom')?.focus(); },
+  logFilt: el => { ui.log.filt = el.dataset.v; refreshMovePick(); },
+  logAddSel: () => addSelectedMoves(),
+  logSelClear: () => { ui.log.sel = []; refreshMovePick(); },
   logUnit: el => { logForm(); const m = ui.log.moves[+el.dataset.i]; const to = el.dataset.v; if ((m.u || 'kg') === to) return; m.sets.forEach(x => { const w = num(x.w); if (w) x.w = r1(to === 'lb' ? w / LB : w * LB); }); m.u = to; ui.log.unit = to; render(); },
-  logPick: el => addMove(el.dataset.v),
-  logCustom: () => addMove($('#logCustom')?.value || ui.log.q),
+  logPick: el => toggleMove(el.dataset.v),
+  logCustom: () => addCustomMove($('#logCustom')?.value || ui.log.q),
   moveForget: el => {
     const k = moveKey(el.dataset.v); if (!S.moveLib || !confirm(`ลืมชื่อท่า “${el.dataset.v}”? (ผลเทรนเก่าที่ใช้ชื่อนี้ยังอยู่ครบ)`)) return;
     S.moveLib.names = S.moveLib.names.filter(n => moveKey(n) !== k); if (!S.moveLib.hidden.includes(k)) S.moveLib.hidden.push(k);
+    if (ui.log?.sel) ui.log.sel = ui.log.sel.filter(x => moveKey(x) !== k);
     saveMoveLib(); refreshMovePick();
   },
   logAddSet: el => { logForm(); const m = ui.log.moves[+el.dataset.i]; const l = m.sets[m.sets.length - 1] || { r: 10, w: 0 }; m.sets.push({ ...l }); render(); },
@@ -2312,7 +2377,7 @@ function onInput(e) {
 function onKey(e) {
   if (document.getElementById('viewer')) { if (e.key === 'Escape') closeViewer(); else if (e.key === 'ArrowLeft') navViewer(-1); else if (e.key === 'ArrowRight') navViewer(1); return; }
   if (e.key === 'Enter' && (e.target.id === 'lgPass' || e.target.id === 'lgUser')) doLogin();
-  if (e.key === 'Enter' && e.target.id === 'logCustom' && ui.log && !e.isComposing) { e.preventDefault(); const q = moveKey(e.target.value); if (!q) return; const hit = [...(S.moveLib?.names || []), ...MOVES].find(n => moveKey(n) === q); addMove(hit || e.target.value); }
+  if (e.key === 'Enter' && e.target.id === 'logCustom' && ui.log && !e.isComposing) { e.preventDefault(); const q = moveKey(e.target.value); if (!q) return; const hit = [...(S.moveLib?.names || []), ...MOVES].find(n => moveKey(n) === q); if (hit) { if (!ui.log.moves.some(m => moveKey(m.name) === q) && !(ui.log.sel || []).some(x => moveKey(x) === q)) ui.log.sel = [...(ui.log.sel || []), hit]; ui.log.q = ''; e.target.value = ''; refreshMovePick(); } else addCustomMove(e.target.value); }
   if (e.key === 'Enter' && ['cpOld', 'cpNew', 'cpNew2'].includes(e.target.id)) { e.preventDefault(); if (e.target.id === 'cpNew2') savePw(); else $(e.target.id === 'cpOld' ? '#cpNew' : '#cpNew2')?.focus(); } if (e.key === 'Escape' && sheet) closeSheet(); }
 
 export const __test = { S, ui, dayTotals, foodCalc, labApply, labPack, labState, ACTS, onClick, setSheet: x => { sheet = x; }, getSheet: () => sheet, foodSheetBody, digestText, addDays, weekStart, thDate, lineChart, render, ACTS, onInput, onChange, setFb: (f, d, a) => { fb = f; db = d; auth = a; } };

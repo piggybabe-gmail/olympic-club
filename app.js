@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261013a';
+const VER = '20261015a';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -413,9 +413,10 @@ function photoPicker(label = 'แนบรูป') {
 const AI_PROMPT = {
   watch: 'This is a screenshot from a fitness watch, fitness app or gym machine. Read only what is visible. Reply JSON: {"activity": one of "swim","walk","bike","class","weights","yoga","other" or null, "minutes": number or null, "kcal": number or null (active/total calories burned), "note": short English text or null}. Use null when not clearly visible. Never guess.',
   label: 'These photos show ONE food product: Thai/English packaging (e.g. 7-Eleven ready meal, snack, drink, frozen food) and/or the food itself. Several photos may show the front, back or nutrition table of the same product. Copy printed numbers exactly; never invent a printed value. Reply JSON: {"name": product name as printed (Thai if printed) or a short Thai description of the food, "kind": "table" if a Nutrition Information table (ข้อมูลโภชนาการ) is readable, "gda" if only the front energy/sugar/fat/sodium label is readable, "food" if no nutrition label is readable, "serving": serving size text as printed (e.g. "1 กล่อง (250 ก.)") or null, "servings": servings per package (จำนวนหน่วยบริโภคต่อ...) as a number or null, "per_serving": {"kcal","protein","carb","fat"} per ONE serving from the nutrition table (numbers or null), "gda": {"kcal","sugar","fat","sodium"} printed on the front GDA label, which are for the WHOLE package (numbers or null), "est": {"kcal","protein","carb","fat"} your best estimate for the WHOLE package or plate from the product type, net weight and what you see (always fill all four), "weight_g": net weight in grams or null}. Energy in kcal; if only kJ is printed divide by 4.184. Carb = total carbohydrate.',
+  plate: 'These photos show ONE meal the person ate: a plate, bowl or several dishes eaten together, usually Thai food. Estimate what the person eats. Split it into the main parts that matter for calories (rice or noodles, each meat/fish/egg/tofu, each side dish, vegetables, visible oil, sauce, dressing, curry or soup, drinks, desserts). Estimate grams from the plate or bowl size, utensils, hands and other objects in the photo; if nothing helps, use typical Thai portions. Include cooking oil in fried or stir-fried items. If a nutrition label is visible, use its printed numbers. Reply JSON: {"summary": one short Thai sentence saying what you see and what the user should double-check, "items": [{"name": short Thai name, "qty": Thai portion text such as "1 ทัพพี" or "1 ฟอง", "g": grams eaten as a number, or null for countable or packaged items, "kcal": number, "protein": grams, "carb": grams, "fat": grams, "conf": "h" if clearly visible or read from a label, "m" if the portion is estimated, "l" if hard to see or the ingredients are guessed, "note": short Thai note on your assumption such as "ผัดน้ำมัน 1 ช้อนโต๊ะ" or ""}]}. Numbers only, no units.',
   inbody: 'This is a body composition result sheet (e.g. InBody). Read only what is printed. Reply JSON: {"date": "YYYY-MM-DD" or null, "weight": kg, "smm": skeletal muscle mass kg, "fatKg": body fat mass kg, "fatPct": percent body fat, "bmr": kcal, "visceral": visceral fat level, "water": total body water kg}. Every value is a number or null. Never guess.'
 };
-async function aiRead(kind, dataUrl) {
+async function aiRead(kind, dataUrl, extra = '') {
   if (S.config.aiOn === false) throw new Error('เจ้าของระบบปิดการใช้ AI ไว้');
   if (!fb.aiMod) {
     if (!fb.appCheck && RECAPTCHA_SITE_KEY) {
@@ -423,7 +424,7 @@ async function aiRead(kind, dataUrl) {
       fb.appCheck = ac.initializeAppCheck(app, { provider: new ac.ReCaptchaEnterpriseProvider(RECAPTCHA_SITE_KEY), isTokenAutoRefreshEnabled: true });
     }
     const m = await import(FBV + 'firebase-ai.js'); fb.aiMod = m; fb.ai = m.getAI(app, { backend: new m.GoogleAIBackend() }); }
-  const parts = [AI_PROMPT[kind], ...[].concat(dataUrl).filter(Boolean).map(d => ({ inlineData: { data: d.split(',')[1], mimeType: 'image/jpeg' } }))];
+  const parts = [AI_PROMPT[kind] + (extra ? '\n' + extra : ''), ...[].concat(dataUrl).filter(Boolean).map(d => ({ inlineData: { data: d.split(',')[1], mimeType: 'image/jpeg' } }))];
   const models = [S.config.aiModel || 'gemini-3.5-flash', 'gemini-3.5-flash-lite'].filter((m, i, a) => a.indexOf(m) === i);
   let r, lastErr;
   for (const name of models) {
@@ -496,7 +497,7 @@ async function renderToday(pid) {
       <div class="bar"><i style="width:${pct}%"></i></div>
       <div class="grid3"><div><div class="xs muted">เป้าหมาย</div><b>${n0(goal)}</b></div><div><div class="xs muted">− กินไป</div><b style="color:#F0D48E">${n0(tot.k)}</b></div><div><div class="xs muted">${addBurn ? '+ เผาผลาญ' : 'เผาผลาญ (ไม่นับคืน)'}</div><b style="color:#A9CBEE">${n0(burn)}</b></div></div>`
       : `<div><div class="small muted">กินไปแล้ว</div><span class="big gold">${n0(tot.k)}</span> <span class="muted">kcal</span></div><div class="small muted">เผาผลาญ ${n0(burn)} kcal · โค้ชยังไม่ได้ตั้งเป้าหมาย</div>`}
-      ${isStaff() ? `<button class="btn sm gold" data-act="editTargets">ตั้งเป้าหมาย</button>` : ''}
+      <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn sm gold" data-act="snapFood">📷 ถ่ายรูปอาหาร</button>${isStaff() ? `<button class="btn sm gold" data-act="editTargets">ตั้งเป้าหมาย</button>` : ''}</div>
     </section>
     <section class="grid3" aria-label="สารอาหาร">${macro('โปรตีน', tot.p, num(t.p), '#1D3A5C')}${macro('คาร์บ', tot.c, num(t.c), '#B8862B')}${macro('ไขมัน', tot.f, num(t.f), '#7A6A58')}</section>
     <section class="card" aria-label="น้ำ"><div class="row"><div class="grow" style="flex:1"><b>น้ำ ${r1(water / 1000)}</b> <span class="muted">/ ${r1(wGoal / 1000)} ลิตร</span><div class="bar" style="margin-top:6px"><i style="width:${Math.min(100, Math.round(water / wGoal * 100))}%"></i></div></div><button class="btn sm ghost" data-act="water" data-v="-250" aria-label="ลดน้ำ 250 มล.">−</button><button class="btn sm" data-act="water" data-v="250">+250 มล.</button></div></section>
@@ -527,6 +528,7 @@ function foodSheetBody() {
     ${mealSel()}${photoPicker('รูปจาน/ฉลาก')}
     <button class="btn pri block" data-act="saveFood">บันทึก</button>`;
   if (s.mode === 'label') return labSheetBody();
+  if (s.mode === 'plate') return plateSheetBody();
   if (s.mode === 'quick') return quickSheetBody();
   if (s.mode === 'noodle') return noodleSheetBody();
   if (s.mode === 'cafe') return cafeSheetBody();
@@ -568,7 +570,7 @@ function foodSheetBody() {
 }
 function foodModeChips() {
   const m = sheet.mode || 'db';
-  return `<div class="chips">${[['db', 'ค้นจากคลัง'], ['label', '📷 สแกนฉลาก'], ['mix', 'ทำเอง/มิกซ์วัตถุดิบ'], ['quick', 'จานด่วน/ข้าวราด'], ['noodle', 'ก๋วยเตี๋ยว'], ['cafe', 'คาเฟ่/กาแฟ'], ['mp', 'หมูปิ้ง/ข้าวเหนียว'], ['kt', 'กล้วยทอด/ของทอด'], ['bag', 'กับข้าวถุง/น้ำพริก'], ['manual', 'กรอกเอง']].map(([k, l]) => `<button class="chip" data-act="foodMode" data-v="${k}" aria-pressed="${m === k}">${l}</button>`).join('')}</div>`;
+  return `<div class="chips">${[['plate', '📷 ถ่ายรูปจาน'], ['db', 'ค้นจากคลัง'], ['label', '📷 สแกนฉลาก'], ['mix', 'ทำเอง/มิกซ์วัตถุดิบ'], ['quick', 'จานด่วน/ข้าวราด'], ['noodle', 'ก๋วยเตี๋ยว'], ['cafe', 'คาเฟ่/กาแฟ'], ['mp', 'หมูปิ้ง/ข้าวเหนียว'], ['kt', 'กล้วยทอด/ของทอด'], ['bag', 'กับข้าวถุง/น้ำพริก'], ['manual', 'กรอกเอง']].map(([k, l]) => `<button class="chip" data-act="foodMode" data-v="${k}" aria-pressed="${m === k}">${l}</button>`).join('')}</div>`;
 }
 /* ---------- จานด่วน / ก๋วยเตี๋ยว: เลือกเหมือนสั่งที่ร้าน แอปคำนวณ kcal ให้ ---------- */
 const QK_DEF = { style: 'krapao', protein: 'porkmince', size: 1, oil: 1, rice: 'white', riceG: 200, ate: 100, egg: 'fried', eggN: 1, prikpla: 0 };
@@ -1015,6 +1017,100 @@ function labApply(r) {
   st.msg = kind === 'table' ? `อ่านจากตารางข้อมูลโภชนาการแล้ว${spp > 1 ? ` · แพ็กนี้มี ${r1(spp)} หน่วยบริโภค แอปคูณให้แล้ว` : ''} · ตรวจตัวเลขกับฉลากก่อนบันทึก`
     : kind === 'gda' ? 'อ่านฉลากหน้ากล่องแล้ว (มีแค่แคล ไขมัน) · โปรตีนกับคาร์บ AI ประมาณให้ ถ้าจะให้แม่น ถ่ายตารางข้อมูลโภชนาการด้านหลังเพิ่มอีกรูป'
     : 'ไม่เห็นฉลากโภชนาการ · ค่าทั้งหมด AI ประมาณจากรูป ตรวจและแก้ได้ก่อนบันทึก';
+}
+/* ---------- 📷 ถ่ายรูปจาน: AI ประมาณแต่ละอย่างในจานก่อน แล้วแก้ทุกช่องได้ก่อนบันทึก ---------- */
+function plState() { if (!sheet.pl) sheet.pl = { items: [], sum: '', msg: '', msgWarn: 0, busy: 0, hint: '', mode: 'one', name: '' }; return sheet.pl; }
+function mealByTime() { const h = new Date().getHours(), m = h < 10 ? 'เช้า' : h < 14 ? 'กลางวัน' : h < 17 ? 'ว่าง' : 'เย็น'; return MEALS.includes(m) ? m : MEALS[0]; }
+const plAmt = x => x.g != null ? x.g : x.m;
+function plRebase(x) { x.b = { a: plAmt(x) || 1, k: +x.k || 0, p: +x.p || 0, c: +x.c || 0, f: +x.f || 0 }; }
+function plTot(items) { return items.reduce((a, x) => ({ k: a.k + (+x.k || 0), p: a.p + (+x.p || 0), c: a.c + (+x.c || 0), f: a.f + (+x.f || 0) }), { k: 0, p: 0, c: 0, f: 0 }); }
+function plDesc(x) { return x.g != null ? `${n0(x.g)} g` : (Math.abs(x.m - 1) < 1e-6 ? (x.q0 || '1 ที่') : `${x.q0 || '1 ที่'} ×${r2(x.m)}`); }
+function plEdited(x) { return !x.e || ['k', 'p', 'c', 'f'].some(k => Math.abs((+x[k] || 0) - (+x.e[k] || 0)) > 0.05); }
+function plSumHtml(st) {
+  const T = plTot(st.items);
+  return `<div class="between"><b>รวม <span class="big" style="font-size:24px">${n0(T.k)}</span> kcal</b><span class="small muted">${st.items.length} อย่าง</span></div>
+    <div class="small">โปรตีน <b>${r1(T.p)}</b> · คาร์บ ${r1(T.c)} · ไขมัน ${r1(T.f)} g</div>`;
+}
+const PL_CONF = { h: ['tag blue', 'มั่นใจสูง'], m: ['tag', 'กะปริมาณ'], l: ['tag alert', 'ควรตรวจ'] };
+function plRow(x, i) {
+  const cf = PL_CONF[x.conf], inp = (k, l, v, step) => `<label>${l}<input class="in" id="pl${k}_${i}" data-pl="${i}" data-k="${k}" inputmode="decimal" step="${step}" value="${esc(v)}"></label>`;
+  return `<div class="plrow${x.conf === 'l' ? ' low' : ''}" id="plr_${i}">
+    <div class="between" style="align-items:center"><input class="in grow" data-pl="${i}" data-k="n" value="${esc(x.n)}" placeholder="ชื่ออาหาร" aria-label="ชื่ออาหาร"><button type="button" class="iconbtn" style="width:40px;height:40px;flex:none" data-act="plDel" data-i="${i}" aria-label="เอาออก ${esc(x.n)}">×</button></div>
+    <div class="plgrid">${inp('a', x.g != null ? 'กรัม' : 'จำนวน (เท่า)', plAmt(x), x.g != null ? 10 : 0.25)}${inp('k', 'kcal', x.k, 1)}${inp('p', 'โปรตีน g', x.p, 0.5)}${inp('c', 'คาร์บ g', x.c, 0.5)}${inp('f', 'ไขมัน g', x.f, 0.5)}</div>
+    <div class="xs muted" style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${cf ? `<span class="${cf[0]}" style="font-size:11px;padding:1px 8px${x.conf === 'm' ? ';background:#FBEFD3;color:#8A5A00' : ''}">${cf[1]}</span>` : ''}${x.q0 ? `<span>AI กะไว้ ${esc(x.q0)}</span>` : ''}${x.note ? `<span>· ${esc(x.note)}</span>` : ''}${x.e ? '' : '<span>เพิ่มเอง</span>'}</div>
+  </div>`;
+}
+function plateSheetBody() {
+  const st = plState(), imgs = labImgs(), aiOff = S.config.aiOn === false, n = st.items.length;
+  return `${foodModeChips()}
+    <section class="card gold-edge" style="gap:8px">
+      <b>📷 ถ่ายรูปจาน ให้ AI ประมาณให้ก่อน</b>
+      <p class="xs muted" style="margin:0">ใช้กับอาหารจานจริง ข้าวราด กับข้าว อาหารร้าน หรือทำเอง · ถ่ายจากด้านบนให้เห็นทั้งจาน มีช้อนหรือมือในรูปจะกะขนาดแม่นขึ้น · แนบได้หลายรูปของมื้อเดียวกัน · ของมีฉลากใช้แท็บ 📷 สแกนฉลาก</p>
+      ${photoPicker('ถ่าย/เลือกรูปจาน')}
+      <label class="f">บอกเพิ่มให้แม่นขึ้น (ไม่บังคับ)<textarea class="in" id="plHint" rows="2" placeholder="เช่น ข้าวครึ่งทัพพี ไม่กินหนัง ผัดน้ำมันน้อย กินไปครึ่งจาน">${esc(st.hint)}</textarea></label>
+      ${aiOff ? '<p class="xs muted" style="margin:0">เจ้าของระบบปิด AI ไว้ · กด “+ เพิ่มรายการ” แล้วกรอกเองได้</p>'
+        : `<button class="btn gold block" data-act="plAi" ${st.busy || (!imgs.length && !st.hint.trim()) ? 'disabled' : ''}>${svg('spark', 18)} ${st.busy ? 'AI กำลังดูจาน…' : n ? 'ประเมินใหม่ (ใช้รูปและข้อความล่าสุด)' : imgs.length ? 'ให้ AI ประเมิน' : 'ถ่ายรูป หรือพิมพ์ว่ากินอะไร'}</button>`}
+      ${st.msg ? `<p class="small" style="margin:0;${st.msgWarn ? 'color:#8A5A00' : ''}">${esc(st.msg)}</p>` : ''}
+    </section>
+    ${st.sum ? `<section class="card sand small" style="gap:4px"><b class="xs" style="color:#5E440D">AI เห็นว่า</b>${esc(st.sum)}</section>` : ''}
+    ${n ? `<div class="small"><b>ในจานนี้</b> <span class="xs muted">· แก้กรัม = ทุกค่าปรับตามสัดส่วน · แก้โปรตีน/คาร์บ/ไขมัน = kcal ปรับตาม (4/4/9 ต่อกรัม) · พิมพ์ kcal เองได้ แล้ว kcal รายการนั้นจะคงที่</span></div>
+      <div style="display:flex;flex-direction:column;gap:8px">${st.items.map(plRow).join('')}</div>` : ''}
+    ${n || st.tried ? `<div class="chips"><button class="chip" data-act="plAdd">+ เพิ่มรายการ</button></div>` : ''}
+    ${n ? `<div><div class="small" style="font-weight:600;margin-bottom:6px">บันทึกเป็น</div>
+      <div class="chips"><button type="button" class="chip" data-act="plMode" data-v="one" aria-pressed="${st.mode === 'one'}">รวมเป็น 1 จาน</button><button type="button" class="chip" data-act="plMode" data-v="each" aria-pressed="${st.mode === 'each'}">แยกทีละรายการ</button></div></div>
+      ${st.mode === 'one' ? `<label class="f">ชื่อจาน (ไม่ใส่ก็ได้)<input class="in" id="plName" value="${esc(st.name)}" placeholder="${esc(st.items.map(x => x.n).filter(Boolean).join(' + ').slice(0, 60))}"></label>` : ''}
+      <section class="card sand" id="plSum">${plSumHtml(st)}</section>
+      ${mealSel()}
+      <button class="btn pri block" data-act="savePlate">บันทึก ${n0(plTot(st.items).k)} kcal</button>` : ''}`;
+}
+function plRead() {
+  const st = sheet?.pl; if (!st) return;
+  const h = $('#plHint'); if (h) st.hint = h.value;
+  const nm = $('#plName'); if (nm) st.name = nm.value;
+}
+function plInput(el) {
+  const st = plState(), i = +el.dataset.pl, k = el.dataset.k, x = st.items[i]; if (!x) return;
+  if (k === 'n') { x.n = el.value; return; }
+  const v = num(el.value); if (v == null || v < 0) return;
+  const set = (kk, val) => { x[kk] = val; const o = $(`#pl${kk}_${i}`); if (o && o !== el) o.value = val; };
+  if (k === 'a') {
+    if (!(v > 0)) return; const b = x.b, s = v / (b.a || 1);
+    if (x.g != null) x.g = Math.round(v); else x.m = v;
+    set('k', Math.round(b.k * s)); set('p', r1(b.p * s)); set('c', r1(b.c * s)); set('f', r1(b.f * s));
+  } else if (k === 'k') { x.k = Math.round(v); x.kLock = 1; plRebase(x); }
+  else { const d = v - (+x[k] || 0); x[k] = r1(v); if (!x.kLock) set('k', Math.max(0, Math.round((+x.k || 0) + d * (k === 'f' ? 9 : 4)))); plRebase(x); }
+  const s = $('#plSum'); if (s) s.innerHTML = plSumHtml(st);
+  const b = document.querySelector('[data-act="savePlate"]'); if (b) b.textContent = `บันทึก ${n0(plTot(st.items).k)} kcal`;
+}
+function plApply(r) {
+  const st = plState(), raw = Array.isArray(r) ? r : (Array.isArray(r?.items) ? r.items : []), nz = v => Math.max(0, num(v) || 0);
+  const items = raw.filter(x => x && x.name).slice(0, 15).map(x => {
+    const g = Math.round(nz(x.g));
+    const it = { n: String(x.name).slice(0, 60), q0: String(x.qty || '').slice(0, 40), g: g > 0 ? g : null, m: 1, k: Math.round(nz(x.kcal)), p: r1(nz(x.protein ?? x.p)), c: r1(nz(x.carb ?? x.c)), f: r1(nz(x.fat ?? x.f)), conf: ['h', 'm', 'l'].includes(x.conf) ? x.conf : 'm', note: String(x.note || '').slice(0, 80) };
+    it.e = { k: it.k, p: it.p, c: it.c, f: it.f, g: it.g }; plRebase(it); return it;
+  });
+  st.tried = 1;
+  if (!items.length) { st.msg = 'AI มองไม่เห็นอาหารในรูปนี้ ลองถ่ายใหม่ให้ชัดขึ้น พิมพ์บอกว่ากินอะไร หรือกด “+ เพิ่มรายการ” กรอกเอง'; st.msgWarn = 1; return; }
+  st.items = items; st.sum = r?.summary ? String(r.summary).slice(0, 200) : '';
+  const low = items.filter(x => x.conf === 'l').length;
+  st.msg = `ประมาณเสร็จแล้ว ${items.length} อย่าง · ตรวจและแก้ตัวเลขได้ทุกช่องก่อนบันทึก${low ? ` · ${low} อย่างติดป้าย “ควรตรวจ”` : ''}`; st.msgWarn = low ? 1 : 0;
+}
+async function savePlate() {
+  plRead();
+  const s = sheet, st = plState(), meal = $('#fMeal').value, items = st.items.filter(x => (x.n || '').trim());
+  if (!items.length) return toast('ยังไม่มีรายการ ให้ AI ประเมิน หรือกด + เพิ่มรายการ');
+  const tag = items.some(plEdited) ? 'AI ประมาณ · แก้แล้ว' : 'AI ประมาณ';
+  const stamp = it => { it.t = Date.now(); it.by = S.me.role; return it; };
+  let out;
+  if (st.mode === 'each') {
+    out = items.map((x, i) => stamp({ n: x.n.trim(), q: 1, qs: `${plDesc(x)} · ${plEdited(x) ? 'AI ประมาณ · แก้แล้ว' : 'AI ประมาณ'}`, k: Math.round(x.k), p: r1(x.p), c: r1(x.c), f: r1(x.f), src: 'plate', opt: { g: x.g, m: x.m, ai: x.e || null }, ...(i === 0 && s.ph?.length ? { ph: s.ph } : {}) }));
+  } else {
+    const T = plTot(items), name = (st.name || '').trim().slice(0, 80) || items.map(x => x.n.trim()).join(' + ').slice(0, 80);
+    out = [stamp({ n: name, q: 1, qs: `${items.map(x => `${x.n.trim()} ${plDesc(x)}`).join(' · ')} · ${tag}`.slice(0, 300), k: Math.round(T.k), p: r1(T.p), c: r1(T.c), f: r1(T.f), src: 'plate', opt: { items: items.map(x => ({ n: x.n.trim(), g: x.g, m: x.m, k: Math.round(x.k), p: r1(x.p), c: r1(x.c), f: r1(x.f), ai: x.e || null })) }, ...(s.ph?.length ? { ph: s.ph } : {}) })];
+  }
+  await mutateDay(S.view, ui.date, d => { (d.meals[meal] = d.meals[meal] || []).push(...out); });
+  const K = out.reduce((a, x) => a + x.k, 0);
+  closeSheet(); toast(`บันทึก${out.length > 1 ? ` ${out.length} รายการ` : ` ${out[0].n}`} ${n0(K)} kcal ลงมื้อ${meal}แล้ว`, 3500); render();
 }
 async function saveLabel() {
   labRead(); const s = sheet, st = s.lab, meal = $('#fMeal').value;
@@ -1944,7 +2040,21 @@ const ACTS = {
   water: async el => { const v = +el.dataset.v; await mutateDay(S.view, ui.date, d => { d.water = Math.max(0, (+d.water || 0) + v); }); render(); },
   rmFood: async el => { if (!confirm('ลบรายการนี้?')) return; const m = el.dataset.m, i = +el.dataset.i; await mutateDay(S.view, ui.date, d => { (d.meals[m] || []).splice(i, 1); }); render(); },
   addFood: el => { openSheet('เพิ่มอาหาร', '', { kind: 'food', meal: el.dataset.m, mode: 'db', q: '', pick: null, qty: null, mf: {}, ph: [], imgMap: {} }); refreshSheet(foodSheetBody()); loadLabLib(); },
-  foodMode: el => { if (sheet.mode === 'label') labRead(); sheet.mode = el.dataset.v; if (sheet.mode === 'label') loadLabLib(); refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); },
+  snapFood: () => { openSheet('เพิ่มอาหาร', '', { kind: 'food', meal: mealByTime(), mode: 'plate', q: '', pick: null, qty: null, mf: {}, ph: [], imgMap: {} }); refreshSheet(foodSheetBody()); loadLabLib(); },
+  plAi: async () => {
+    plRead(); const st = plState(), imgs = labImgs(), hint = (st.hint || '').trim();
+    if (!imgs.length && !hint) return toast('ถ่ายรูปจาน หรือพิมพ์ว่ากินอะไรก่อน');
+    st.busy = 1; st.msg = ''; redrawFood();
+    const extra = [hint ? `Note from the person who ate it (trust this over the photo): ${hint}` : '', st.items.length ? `Your previous estimate, which the person wants corrected: ${st.items.map(x => `${x.n} ${plDesc(x)} ${n0(x.k)} kcal`).join('; ')}` : ''].filter(Boolean).join('\n');
+    try { plApply(await aiRead('plate', imgs, extra)); }
+    catch (err) { console.error(err); st.msg = 'AI ประเมินไม่สำเร็จ (' + (err.message || err).toString().slice(0, 60) + ') · ลองอีกครั้ง หรือกด “+ เพิ่มรายการ” กรอกเอง'; st.msgWarn = 1; st.tried = 1; }
+    st.busy = 0; if (sheet?.kind === 'food' && sheet.mode === 'plate') redrawFood();
+  },
+  plDel: el => { plRead(); plState().items.splice(+el.dataset.i, 1); redrawFood(); },
+  plAdd: () => { plRead(); const st = plState(), it = { n: '', q0: '', g: null, m: 1, k: 0, p: 0, c: 0, f: 0, conf: '', note: '', e: null }; plRebase(it); st.items.push(it); redrawFood(); const r = $(`#plr_${st.items.length - 1} input`); if (r) r.focus(); },
+  plMode: el => { plRead(); plState().mode = el.dataset.v; redrawFood(); },
+  savePlate: () => savePlate(),
+  foodMode: el => { if (sheet.mode === 'label') labRead(); if (sheet.mode === 'plate') plRead(); sheet.mode = el.dataset.v; if (sheet.mode === 'label') loadLabLib(); refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); },
   labAi: async () => {
     labRead(); const st = labState(), imgs = labImgs(); if (!imgs.length) return toast('ถ่ายหรือเลือกรูปฉลากก่อน');
     st.busy = 1; st.msg = ''; redrawFood();
@@ -2162,6 +2272,7 @@ async function onChange(e) {
     const pid = S.view; const files = [...el.files]; toast('กำลังแนบรูป…', 8000);
     for (const f of files) { try { const d = await compress(f); const id = await savePhoto(pid, d); sheet.ph.push(id); sheet.lastImg = d; if (sheet.kind === 'food') (sheet.imgMap = sheet.imgMap || {})[id] = d; } catch (err) { console.error(err); toast('แนบรูปไม่สำเร็จ'); } }
     toast('แนบรูปแล้ว');
+    if (sheet.kind === 'food' && sheet.mode === 'plate') { plRead(); redrawFood(); if (S.config.aiOn !== false && labImgs().length) await ACTS.plAi(); return; }
     if (sheet.kind === 'food' && sheet.mode === 'label') { labRead(); redrawFood(); if (S.config.aiOn !== false && labImgs().length) await ACTS.labAi(); return; }
     if (sheet.kind === 'act') { readActForm(); refreshSheet(actSheetBody()); }
     else if (sheet.kind === 'body') { readBodyForm(); refreshSheet(bodySheetBody()); }
@@ -2192,6 +2303,8 @@ function onInput(e) {
   if (el.id === 'mxSearch' && sheet) { mxRead(); mxState().q = el.value; const pos = el.selectionStart; redrawFood(); const n = $('#mxSearch'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) { } return; }
   if (el.id === 'mxName' && sheet?.mx) { sheet.mx.name = el.value; return; }
   if (el.dataset?.lab && sheet?.lab) { labLive(el); return; }
+  if (el.dataset?.pl != null && sheet?.pl) { plInput(el); return; }
+  if (el.id === 'plHint' && sheet?.pl) { const was = !(sheet.pl.hint || '').trim(); sheet.pl.hint = el.value; const b = document.querySelector('[data-act="plAi"]'); if (b && was !== !el.value.trim() && !sheet.pl.busy) { b.disabled = !labImgs().length && !el.value.trim(); } return; }
   if (el.id === 'labLq' && sheet?.lab) { labRead(); const pos = el.selectionStart; redrawFood(); const n = $('#labLq'); if (n) { n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) { } } return; }
   if (el.id === 'fSearch' && sheet) { sheet.q = el.value; sheet.pick = null; const pos = el.selectionStart; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); const n = $('#fSearch'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) { } }
   if (el.dataset?.set && ui.log) { const m = ui.log.moves[+el.dataset.mi]; m.sets[+el.dataset.si][el.dataset.set] = el.value; if (el.dataset.set === 'w') convHint(el, m); }

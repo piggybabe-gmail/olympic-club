@@ -115,3 +115,11 @@ textarea.in{padding:10px 12px;min-height:72px;resize:vertical}
 .pgt th:first-child{text-align:left}
 .pgt td{padding:8px 4px;border-bottom:1px solid var(--soft);vertical-align:top}
 .pgt td.n{text-align:right;white-space:nowrap}
+
+/* 📷 ถ่ายรูปจาน: แก้ค่าทีละรายการ */
+.plrow{border:1px solid var(--line);border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;background:#fff}
+.plrow.low{border-color:var(--alert)}
+.plgrid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px}
+.plgrid label{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--muted);min-width:0}
+.plgrid input.in{min-height:40px;padding:0 6px;text-align:right;font-variant-numeric:tabular-nums;font-size:15px}
+@media (max-width:420px){.plgrid{grid-template-columns:repeat(3,minmax(0,1fr))}}

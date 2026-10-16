@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261016a';
+const VER = '20261016b';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -30,7 +30,7 @@ const weekStart = ds => addDays(ds, -((dowOf(ds) + 6) % 7));
 
 /* ============ ค่าคงที่ ============ */
 const ACT = {
-  swim: ['ว่ายน้ำ', 7], coach: ['เทรนกับโค้ช', 5], class: ['เข้าคลาส', 7], walk: ['เดิน / วิ่ง', 5],
+  swim: ['ว่ายน้ำ', 7], pt: ['เทรนกับ PT', 5], coach: ['เทรนกับโค้ช', 5], class: ['เข้าคลาส', 7], walk: ['เดิน / วิ่ง', 5],
   bike: ['ปั่นจักรยาน', 6], yoga: ['โยคะ / พิลาทิส', 3], weights: ['เวทเทรนนิ่งเอง', 5], other: ['อื่นๆ', 5]
 };
 // ประเภทการเทรน: 1 วันเลือกได้หลายอย่าง (เช่น Push + Pull + Legs) เก็บเป็น types[] และ type = 'Push + Pull + Legs' (ข้อความเดิมยังใช้ได้ทุกที่)
@@ -335,8 +335,8 @@ async function sessionsFor(pid) {
   return rows.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 }
 // วันเทรน: โค้ชเลือกเองรายวัน (day.train = true/false) ถ้ายังไม่เลือก ดูจากนัดเทรนวันนั้นที่ไม่ได้ยกเลิก
-function trainOf(day, sess, ds) {
-  const auto = (sess || []).some(x => x.date === ds && x.status !== 'cancelled');
+function trainOf(day, sess, ds, acts) {
+  const auto = (sess || []).some(x => x.date === ds && x.status !== 'cancelled') || (acts || []).some(a => a.date === ds && (a.type === 'pt' || a.type === 'coach'));
   const v = day?.train;
   return { auto, on: v === true || (v !== false && auto), set: v === true || v === false ? v : null };
 }
@@ -505,10 +505,10 @@ function dateNav(ds, act) {
 async function renderToday(pid) {
   const [p, day, acts, sess] = await Promise.all([person(pid, true), dayDoc(pid, ui.date), actsRange(pid, ui.date, ui.date), sessionsFor(pid).catch(() => [])]);
   const t = p?.targets || {}; const tot = dayTotals(day); const burn = burnOf(acts);
-  const tr = trainOf(day, sess, ui.date); const G = goalOf(t, tr.on); const xcSet = num(t.trainC) > 0;
+  const tr = trainOf(day, sess, ui.date, acts); const G = goalOf(t, tr.on); const xcSet = num(t.trainC) > 0;
   const addBurn = t.addBurn !== false; const goal = G.k;
   const trMode = tr.set === true ? 'on' : tr.set === false ? 'off' : 'auto';
-  const trainHtml = (xcSet || isStaff()) ? `<section class="card ${tr.on ? 'sand' : ''}" aria-label="วันเทรน"><div class="between"><b>${tr.on ? '🏋️ วันเทรน' : 'วันพัก'}</b><span class="xs muted">${tr.set != null ? 'โค้ชเลือก' : tr.auto ? 'ตามนัดเทรน' : 'ไม่มีนัดเทรน'}</span></div>
+  const trainHtml = (xcSet || isStaff()) ? `<section class="card ${tr.on ? 'sand' : ''}" aria-label="วันเทรน"><div class="between"><b>${tr.on ? '🏋️ วันเทรน' : 'วันพัก'}</b><span class="xs muted">${tr.set != null ? 'โค้ชเลือก' : tr.auto ? 'ตามนัด/กิจกรรมเทรน' : 'ไม่มีนัดเทรน'}</span></div>
       <span class="small">${xcSet ? (tr.on ? `เป้าวันนี้เพิ่มคาร์บ ${n0(t.trainC)} g (+${n0(t.trainC * 4)} kcal) ให้มีแรงเทรน` : `วันเทรนแอปจะเพิ่มคาร์บ ${n0(t.trainC)} g ให้อัตโนมัติ`) : 'ยังไม่ได้ตั้งคาร์บเพิ่มสำหรับวันเทรน (ตั้งได้ที่ปุ่ม ตั้งเป้าหมาย)'}</span>
       ${isStaff() ? `<div class="chips">${[['auto', 'อัตโนมัติ (ตามนัด)'], ['on', 'วันเทรน'], ['off', 'วันพัก']].map(([k, l]) => `<button class="chip" data-act="setTrain" data-v="${k}" aria-pressed="${trMode === k}">${l}</button>`).join('')}</div>` : ''}</section>` : '';
   const remain = goal != null ? goal - tot.k + (addBurn ? burn : 0) : null;
@@ -1215,10 +1215,11 @@ async function openAddAct() {
 }
 function actSheetBody() {
   const s = sheet; const met = ACT[s.type][1]; const est = Math.round(met * s.weight * ((num(s.min) || 0) / 60));
-  const named = { class: ['ชื่อคลาส', 'เช่น Body Combat, Zumba'], other: ['ชื่อกิจกรรม', 'เช่น แบดมินตัน, ปีนผา'] }[s.type];
+  const named = { class: ['ชื่อคลาส', 'เช่น Body Combat, Zumba'], other: ['ชื่อกิจกรรม', 'เช่น แบดมินตัน, ปีนผา'], pt: ['ท่าหรือส่วนที่เล่น (ไม่บังคับ)', 'เช่น Push + Pull, ขา'] }[s.type];
   return `<label class="f">วันที่<input class="in" type="date" id="aDate" value="${s.date}"></label>
     <div><div class="small" style="font-weight:600;margin-bottom:8px">ประเภทกิจกรรม</div><div class="chipgrid">${Object.entries(ACT).filter(([k]) => k !== 'coach').map(([k, v]) => `<button type="button" class="chip" data-act="actType" data-v="${k}" aria-pressed="${s.type === k}">${v[0]}</button>`).join('')}</div></div>
     ${named ? `<label class="f">${named[0]}<input class="in" id="aName" value="${esc(s.name)}" placeholder="${named[1]}"></label>` : ''}
+    ${s.type === 'pt' ? `<p class="xs muted" style="margin:0">ถ้าโค้ชบันทึกผลเทรนในแอปแล้ว กิจกรรม “เทรนกับโค้ช” จะขึ้นให้เอง ไม่ต้องเพิ่มซ้ำ ใช้ปุ่มนี้เมื่อโค้ชยังไม่ได้บันทึก วันนั้นจะนับเป็นวันเทรนให้อัตโนมัติ</p>` : ''}
     <label class="f">ระยะเวลา (นาที)<input class="in" id="aMin" inputmode="numeric" value="${esc(s.min)}"></label>
     <div><div class="small" style="font-weight:600;margin-bottom:8px">แคลอรีที่เผาผลาญ</div>
       <div class="chips"><button type="button" class="chip" data-act="actMode" data-v="manual" aria-pressed="${s.mode === 'manual'}">กรอกเอง</button><button type="button" class="chip" data-act="actMode" data-v="auto" aria-pressed="${s.mode === 'auto'}">ให้แอปประมาณ</button></div>
@@ -1238,7 +1239,7 @@ async function saveAct() {
   const min = num(s.min) || 0; const est = Math.round(ACT[s.type][1] * s.weight * (min / 60));
   const kcal = s.mode === 'manual' ? num(s.kcal) : est;
   if (kcal == null) return toast('กรอกแคลอรี หรือเลือก “ให้แอปประมาณ”');
-  const name = (s.type === 'class' || s.type === 'other') && s.name.trim() ? `${ACT[s.type][0]} · ${s.name.trim()}` : ACT[s.type][0];
+  const name = (s.type === 'class' || s.type === 'other' || s.type === 'pt') && s.name.trim() ? `${ACT[s.type][0]} · ${s.name.trim()}` : ACT[s.type][0];
   await fb.addDoc(C('people', S.view, 'activities'), { date: s.date, type: s.type, name, min, kcal: Math.round(kcal), source: isStaff() ? 'staff' : 'self', ph: s.ph || [], t: Date.now(), byUid: auth.currentUser.uid });
   ui.exDate = s.date; closeSheet(); toast('บันทึกกิจกรรมแล้ว'); render();
 }
@@ -1399,10 +1400,12 @@ async function pgBehavior(pid, a, b) {
   const avg = k => n ? logged.reduce((s2, x) => s2 + x.t[k], 0) / n : null;
   const t = p?.targets || {}; const goal = num(t.kcal);
   const burnBy = {}; for (const x of acts) burnBy[x.date] = (burnBy[x.date] || 0) + (+x.kcal || 0);
-  const within = goal ? logged.filter(x => x.t.k <= goalOf(t, trainOf(x.d, ss, x.d.id).on).k + (t.addBurn === false ? 0 : (burnBy[x.d.id] || 0)) + 100).length : null;
+  const within = goal ? logged.filter(x => x.t.k <= goalOf(t, trainOf(x.d, ss, x.d.id, acts).on).k + (t.addBurn === false ? 0 : (burnBy[x.d.id] || 0)) + 100).length : null;
   const coach = ss.filter(x => x.status === 'logged' && x.date >= a && x.date <= b).length;
-  const own = acts.filter(x => x.type !== 'coach').length;
-  return { span, n, kcal: avg('k'), prot: avg('p'), goal, goalP: num(t.p), within, acts: own, actsWk: own / wk, burnWk: acts.reduce((s2, x) => s2 + (+x.kcal || 0), 0) / wk, coach, coachWk: coach / wk };
+  const own = acts.filter(x => x.type !== 'coach' && x.type !== 'pt').length;
+  const coachDays = new Set(ss.filter(x => x.status === 'logged').map(x => x.date));
+  const coachAll = coach + new Set(acts.filter(x => x.type === 'pt' && x.date >= a && x.date <= b && !coachDays.has(x.date)).map(x => x.date)).size;
+  return { span, n, kcal: avg('k'), prot: avg('p'), goal, goalP: num(t.p), within, acts: own, actsWk: own / wk, burnWk: acts.reduce((s2, x) => s2 + (+x.kcal || 0), 0) / wk, coach: coachAll, coachWk: coachAll / wk };
 }
 function pgInsights(A, B, get, beh, lastDate) {
   const out = []; const add = (tone, title, txt) => out.push({ tone, title, txt });
@@ -1985,7 +1988,7 @@ async function clientStats(ms, ds) {
   const out = {};
   await Promise.all(ms.map(async m => {
     const [day, acts, ss] = await Promise.all([dayDoc(m.id, ds), actsRange(m.id, ds, ds), sessionsFor(m.id).catch(() => [])]);
-    const train = trainOf(day, ss, ds).on;
+    const train = trainOf(day, ss, ds, acts).on;
     out[m.id] = { day, acts, tot: dayTotals(day), burn: burnOf(acts), train, goal: goalOf(m.targets, train).k };
   }));
   return out;

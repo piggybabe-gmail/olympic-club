@@ -328,6 +328,7 @@ function ocMemberDay_(pid, ds) {
   // วันเทรน: โค้ชเลือกเอง (day.train) หรือมีนัดเทรนวันนั้นที่ไม่ได้ยกเลิก
   let auto = false;
   try { auto = fsQuery_('', 'sessions', [['memberPid', pid], ['date', ds]]).some(function (x) { return x.status !== 'cancelled'; }); } catch (e) { }
+  if (acts.some(function (a) { return a.type === 'pt' || a.type === 'coach'; })) auto = true;
   const train = day.train === true || (day.train !== false && auto);
   return { tot: tot, acts: acts, train: train, burn: acts.reduce(function (a, x) { return a + (+x.kcal || 0); }, 0) };
 }

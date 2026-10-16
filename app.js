@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261015d';
+const VER = '20261016a';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -334,6 +334,17 @@ async function sessionsFor(pid) {
   }
   return rows.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 }
+// วันเทรน: โค้ชเลือกเองรายวัน (day.train = true/false) ถ้ายังไม่เลือก ดูจากนัดเทรนวันนั้นที่ไม่ได้ยกเลิก
+function trainOf(day, sess, ds) {
+  const auto = (sess || []).some(x => x.date === ds && x.status !== 'cancelled');
+  const v = day?.train;
+  return { auto, on: v === true || (v !== false && auto), set: v === true || v === false ? v : null };
+}
+// เป้าของวันนั้น: วันเทรนเพิ่มคาร์บตามที่โค้ชตั้ง (คาร์บ 1 g = 4 kcal)
+function goalOf(t, on) {
+  const xc = on ? (num(t?.trainC) || 0) : 0; const k = num(t?.kcal), c = num(t?.c);
+  return { k: k != null ? k + xc * 4 : null, p: num(t?.p), c: c != null ? c + xc : null, f: num(t?.f), xc };
+}
 async function myMembers() {
   const q = S.me.role === 'owner' ? fb.query(C('people'), fb.where('role', '==', 'member')) : fb.query(C('people'), fb.where('trainerPid', '==', S.me.pid));
   const rows = (await list(q)).sort((a, b) => String(a.name).localeCompare(String(b.name), 'th'));
@@ -492,9 +503,14 @@ function dateNav(ds, act) {
 
 /* ---------- ลูกค้า: วันนี้ ---------- */
 async function renderToday(pid) {
-  const [p, day, acts] = await Promise.all([person(pid, true), dayDoc(pid, ui.date), actsRange(pid, ui.date, ui.date)]);
+  const [p, day, acts, sess] = await Promise.all([person(pid, true), dayDoc(pid, ui.date), actsRange(pid, ui.date, ui.date), sessionsFor(pid).catch(() => [])]);
   const t = p?.targets || {}; const tot = dayTotals(day); const burn = burnOf(acts);
-  const addBurn = t.addBurn !== false; const goal = num(t.kcal);
+  const tr = trainOf(day, sess, ui.date); const G = goalOf(t, tr.on); const xcSet = num(t.trainC) > 0;
+  const addBurn = t.addBurn !== false; const goal = G.k;
+  const trMode = tr.set === true ? 'on' : tr.set === false ? 'off' : 'auto';
+  const trainHtml = (xcSet || isStaff()) ? `<section class="card ${tr.on ? 'sand' : ''}" aria-label="วันเทรน"><div class="between"><b>${tr.on ? '🏋️ วันเทรน' : 'วันพัก'}</b><span class="xs muted">${tr.set != null ? 'โค้ชเลือก' : tr.auto ? 'ตามนัดเทรน' : 'ไม่มีนัดเทรน'}</span></div>
+      <span class="small">${xcSet ? (tr.on ? `เป้าวันนี้เพิ่มคาร์บ ${n0(t.trainC)} g (+${n0(t.trainC * 4)} kcal) ให้มีแรงเทรน` : `วันเทรนแอปจะเพิ่มคาร์บ ${n0(t.trainC)} g ให้อัตโนมัติ`) : 'ยังไม่ได้ตั้งคาร์บเพิ่มสำหรับวันเทรน (ตั้งได้ที่ปุ่ม ตั้งเป้าหมาย)'}</span>
+      ${isStaff() ? `<div class="chips">${[['auto', 'อัตโนมัติ (ตามนัด)'], ['on', 'วันเทรน'], ['off', 'วันพัก']].map(([k, l]) => `<button class="chip" data-act="setTrain" data-v="${k}" aria-pressed="${trMode === k}">${l}</button>`).join('')}</div>` : ''}</section>` : '';
   const remain = goal != null ? goal - tot.k + (addBurn ? burn : 0) : null;
   const pct = goal ? Math.min(100, Math.round(tot.k / (goal + (addBurn ? burn : 0)) * 100)) : 0;
   const macro = (label, v, tg, color) => `<div class="stat"><span>${label}</span><b style="font-size:16px">${r1(v)}<span class="xs muted" style="font-weight:400"> ${tg ? '/ ' + tg + ' g' : 'g'}</span></b><div class="bar"><i style="width:${tg ? Math.min(100, Math.round(v / tg * 100)) : 0}%;background:${color}"></i></div></div>`;
@@ -515,7 +531,8 @@ async function renderToday(pid) {
       : `<div><div class="small muted">กินไปแล้ว</div><span class="big gold">${n0(tot.k)}</span> <span class="muted">kcal</span></div><div class="small muted">เผาผลาญ ${n0(burn)} kcal · โค้ชยังไม่ได้ตั้งเป้าหมาย</div>`}
       <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn sm gold" data-act="snapFood">📷 ถ่ายรูปอาหาร</button>${isStaff() ? `<button class="btn sm gold" data-act="editTargets">ตั้งเป้าหมาย</button>` : ''}</div>
     </section>
-    <section class="grid3" aria-label="สารอาหาร">${macro('โปรตีน', tot.p, num(t.p), '#1D3A5C')}${macro('คาร์บ', tot.c, num(t.c), '#B8862B')}${macro('ไขมัน', tot.f, num(t.f), '#7A6A58')}</section>
+    ${trainHtml}
+    <section class="grid3" aria-label="สารอาหาร">${macro('โปรตีน', tot.p, G.p, '#1D3A5C')}${macro('คาร์บ', tot.c, G.c, '#B8862B')}${macro('ไขมัน', tot.f, G.f, '#7A6A58')}</section>
     <section class="card" aria-label="น้ำ"><div class="row"><div class="grow" style="flex:1"><b>น้ำ ${r1(water / 1000)}</b> <span class="muted">/ ${r1(wGoal / 1000)} ลิตร</span><div class="bar" style="margin-top:6px"><i style="width:${Math.min(100, Math.round(water / wGoal * 100))}%"></i></div></div><button class="btn sm ghost" data-act="water" data-v="-250" aria-label="ลดน้ำ 250 มล.">−</button><button class="btn sm" data-act="water" data-v="250">+250 มล.</button></div></section>
     <section aria-label="มื้ออาหาร" style="display:flex;flex-direction:column;gap:8px"><h2>มื้ออาหาร</h2><div class="list">${mealRows}</div></section>
     ${day.coachNote ? `<section class="card sand"><b class="xs" style="color:#5E440D">โน้ตจากโค้ช ${esc(p?.trainerName || '')}</b><span>${esc(day.coachNote)}</span></section>` : ''}
@@ -1382,7 +1399,7 @@ async function pgBehavior(pid, a, b) {
   const avg = k => n ? logged.reduce((s2, x) => s2 + x.t[k], 0) / n : null;
   const t = p?.targets || {}; const goal = num(t.kcal);
   const burnBy = {}; for (const x of acts) burnBy[x.date] = (burnBy[x.date] || 0) + (+x.kcal || 0);
-  const within = goal ? logged.filter(x => x.t.k <= goal + (t.addBurn === false ? 0 : (burnBy[x.d.id] || 0)) + 100).length : null;
+  const within = goal ? logged.filter(x => x.t.k <= goalOf(t, trainOf(x.d, ss, x.d.id).on).k + (t.addBurn === false ? 0 : (burnBy[x.d.id] || 0)) + 100).length : null;
   const coach = ss.filter(x => x.status === 'logged' && x.date >= a && x.date <= b).length;
   const own = acts.filter(x => x.type !== 'coach').length;
   return { span, n, kcal: avg('k'), prot: avg('p'), goal, goalP: num(t.p), within, acts: own, actsWk: own / wk, burnWk: acts.reduce((s2, x) => s2 + (+x.kcal || 0), 0) / wk, coach, coachWk: coach / wk };
@@ -1935,6 +1952,7 @@ async function renderCoach(pid) {
       <div class="grow" style="flex:1"><b style="font-size:17px">${esc(p?.trainerName || 'ยังไม่มีโค้ช')}</b><div class="small muted">เทรนเนอร์ส่วนตัว · The Olympic Club</div></div></div></section>
     <section class="card"><div class="between"><b>เป้าหมายที่โค้ชตั้ง</b>${isStaff() ? '<button class="btn sm" data-act="editTargets">แก้เป้าหมาย</button>' : ''}</div>
       ${t.kcal ? `<div class="grid4"><div><div class="xs muted">พลังงาน</div><b>${n0(t.kcal)}</b></div><div><div class="xs muted">โปรตีน</div><b>${t.p ? n0(t.p) + ' g' : '—'}</b></div><div><div class="xs muted">คาร์บ</div><b>${t.c ? n0(t.c) + ' g' : '—'}</b></div><div><div class="xs muted">ไขมัน</div><b>${t.f ? n0(t.f) + ' g' : '—'}</b></div></div>
+      ${num(t.trainC) > 0 ? `<div class="small">🏋️ วันเทรน: คาร์บ +${n0(t.trainC)} g · พลังงาน ${n0(goalOf(t, true).k)} kcal</div>` : ''}
       <div class="small muted">นับแคลที่เผาผลาญคืนให้: ${t.addBurn === false ? 'ปิด' : 'เปิด'}</div>` : '<p class="small muted" style="margin:0">โค้ชยังไม่ได้ตั้งเป้าหมาย</p>'}</section>
     <section style="display:flex;flex-direction:column;gap:8px"><h2>นัดเทรนที่จะถึง</h2>${upcoming.length ? `<div class="list">${upcoming.map(s => `<div class="li"><div class="grow"><b>${thDate(s.date, true)} · ${esc(s.time)}</b><div class="small muted">${esc(s.type)} · กับ ${esc(s.trainerName || 'โค้ช')}</div></div></div>`).join('')}</div>` : '<p class="small muted" style="margin:0">ยังไม่มีนัด</p>'}</section>
     ${notes.length ? `<section style="display:flex;flex-direction:column;gap:8px"><h2>ความเห็นล่าสุดจากโค้ช</h2>${notes.map(s => `<div class="card sand"><b class="xs" style="color:#5E440D">${thDate(s.date)} · หลังเทรน ${esc(s.type)}</b><span>${esc(s.note)}</span></div>`).join('')}</section>` : ''}
@@ -1966,8 +1984,9 @@ async function renderMore() {
 async function clientStats(ms, ds) {
   const out = {};
   await Promise.all(ms.map(async m => {
-    const [day, acts] = await Promise.all([dayDoc(m.id, ds), actsRange(m.id, ds, ds)]);
-    out[m.id] = { day, acts, tot: dayTotals(day), burn: burnOf(acts) };
+    const [day, acts, ss] = await Promise.all([dayDoc(m.id, ds), actsRange(m.id, ds, ds), sessionsFor(m.id).catch(() => [])]);
+    const train = trainOf(day, ss, ds).on;
+    out[m.id] = { day, acts, tot: dayTotals(day), burn: burnOf(acts), train, goal: goalOf(m.targets, train).k };
   }));
   return out;
 }
@@ -1976,7 +1995,7 @@ async function renderClients() {
   const ds = todayStr();
   const [st, sess] = await Promise.all([clientStats(ms, ds), S.me.role === 'trainer' ? list(fb.query(C('sessions'), fb.where('trainerPid', '==', S.me.pid), fb.where('date', '==', ds))) : Promise.resolve([])]);
   const rows = ms.map(m => {
-    const s = st[m.id]; const goal = num(m.targets?.kcal); const logged = s.tot.k > 0; const over = goal && s.tot.k > goal + (m.targets?.addBurn === false ? 0 : s.burn);
+    const s = st[m.id]; const goal = s.goal; const logged = s.tot.k > 0; const over = goal && s.tot.k > goal + (m.targets?.addBurn === false ? 0 : s.burn);
     const appt = sess.filter(x => x.memberPid === m.id && x.status === 'planned').map(x => x.time).sort()[0];
     const badge = appt ? ['gold', 'นัด ' + appt] : over ? ['alert', 'เกินเป้า ' + n0(s.tot.k - goal - (m.targets?.addBurn === false ? 0 : s.burn))] : !logged ? ['grey', 'ยังไม่บันทึกวันนี้'] : ['blue', 'ตามแผน'];
     return { m, s, goal, logged, over, appt, badge };
@@ -2183,11 +2202,12 @@ async function saveLog() {
 function digestText(ms, st, ds) {
   const lines = [`สรุปประจำวัน · ${thDate(ds)}`, `ลูกค้าของคุณ ${ms.length} คน`, ''];
   for (const m of ms) {
-    const s = st[m.id]; const goal = num(m.targets?.kcal);
+    const s = st[m.id]; const goal = s.goal;
     if (!s.tot.k) lines.push(`${m.name} — ยังไม่บันทึกอาหาร`);
     else {
       const diff = goal ? s.tot.k - goal : 0;
       lines.push(`${m.name} — ${n0(s.tot.k)}${goal ? ' / ' + n0(goal) : ''} kcal${diff > 0 ? ` (+${n0(diff)})` : ''}`);
+      if (s.train && num(m.targets?.trainC) > 0) lines.push(`🏋️ วันเทรน: เป้ารวมคาร์บเพิ่ม ${n0(m.targets.trainC)} g`);
       lines.push(`P ${n0(s.tot.p)} · C ${n0(s.tot.c)} · F ${n0(s.tot.f)} g`);
       lines.push(MEALS.filter(x => s.tot.byMeal[x] != null || x !== 'ว่าง').map(x => `${x} ${s.tot.byMeal[x] != null ? n0(s.tot.byMeal[x]) : 'ยังไม่บันทึก'}`).join(' · '));
     }
@@ -2201,7 +2221,7 @@ async function renderSummary() {
   const txt = digestText(ms, st, ds); ui.digest = txt;
   setMain(`${dateNav(ds, 'sumNav')}
     <section class="card dark"><b class="xs gold">สรุปประจำวัน · ${thDate(ds)}</b><b style="font-size:16px">ลูกค้าของคุณ ${ms.length} คน</b><span class="xs muted">${lineOn() ? `ระบบส่งข้อความนี้เข้า LINE ของคุณทุกวันเวลา ${esc(S.config.digestTime || '21:00')} แก้ข้อมูลก่อนเวลานั้นได้ (เชื่อม LINE ที่แท็บเพิ่มเติม)` : `หน้านี้คือข้อความที่จะส่งเข้า LINE ตอน ${esc(S.config.digestTime || '21:00')} เมื่อเปิดใช้ LINE แล้ว`}</span></section>
-    <div class="list">${ms.map(m => { const s = st[m.id]; const goal = num(m.targets?.kcal); const diff = goal ? s.tot.k - goal : 0;
+    <div class="list">${ms.map(m => { const s = st[m.id]; const goal = s.goal; const diff = goal ? s.tot.k - goal : 0;
       return `<div class="li" style="flex-direction:column;align-items:stretch;gap:4px"><div class="between"><b>${esc(m.name)}</b><b class="small ${!s.tot.k ? 'muted' : diff > 0 ? 'alert' : ''}">${s.tot.k ? n0(s.tot.k) + (goal ? ' / ' + n0(goal) : '') + ' kcal' + (diff > 0 ? ' (+' + n0(diff) + ')' : '') : 'ยังไม่บันทึกอาหาร'}</b></div>
         ${s.tot.k ? `<span class="small">P ${n0(s.tot.p)} · C ${n0(s.tot.c)} · F ${n0(s.tot.f)} g</span><span class="small muted">${MEALS.filter(x => s.tot.byMeal[x] != null || x !== 'ว่าง').map(x => `${x} ${s.tot.byMeal[x] != null ? n0(s.tot.byMeal[x]) : 'ยังไม่บันทึก'}`).join(' · ')}</span>` : ''}
         <span class="small blue">${s.acts.length ? 'กิจกรรม: ' + s.acts.map(a => esc(a.name) + ' ' + n0(a.kcal)).join(' · ') + ' = เผาผลาญ ' + n0(s.burn) + ' kcal' : 'กิจกรรม: ยังไม่มี'}</span></div>`; }).join('')}</div>
@@ -2539,16 +2559,22 @@ const ACTS = {
   saveBuilt,
   pickFood: el => { sheet.pick = el.dataset.id; sheet.qty = null; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); $('#fQty')?.focus(); },
   saveFood,
+  setTrain: async el => {
+    const v = el.dataset.v;
+    await mutateDay(S.view, ui.date, d => { if (v === 'auto') delete d.train; else d.train = v === 'on'; });
+    toast(v === 'auto' ? 'ใช้วันเทรนตามนัดอัตโนมัติ' : v === 'on' ? 'ตั้งเป็นวันเทรนแล้ว' : 'ตั้งเป็นวันพักแล้ว'); render();
+  },
   saveCoachNote: async () => { const v = $('#coachNote').value.trim(); await mutateDay(S.view, ui.date, d => { d.coachNote = v; }); toast('บันทึกโน้ตแล้ว'); render(); },
   editTargets: async () => {
     const p = await person(S.view, true); const t = p.targets || {};
     openSheet('เป้าหมายของ ' + p.name, `<div class="grid2"><label class="f">พลังงาน (kcal)<input class="in" id="tK" inputmode="numeric" value="${esc(t.kcal ?? '')}"></label><label class="f">น้ำ (มล.)<input class="in" id="tW" inputmode="numeric" value="${esc(t.water ?? 2500)}"></label>
-      <label class="f">โปรตีน (g)<input class="in" id="tP" inputmode="numeric" value="${esc(t.p ?? '')}"></label><label class="f">คาร์บ (g)<input class="in" id="tC" inputmode="numeric" value="${esc(t.c ?? '')}"></label><label class="f">ไขมัน (g)<input class="in" id="tF" inputmode="numeric" value="${esc(t.f ?? '')}"></label></div>
+      <label class="f">โปรตีน (g)<input class="in" id="tP" inputmode="numeric" value="${esc(t.p ?? '')}"></label><label class="f">คาร์บ (g)<input class="in" id="tC" inputmode="numeric" value="${esc(t.c ?? '')}"></label><label class="f">ไขมัน (g)<input class="in" id="tF" inputmode="numeric" value="${esc(t.f ?? '')}"></label><label class="f">วันเทรน: คาร์บเพิ่ม (g)<input class="in" id="tX" inputmode="numeric" value="${esc(t.trainC ?? '')}" placeholder="เช่น 45"></label></div>
+      <p class="xs muted" style="margin:0">วันเทรนคือวันที่มีนัดเทรน หรือวันที่โค้ชกดเลือกในแท็บวันนี้ของลูกค้า วันนั้นเป้าคาร์บและพลังงานเพิ่มให้อัตโนมัติ (คาร์บ 1 g = 4 kcal) เว้นว่างถ้าไม่ต้องการ</p>
       <label class="row small" style="min-height:44px"><input type="checkbox" id="tB" ${t.addBurn !== false ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> นับแคลที่เผาผลาญคืนให้ลูกค้า</label>
       <button class="btn pri block" data-act="saveTargets">บันทึกเป้าหมาย</button>`, { kind: 'targets' });
   },
   saveTargets: async () => {
-    const t = { kcal: num($('#tK').value), water: num($('#tW').value), p: num($('#tP').value), c: num($('#tC').value), f: num($('#tF').value), addBurn: $('#tB').checked };
+    const t = { kcal: num($('#tK').value), water: num($('#tW').value), p: num($('#tP').value), c: num($('#tC').value), f: num($('#tF').value), trainC: num($('#tX').value), addBurn: $('#tB').checked };
     Object.keys(t).forEach(k => t[k] == null && delete t[k]);
     await fb.updateDoc(D('people', S.view), { targets: t }); S.cache.delete('p:' + S.view); closeSheet(); toast('บันทึกเป้าหมายแล้ว'); render();
   },

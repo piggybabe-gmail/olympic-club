@@ -325,12 +325,17 @@ function ocMemberDay_(pid, ds) {
     items.forEach(function (it) { tot.k += +it.k || 0; tot.p += +it.p || 0; tot.c += +it.c || 0; tot.f += +it.f || 0; mk += +it.k || 0; });
     if (items.length) tot.byMeal[m] = mk;
   });
-  return { tot: tot, acts: acts, burn: acts.reduce(function (a, x) { return a + (+x.kcal || 0); }, 0) };
+  // วันเทรน: โค้ชเลือกเอง (day.train) หรือมีนัดเทรนวันนั้นที่ไม่ได้ยกเลิก
+  let auto = false;
+  try { auto = fsQuery_('', 'sessions', [['memberPid', pid], ['date', ds]]).some(function (x) { return x.status !== 'cancelled'; }); } catch (e) { }
+  const train = day.train === true || (day.train !== false && auto);
+  return { tot: tot, acts: acts, train: train, burn: acts.reduce(function (a, x) { return a + (+x.kcal || 0); }, 0) };
 }
 function ocDigestText_(ms, ds, showCoach) {
   const lines = ['🏅 The Olympic Club · สรุปประจำวัน', ocThDate_(ds) + ' · ลูกค้า ' + ms.length + ' คน', ''];
   ms.forEach(function (m) {
-    const s = ocMemberDay_(m._id, ds); const base = +(m.targets && m.targets.kcal) || 0;
+    const s = ocMemberDay_(m._id, ds); const xc = s.train ? (+(m.targets && m.targets.trainC) || 0) : 0;
+    const base = (+(m.targets && m.targets.kcal) || 0) ? (+m.targets.kcal) + xc * 4 : 0;
     const addBurn = !(m.targets && m.targets.addBurn === false) ? s.burn : 0;
     const goal = base ? base + addBurn : 0; // เป้าเดียวกับในแอป: เป้าพื้นฐาน + kcal ที่ออกกำลังกาย
     const head = m.name + (showCoach && m.trainerName ? ' (โค้ช ' + m.trainerName + ')' : '');
@@ -338,6 +343,7 @@ function ocDigestText_(ms, ds, showCoach) {
     else {
       const diff = goal ? s.tot.k - goal : 0;
       lines.push(head + ' — กิน ' + n0_(s.tot.k) + (goal ? ' / เป้า ' + n0_(goal) : '') + ' kcal' + (diff > 0 ? ' (เกิน ' + n0_(diff) + ')' : goal ? ' (เหลือ ' + n0_(-diff) + ')' : ''));
+      if (goal && xc) lines.push('🏋️ วันเทรน: เป้ารวมคาร์บเพิ่ม ' + n0_(xc) + ' g (+' + n0_(xc * 4) + ' kcal)');
       if (goal && addBurn) lines.push('เป้า = ' + n0_(base) + ' + ออกกำลังกาย ' + n0_(addBurn));
       lines.push('P ' + n0_(s.tot.p) + ' · C ' + n0_(s.tot.c) + ' · F ' + n0_(s.tot.f) + ' g');
       lines.push(OC.meals.filter(function (x) { return s.tot.byMeal[x] != null || x !== 'ว่าง'; }).map(function (x) { return x + ' ' + (s.tot.byMeal[x] != null ? n0_(s.tot.byMeal[x]) : 'ยังไม่บันทึก'); }).join(' · '));

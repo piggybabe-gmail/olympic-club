@@ -1,10 +1,10 @@
 // The Olympic Club by PT-Palm — แอปติดตามอาหารและการเทรน (ลูกค้า / เทรนเนอร์ / เจ้าของระบบ)
 import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN, RECAPTCHA_SITE_KEY } from './firebase-config.js?v=20260929b';
-import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX_SUM, MIX_ATE, BAG, NAMPRIK, NP_SETS, quickCalc, noodleCalc, mpCalc, ktCalc, mixCalc, bagCalc, npCalc, frac, normTh } from './foods.js?v=20261013a';
+import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX_SUM, MIX_ATE, CLEAN_MENUS, CLEAN_GROUPS, BAG, NAMPRIK, NP_SETS, quickCalc, noodleCalc, mpCalc, ktCalc, mixCalc, bagCalc, npCalc, frac, normTh } from './foods.js?v=20261025a';
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261016b';
+const VER = '20261025a';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -579,6 +579,7 @@ function foodSheetBody() {
   const lres = q ? (labLib() || []).map((x, i) => ({ x, i })).filter(({ x }) => x.n.toLowerCase().includes(q) || (qn && normTh(x.n).includes(qn))).slice(0, 8) : [];
   const hintLab = q && /เซเว่น|เซเวน|7-?11|711|ข้าวกล่อง|แช่แข็ง|ฉลาก|สำเร็จรูป|ซีพี|อีซี่โก|\bcp\b|ซอง|ขวด|กระป๋อง/i.test(q);
   const hintMix = qn && /มามา|ไข|ผกขม|ผกโขม|ปวยเลง|ทำเอง|ทเอง|มกซ|mix/.test(qn);
+  const cmHits = qn && qn.length >= 2 ? CLEAN_MENUS.filter(m => /คลน|clean/.test(qn) || normTh(m.n + ' ' + (m.al || '')).includes(qn)).slice(0, 6) : [];
   const f = s.pick ? FOOD[s.pick] : null;
   let pickHtml = '';
   if (f) {
@@ -588,10 +589,11 @@ function foodSheetBody() {
       <div class="small">≈ <b>${n0(v.k)} kcal</b> · P ${v.p} · C ${v.c} · F ${v.f} g</div>${f.qk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="qkFrom" data-id="${f.id}">ปรับข้าว ไข่ น้ำมัน หรือสั่งพิเศษ ›</button>` : ''}${f.cf || f.bk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="cfFrom" data-id="${f.id}">${f.cf ? 'ปรับขนาด นม ความหวาน ท็อปปิ้ง หรือเพิ่มขนม ›' : 'เพิ่มเครื่องดื่มคู่กัน ›'}</button>` : ''}<button class="btn sm ghost" style="margin-top:8px" data-act="mxFromPick" data-id="${f.id}">ใส่ลงจานทำเอง · มิกซ์กับวัตถุดิบอื่น ›</button>${f.bg ? `<button class="btn sm ghost" style="margin-top:8px" data-act="bgFrom" data-id="${f.id}">เติมเนื้อสัตว์ใส่แกงนี้ (เช่น ปลาช่อน กุ้ง) · ใส่ว่ากินไปเท่าไร ›</button>` : ''}${f.np ? `<button class="btn sm ghost" style="margin-top:8px" data-act="npFrom" data-id="${f.id}">ประกอบชุดน้ำพริก + ผักจิ้ม + ของทานเล่น ›</button>` : ''}${f.kt ? `<button class="btn sm ghost" style="margin-top:8px" data-act="ktFrom" data-id="${f.id}">ประกอบถุงของทอด ผสมหลายอย่าง · ใส่ว่ากินไปเท่าไร ›</button>` : ''}${f.mp ? `<button class="btn sm ghost" style="margin-top:8px" data-act="mpFrom" data-id="${f.id}">ประกอบชุดหมูปิ้ง + ข้าวเหนียว · ใส่ว่ากินข้าวไปเท่าไร ›</button>` : ''}</section>`;
   }
   return `${foodModeChips()}
-    <label class="f">ค้นหาอาหาร<input class="in" id="fSearch" value="${esc(s.q || '')}" placeholder="เช่น ไข่ ปลา ข้าว อกไก่" autocomplete="off"></label>
+    <label class="f">ค้นหาอาหาร<input class="in" id="fSearch" value="${esc(s.q || '')}" placeholder="เช่น สันในไก่ ข้าวต้มไก่ ปลา ข้าว" autocomplete="off"></label>
     ${lres.length ? `<div class="foodres">${lres.map(({ x, i }) => `<button type="button" data-act="labPick" data-i="${i}">📦 ${esc(x.n)} <span class="xs muted">· ของที่เคยสแกน · ${n0(labPack(x).k)} kcal/แพ็ก</span></button>`).join('')}</div>` : ''}
     ${hintLab && !lres.length ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="label">📷 ของมีฉลาก (เซเว่น ข้าวกล่อง ขนม) · ถ่ายฉลากให้ AI อ่าน ›</button></div>` : ''}
     ${hintCafe ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="cafe">ประกอบแก้วเครื่องดื่ม + ขนม (คาเฟ่) ›</button></div>` : ''}
+    ${cmHits.length ? `<div class="chips">${cmHits.map(m => `<button class="chip" data-act="cmLoad" data-k="${m.k}">🥗 ${esc(m.n)} · ${n0(cmCalc(m).k)} kcal · เลือกวัตถุดิบเอง ›</button>`).join('')}</div>` : ''}
     ${hintMix ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="mix">ทำกินเอง? มิกซ์หลายวัตถุดิบเป็นจานเดียว (เช่น มาม่า + ไข่ 3 ฟอง + ผักโขม) ›</button></div>` : ''}
     ${hintBag ? `<div class="chips"><button class="chip" data-act="bagTab" data-v="curry">กับข้าวถุง + เติมเนื้อสัตว์เอง ›</button><button class="chip" data-act="bagTab" data-v="np">ชุดน้ำพริก/ผักจิ้ม ›</button></div>` : ''}
     ${hintKt ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="kt">ประกอบถุงกล้วยทอด/มันทอด/เผือกทอด (นับชิ้น ใส่ว่ากินไปเท่าไร) ›</button></div>` : ''}
@@ -860,7 +862,7 @@ async function loadMixLib() {
 const mxShort = n => String(n || '').replace(/ \(.*?\)/g, '').trim();
 function mixAutoName(lines) { const n = lines.map(x => { const f = FOOD[x.id], u = mxShort(f?.un); return mxShort(x.n) + (f && f.u !== 'g' && +x.q !== 1 && !/ช้อน/.test(u) ? ` ${x.q} ${u}` : ''); }); return n.slice(0, 4).join(' + ') + (n.length > 4 ? ' ฯลฯ' : ''); }
 function mixDesc(r) { const a = r.lines.map(x => `${mxShort(x.n)} ${x.qs}`); if (r.share < 1) a.push(`กิน ${Math.round(r.share * 100)}% ของทั้งจาน (ทั้งจาน ${n0(r.all.k)} kcal)`); return 'ทำเอง · ' + a.join(' · '); }
-function mxRead() { const st = sheet?.mx; if (!st) return; const dm = document.querySelector('[data-mxmore]'); if (dm) sheet.mxMore = dm.open ? 1 : 0; const n = $('#mxName'); if (n) st.name = n.value; document.querySelectorAll('[data-mxg]').forEach(el => { const it = st.items[+el.dataset.mxg], v = num(el.value); if (it && v != null && v >= 0) it.q = Math.min(5000, r1(v)); }); }
+function mxRead() { const st = sheet?.mx; if (!st) return; const dm = document.querySelector('[data-mxmore]'); if (dm) sheet.mxMore = dm.open ? 1 : 0; const dc = document.querySelector('[data-cmopen]'); if (dc) sheet.cmOpen = dc.open ? 1 : 0; const ds = document.querySelector('[data-cmsteps]'); if (ds) sheet.cmSteps = ds.open ? 1 : 0; const n = $('#mxName'); if (n) st.name = n.value; document.querySelectorAll('[data-mxg]').forEach(el => { const it = st.items[+el.dataset.mxg], v = num(el.value); if (it && v != null && v >= 0) it.q = Math.min(5000, r1(v)); }); }
 function mxAdd(id) {
   const f = FOOD[id]; if (!f) return; const st = mxState(), it = st.items.find(x => x.id === id);
   if (it) it.q = r1(+it.q + (f.u === 'g' ? f.d : 1));
@@ -877,6 +879,18 @@ function mixSumHtml(r) {
   const other = r.lines.reduce((t, l) => t + l.k, 0) - a.reduce((t, x) => t + x[1], 0); if (other > 0) a.push(['อื่น ๆ', other]);
   const sh = r.share < 1 ? r.share : 1, used = a.filter(x => x[1] > 0);
   return used.length > 1 ? `<div class="xs" style="margin-top:4px">มาจาก: ${used.map(([n, k]) => `${n} <b>${n0(k * sh)}</b>`).join(' · ')} kcal</div>` : '';
+}
+function cmCalc(m) { return mixCalc(m.items, 100, FOOD); }
+function cleanMenusHtml(st) {
+  const g = sheet.cmG || 'all', list = CLEAN_MENUS.filter(m => g === 'all' || m.g === g), open = sheet.cmOpen ?? (st.items.length ? 0 : 1);
+  return `<details class="card" style="padding:10px 12px"${open ? ' open' : ''} data-cmopen><summary class="small"><b>🥗 เมนูคลีนทำเอง (ไก่ ปลา กุ้ง) · ${CLEAN_MENUS.length} เมนู</b></summary>
+    <p class="xs muted" style="margin:6px 0">แตะเมนู แอปใส่วัตถุดิบทั้งหมดลงจานให้ แล้วกด × เอาอันที่ไม่กินออก หรือแก้กรัมตามที่ชั่งจริง · ถูกใจแล้วกด “จำเป็นสูตรของฉัน” ครั้งหน้าแตะเดียว</p>
+    <div class="chips">${CLEAN_GROUPS.map(x => `<button class="chip" data-act="cmGrp" data-v="${x.k}" aria-pressed="${g === x.k}">${esc(x.n)}</button>`).join('')}</div>
+    <div class="chips">${list.map(m => { const r = cmCalc(m); return `<button class="chip" data-act="cmLoad" data-k="${m.k}" aria-pressed="${st.cm === m.k}">${esc(m.n)} <span class="xs muted">${n0(r.k)} kcal · P ${Math.round(r.p)}</span></button>`; }).join('')}</div></details>`;
+}
+function cleanStepsHtml(st) {
+  const m = st.cm && CLEAN_MENUS.find(x => x.k === st.cm); if (!m) return '';
+  return `<details class="card" style="padding:10px 12px"${sheet.cmSteps ? ' open' : ''} data-cmsteps><summary class="small"><b>วิธีทำ ${esc(m.n)}</b></summary><ol class="small" style="margin:6px 0 0;padding-left:20px">${m.steps.map(x => `<li>${esc(x)}</li>`).join('')}</ol><p class="xs muted" style="margin:6px 0 0">ค่าในจานเป็นค่าตั้งต้น ชั่งจริงได้เท่าไรแก้กรัมในรายการด้านล่างได้เลย</p></details>`;
 }
 function mixSheetBody() {
   const st = mxState(), r = mixCalc(st.items, st.ate, FOOD), lb = t => `<div class="small"><b>${t}</b></div>`, lib = mixLib();
@@ -895,13 +909,15 @@ function mixSheetBody() {
     <p class="xs muted" style="margin:0">ทำกินเอง ใส่หลายอย่างในจานเดียว เช่น ข้าว 2 ทัพพี + เนื้อ + หมูสับ + ปลา + ไข่ หรือ มาม่าห่อใหญ่ + ไข่ 3 ฟอง + ผักโขม · แอปรวม kcal โปรตีน คาร์บ ไขมัน ทั้งจานให้</p>
     ${lib?.length ? `${lb('สูตรของฉัน (แตะเพื่อใช้ซ้ำ)')}<div class="chips">${lib.map((m, i) => `<button class="chip" data-act="mxLoad" data-i="${i}">${esc(m.n)}</button>`).join('')}</div>
       <div class="chips"><button class="chip" data-act="mxLibEdit" aria-pressed="${!!sheet.mxLibEdit}">${sheet.mxLibEdit ? 'เสร็จ' : 'ลบสูตรที่ไม่ใช้'}</button>${sheet.mxLibEdit ? lib.map((m, i) => `<button class="chip" data-act="mxLibDel" data-i="${i}">× ${esc(m.n)}</button>`).join('') : ''}</div>` : ''}
+    ${cleanMenusHtml(st)}
     ${lb('1. เลือกวัตถุดิบตามหมวด (แตะได้หลายอย่าง แตะซ้ำ = เพิ่มจำนวน)')}
     <div class="chips">${MIX_GROUPS.map(g => `<button class="chip" data-act="mxGrp" data-v="${g.k}" aria-pressed="${grp.k === g.k}">${esc(g.n)}${(cnt[g.k] || 0) ? ` (${cnt[g.k]})` : ''}</button>`).join('')}</div>
     <div class="chips">${grp.q.map(id => FOOD[id]).filter(Boolean).map(f => mxChip(f, st)).join('')}</div>
     ${more.length ? `<details${sheet.mxMore ? ' open' : ''} data-mxmore><summary class="small">ดูทั้งหมดในหมวด${esc(grp.n)} (${more.length} รายการ)</summary><div class="foodres">${more.map(x => `<button type="button" data-act="mxAdd" data-id="${x.id}">${esc(x.n)} <span class="xs muted">· ${x.u === 'g' ? '100 g' : '1 ' + esc(x.un || '')} = ${n0(foodCalc(x, x.u === 'g' ? 100 : 1).k)} kcal</span></button>`).join('')}</div></details>` : ''}
-    <label class="f">หรือค้นวัตถุดิบ<input class="in" id="mxSearch" value="${esc(st.q || '')}" placeholder="เช่น เนื้อ หมูสับ ปลานิล ข้าว คะน้า ซอสหอย" autocomplete="off"></label>
+    <label class="f">หรือค้นวัตถุดิบ<input class="in" id="mxSearch" value="${esc(st.q || '')}" placeholder="เช่น สันในไก่ อกไก่ ปลากะพง ข้าว คะน้า ขิง" autocomplete="off"></label>
     ${res.length ? `<div class="foodres">${res.map(x => `<button type="button" data-act="mxAdd" data-id="${x.id}">${esc(x.n)} <span class="xs muted">· ${x.u === 'g' ? '100 g' : '1 ' + esc(x.un || '')} = ${n0(foodCalc(x, x.u === 'g' ? 100 : 1).k)} kcal</span></button>`).join('')}</div>` : (q ? '<p class="small muted" style="margin:0">ไม่พบวัตถุดิบนี้ ลองคำอื่น</p>' : '')}
     ${lb(`2. ในจานนี้ (${st.items.length} อย่าง)`)}
+    ${cleanStepsHtml(st)}
     ${rows || '<p class="small muted" style="margin:0">ยังไม่มีวัตถุดิบ แตะปุ่มด้านบนหรือค้นหาเพื่อเพิ่ม</p>'}
     ${st.items.length ? `<div class="chips"><button class="chip" data-act="mxAdd" data-id="oiltsp">+ น้ำมัน 1 ช้อนชา</button><button class="chip" data-act="mxAdd" data-id="oiltbsp">+ น้ำมัน 1 ช้อนโต๊ะ</button><button class="chip" data-act="mxClr">ล้างจาน</button></div>` : ''}
     ${lb('3. กินไปเท่าไร (ทำแบ่งกับคนอื่น หรือกินไม่หมด)')}${optChips(MIX_ATE, st.ate, 'mxSet', 'ate')}
@@ -2550,9 +2566,14 @@ const ACTS = {
   mxStep: el => { mxRead(); const st = mxState(), it = st.items[+el.dataset.i]; if (!it) return; it.q = r1(+it.q + (+el.dataset.v)); if (!(it.q > 0)) st.items.splice(+el.dataset.i, 1); redrawFood(); },
   mxDel: el => { mxRead(); mxState().items.splice(+el.dataset.i, 1); redrawFood(); },
   mxGrp: el => { mxRead(); const st = mxState(); st.g = el.dataset.v; sheet.mxMore = 0; redrawFood(); },
-  mxClr: () => { mxRead(); mxState().items = []; redrawFood(); },
+  mxClr: () => { mxRead(); const st = mxState(); st.items = []; st.cm = ''; st.name = ''; redrawFood(); },
+  cmGrp: el => { mxRead(); sheet.cmG = el.dataset.v; sheet.cmOpen = 1; redrawFood(); },
+  cmLoad: el => { const m = CLEAN_MENUS.find(x => x.k === el.dataset.k); if (!m) return; const inMix = sheet.mode === 'mix'; if (inMix) mxRead(); const st = mxState();
+    if (inMix && st.items.length && st.cm !== m.k && !confirm(`ใส่วัตถุดิบเมนู “${m.n}” แทนของที่อยู่ในจานตอนนี้?`)) return;
+    st.items = m.items.filter(x => FOOD[x.id]).map(x => ({ ...x })); st.name = m.n; st.ate = 100; st.cm = m.k; st.q = ''; sheet.cmOpen = 0; sheet.cmSteps = 0;
+    sheet.mode = 'mix'; sheet.q = ''; sheet.pick = null; redrawFood(); toast('ใส่วัตถุดิบให้แล้ว กด × เอาอันที่ไม่กินออก หรือแก้กรัมได้'); },
   mxSet: el => { mxRead(); mxState()[el.dataset.k] = +el.dataset.v; redrawFood(); },
-  mxLoad: el => { const m = (mixLib() || [])[+el.dataset.i]; if (!m) return; const st = mxState(); st.items = (m.items || []).filter(x => FOOD[x.id]).map(x => ({ ...x })); st.name = m.n; st.ate = 100; redrawFood(); },
+  mxLoad: el => { const m = (mixLib() || [])[+el.dataset.i]; if (!m) return; const st = mxState(); st.items = (m.items || []).filter(x => FOOD[x.id]).map(x => ({ ...x })); st.name = m.n; st.ate = 100; st.cm = ''; redrawFood(); },
   mxLibEdit: () => { mxRead(); sheet.mxLibEdit = !sheet.mxLibEdit; redrawFood(); },
   mxLibDel: async el => { const lib = mixLib() || [], m = lib[+el.dataset.i]; if (!m || !confirm(`ลบสูตร “${m.n}” ออกจากสูตรของฉัน? (อาหารที่บันทึกไปแล้วไม่หาย)`)) return;
     mxRead(); const list = lib.filter((_, i) => i !== +el.dataset.i); S.mixLib = { pid: S.view, list }; redrawFood();

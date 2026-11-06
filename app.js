@@ -1,10 +1,10 @@
 // The Olympic Club by PT-Palm — แอปติดตามอาหารและการเทรน (ลูกค้า / เทรนเนอร์ / เจ้าของระบบ)
 import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN, RECAPTCHA_SITE_KEY } from './firebase-config.js?v=20260929b';
-import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX_SUM, MIX_ATE, CLEAN_MENUS, CLEAN_GROUPS, BAG, NAMPRIK, NP_SETS, quickCalc, noodleCalc, mpCalc, ktCalc, mixCalc, bagCalc, npCalc, frac, normTh } from './foods.js?v=20261025a';
+import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX_SUM, MIX_ATE, CLEAN_MENUS, CLEAN_GROUPS, BAG, NAMPRIK, NP_SETS, quickCalc, noodleCalc, mpCalc, ktCalc, mixCalc, bagCalc, npCalc, frac, normTh } from './foods.js?v=20261107a';
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261025a';
+const VER = '20261107a';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -573,7 +573,7 @@ function foodSheetBody() {
   const res = q ? FOODS.filter(f => f.n.toLowerCase().includes(q) || (f.cat || '').includes(q) || (f.al || '').toLowerCase().includes(q) || (qn && (normTh(f.n).includes(qn) || normTh(f.al).includes(qn)))).slice(0, 40) : [];
   const hintCafe = qn && /กาแฟ|ลาเต|อเมิกา|มอคคา|คาปู|เอสเย็น|ชาเย็น|ชานม|โกโก|มทฉ|มจฉ|มัท|ชาเขียว|สมูท|คาเฟ|เบเกอ|ควซอง|คซอง|เคก|บาวนี|มฟฟิน|คุกกี|โอเลียง|นมชมพู|ขนม|latte|mocha|coffee|americano|matcha|cafe/.test(qn);
   const hintQ = qn && /กเพา|ขาว|ผด|บอกโคล|ไขดาว|ตามสง|ราด|กวยเตยว|เสน|บหม|เยนตาโฟ|เกาเหลา|มามา|กวยจบ|วนเสน/.test(qn);
-  const hintMp = qn && /หมูป|เหนียว|เหนยว|sticky|moo ?ping/.test(qn);
+  const hintMp = qn && /หมูป|หมูทอด|หมทอด|สามชน|ซีโคง|เหนียว|เหนยว|sticky|moo ?ping/.test(qn);
   const hintKt = q && /กล้วย|เผือก|มันทอด|มันเทศทอด|ข้าวเม่า|ฟักทอง|ไข่นกกระทา|ปั่นทอด|ปั้นทอด|ของทอด|banana/.test(q);
   const hintBag = qn && /แกง|ตมม|ตมยำ|ตมขา|ตมจืด|ตมโคลง|จบฉาย|พโล|พแนง|ฉฉี|ไตปลา|ถุง|นำพิก|ผกจิม|ผกลวก/.test(qn);
   const lres = q ? (labLib() || []).map((x, i) => ({ x, i })).filter(({ x }) => x.n.toLowerCase().includes(q) || (qn && normTh(x.n).includes(qn))).slice(0, 8) : [];
@@ -586,7 +586,7 @@ function foodSheetBody() {
     const qty = num(s.qty) ?? f.d; const v = foodCalc(f, qty);
     pickHtml = `<section class="card gold-edge"><b>${esc(f.n)}</b>
       <label class="f">${f.u === 'g' ? 'น้ำหนัก (กรัม)' : 'จำนวน (' + esc(f.un || 'หน่วย') + ')'}<input class="in" id="fQty" inputmode="decimal" value="${esc(s.qty ?? f.d)}"></label>
-      <div class="small">≈ <b>${n0(v.k)} kcal</b> · P ${v.p} · C ${v.c} · F ${v.f} g</div>${f.qk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="qkFrom" data-id="${f.id}">ปรับข้าว ไข่ น้ำมัน หรือสั่งพิเศษ ›</button>` : ''}${f.cf || f.bk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="cfFrom" data-id="${f.id}">${f.cf ? 'ปรับขนาด นม ความหวาน ท็อปปิ้ง หรือเพิ่มขนม ›' : 'เพิ่มเครื่องดื่มคู่กัน ›'}</button>` : ''}<button class="btn sm ghost" style="margin-top:8px" data-act="mxFromPick" data-id="${f.id}">ใส่ลงจานทำเอง · มิกซ์กับวัตถุดิบอื่น ›</button>${f.bg ? `<button class="btn sm ghost" style="margin-top:8px" data-act="bgFrom" data-id="${f.id}">เติมเนื้อสัตว์ใส่แกงนี้ (เช่น ปลาช่อน กุ้ง) · ใส่ว่ากินไปเท่าไร ›</button>` : ''}${f.np ? `<button class="btn sm ghost" style="margin-top:8px" data-act="npFrom" data-id="${f.id}">ประกอบชุดน้ำพริก + ผักจิ้ม + ของทานเล่น ›</button>` : ''}${f.kt ? `<button class="btn sm ghost" style="margin-top:8px" data-act="ktFrom" data-id="${f.id}">ประกอบถุงของทอด ผสมหลายอย่าง · ใส่ว่ากินไปเท่าไร ›</button>` : ''}${f.mp ? `<button class="btn sm ghost" style="margin-top:8px" data-act="mpFrom" data-id="${f.id}">ประกอบชุดหมูปิ้ง + ข้าวเหนียว · ใส่ว่ากินข้าวไปเท่าไร ›</button>` : ''}</section>`;
+      <div class="small">≈ <b>${n0(v.k)} kcal</b> · P ${v.p} · C ${v.c} · F ${v.f} g</div>${f.qk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="qkFrom" data-id="${f.id}">ปรับข้าว ไข่ น้ำมัน หรือสั่งพิเศษ ›</button>` : ''}${f.cf || f.bk ? `<button class="btn sm ghost" style="margin-top:8px" data-act="cfFrom" data-id="${f.id}">${f.cf ? 'ปรับขนาด นม ความหวาน ท็อปปิ้ง หรือเพิ่มขนม ›' : 'เพิ่มเครื่องดื่มคู่กัน ›'}</button>` : ''}<button class="btn sm ghost" style="margin-top:8px" data-act="mxFromPick" data-id="${f.id}">ใส่ลงจานทำเอง · มิกซ์กับวัตถุดิบอื่น ›</button>${f.bg ? `<button class="btn sm ghost" style="margin-top:8px" data-act="bgFrom" data-id="${f.id}">เติมเนื้อสัตว์ใส่แกงนี้ (เช่น ปลาช่อน กุ้ง) · ใส่ว่ากินไปเท่าไร ›</button>` : ''}${f.np ? `<button class="btn sm ghost" style="margin-top:8px" data-act="npFrom" data-id="${f.id}">ประกอบชุดน้ำพริก + ผักจิ้ม + ของทานเล่น ›</button>` : ''}${f.kt ? `<button class="btn sm ghost" style="margin-top:8px" data-act="ktFrom" data-id="${f.id}">ประกอบถุงของทอด ผสมหลายอย่าง · ใส่ว่ากินไปเท่าไร ›</button>` : ''}${f.mp || f.mt ? `<button class="btn sm ghost" style="margin-top:8px" data-act="mpFrom" data-id="${f.id}">${f.mt ? 'ประกอบชุดหมูทอด (ชั่งขีด) + ข้าวเหนียว · ผสมหลายแบบได้ ›' : 'ประกอบชุดหมูปิ้ง/หมูทอด + ข้าวเหนียว · ใส่ว่ากินข้าวไปเท่าไร ›'}</button>` : ''}</section>`;
   }
   return `${foodModeChips()}
     <label class="f">ค้นหาอาหาร<input class="in" id="fSearch" value="${esc(s.q || '')}" placeholder="เช่น สันในไก่ ข้าวต้มไก่ ปลา ข้าว" autocomplete="off"></label>
@@ -597,7 +597,7 @@ function foodSheetBody() {
     ${hintMix ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="mix">ทำกินเอง? มิกซ์หลายวัตถุดิบเป็นจานเดียว (เช่น มาม่า + ไข่ 3 ฟอง + ผักโขม) ›</button></div>` : ''}
     ${hintBag ? `<div class="chips"><button class="chip" data-act="bagTab" data-v="curry">กับข้าวถุง + เติมเนื้อสัตว์เอง ›</button><button class="chip" data-act="bagTab" data-v="np">ชุดน้ำพริก/ผักจิ้ม ›</button></div>` : ''}
     ${hintKt ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="kt">ประกอบถุงกล้วยทอด/มันทอด/เผือกทอด (นับชิ้น ใส่ว่ากินไปเท่าไร) ›</button></div>` : ''}
-    ${hintMp ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="mp">ประกอบหมูปิ้ง + ข้าวเหนียว (ใส่ปริมาณที่กินจริง) ›</button></div>` : ''}
+    ${hintMp ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="mp">ประกอบหมูปิ้ง/หมูทอด + ข้าวเหนียว (ใส่ปริมาณที่กินจริง) ›</button></div>` : ''}
     ${hintQ ? `<div class="chips"><button class="chip" data-act="foodMode" data-v="quick">ประกอบจานด่วน/ข้าวราด ›</button><button class="chip" data-act="foodMode" data-v="noodle">ประกอบชามก๋วยเตี๋ยว ›</button></div>` : ''}
     ${res.length ? `<div class="foodres">${res.map(x => `<button type="button" data-act="pickFood" data-id="${x.id}">${esc(x.n)} <span class="xs muted">· ${x.d} ${x.u === 'g' ? 'g' : esc(x.un || '')} · ${n0(foodCalc(x, x.d).k)} kcal</span></button>`).join('')}</div>` : (q && !lres.length ? '<p class="small muted" style="margin:0">ไม่พบในคลัง ลองคำอื่น · ของมีฉลากกด “📷 สแกนฉลาก” · หรือกด “กรอกเอง”</p>' : '')}
     ${pickHtml}${mealSel()}${photoPicker('รูปจาน')}
@@ -605,7 +605,7 @@ function foodSheetBody() {
 }
 function foodModeChips() {
   const m = sheet.mode || 'db';
-  return `<div class="chips">${[['plate', '📷 ถ่ายรูปจาน'], ['db', 'ค้นจากคลัง'], ['label', '📷 สแกนฉลาก'], ['mix', 'ทำเอง/มิกซ์วัตถุดิบ'], ['quick', 'จานด่วน/ข้าวราด'], ['noodle', 'ก๋วยเตี๋ยว'], ['cafe', 'คาเฟ่/กาแฟ'], ['mp', 'หมูปิ้ง/ข้าวเหนียว'], ['kt', 'กล้วยทอด/ของทอด'], ['bag', 'กับข้าวถุง/น้ำพริก'], ['manual', 'กรอกเอง']].map(([k, l]) => `<button class="chip" data-act="foodMode" data-v="${k}" aria-pressed="${m === k}">${l}</button>`).join('')}</div>`;
+  return `<div class="chips">${[['plate', '📷 ถ่ายรูปจาน'], ['db', 'ค้นจากคลัง'], ['label', '📷 สแกนฉลาก'], ['mix', 'ทำเอง/มิกซ์วัตถุดิบ'], ['quick', 'จานด่วน/ข้าวราด'], ['noodle', 'ก๋วยเตี๋ยว'], ['cafe', 'คาเฟ่/กาแฟ'], ['mp', 'หมูปิ้ง/หมูทอด/ข้าวเหนียว'], ['kt', 'กล้วยทอด/ของทอด'], ['bag', 'กับข้าวถุง/น้ำพริก'], ['manual', 'กรอกเอง']].map(([k, l]) => `<button class="chip" data-act="foodMode" data-v="${k}" aria-pressed="${m === k}">${l}</button>`).join('')}</div>`;
 }
 /* ---------- จานด่วน / ก๋วยเตี๋ยว: เลือกเหมือนสั่งที่ร้าน แอปคำนวณ kcal ให้ ---------- */
 const QK_DEF = { style: 'krapao', protein: 'porkmince', size: 1, oil: 1, rice: 'white', riceG: 200, ate: 100, egg: 'fried', eggN: 1, prikpla: 0 };
@@ -695,8 +695,8 @@ async function saveCafe() {
   closeSheet(); toast(`บันทึก ${items.length} รายการ ${n0(k)} kcal`); render();
 }
 /* ---------- หมูปิ้ง + ข้าวเหนียว: นับไม้ และใส่ว่ากินข้าวเหนียวไปเท่าไร ---------- */
-const MP_DEF = { cnt: { std: 3 }, riceG: 100, ate: 100, fromLeft: 0 };
-function mpState() { if (!sheet.mp) { sheet.mp = lsGet('oc_mp', MP_DEF); sheet.mp.cnt = { ...(sheet.mp.cnt || {}) }; sheet.mp.fromLeft = 0; if (sheet.mp.ate == null) sheet.mp.ate = 100; } return sheet.mp; }
+const MP_DEF = { cnt: { std: 3 }, mt: {}, riceG: 100, ate: 100, fromLeft: 0 };
+function mpState() { if (!sheet.mp) { sheet.mp = lsGet('oc_mp', MP_DEF); sheet.mp.cnt = { ...(sheet.mp.cnt || {}) }; sheet.mp.mt = { ...(sheet.mp.mt || {}) }; sheet.mp.fromLeft = 0; if (sheet.mp.ate == null) sheet.mp.ate = 100; } return sheet.mp; }
 // ข้าวเหนียวที่กินเหลือไว้ (จำในเครื่องนี้ 3 วัน) ให้กดบันทึกส่วนที่เหลือได้ทีหลังในมื้อถัดไป
 function mpLeft() { const l = lsGet('oc_mp_left', {}); return +l.g > 0 && Date.now() - (+l.t || 0) < 3 * 864e5 ? l : null; }
 function mpSheetBody() {
@@ -704,41 +704,47 @@ function mpSheetBody() {
   const bags = [...MOOPING.bags]; const bagOn = st.fromLeft ? null : bags.find(x => x.k === +st.riceG);
   const ateOn = MOOPING.ate.find(x => x.k === +st.ate);
   return `${foodModeChips()}
-    <p class="xs muted" style="margin:0">นับไม้หมูปิ้ง แล้วใส่ว่าข้าวเหนียวถุงนั้นกินไปเท่าไร แอปคิด kcal ตามที่กินจริง · ตัวเลขเล็กคือ kcal ต่อไม้</p>
+    <p class="xs muted" style="margin:0">นับไม้หมูปิ้ง / ใส่หมูทอดเป็นขีดตามที่แม่ค้าชั่ง แล้วใส่ว่าข้าวเหนียวถุงนั้นกินไปเท่าไร แอปคิด kcal ตามที่กินจริง</p>
     ${lb('1. หมูปิ้ง (กด + / − เพื่อนับไม้ ผสมหลายแบบได้)')}
     ${MOOPING.types.map(x => { const n = +(st.cnt || {})[x.k] || 0; return `<div class="between" style="align-items:center;padding:4px 0;border-bottom:1px solid var(--line)"><div><b class="small">${esc(x.n)}</b> <span class="xs muted">${esc(x.d)} · ${n0(x.k2)} kcal</span></div>
       <div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn sm ghost" data-act="mpCnt" data-k="${x.k}" data-v="-1" aria-label="ลด ${esc(x.n)}" ${n ? '' : 'disabled'}>−</button><b style="min-width:22px;text-align:center">${n}</b><button class="btn sm ghost" data-act="mpCnt" data-k="${x.k}" data-v="1" aria-label="เพิ่ม ${esc(x.n)}">+</button></div></div>`; }).join('')}
-    ${lb('2. ข้าวเหนียว · ถุงที่ซื้อมา')}
+    ${lb('2. หมูทอด · ชั่งเป็นขีด (1 ขีด = 100 g · กด + / − ทีละครึ่งขีด หรือพิมพ์เอง เช่น 0.7)')}
+    ${MOOPING.fried.map(x => { const v = Math.round((+(st.mt || {})[x.k] || 0) * 100) / 100; return `<div class="between" style="align-items:center;padding:4px 0;border-bottom:1px solid var(--line)"><div><b class="small">${esc(x.n)}</b> <span class="xs muted">${esc(x.d)} · ${n0(x.k2)} kcal/ขีด</span></div>
+      <div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn sm ghost" data-act="mtCnt" data-k="${x.k}" data-v="-1" aria-label="ลด ${esc(x.n)} ครึ่งขีด" ${v ? '' : 'disabled'}>−</button><input class="in" data-mtk="${x.k}" inputmode="decimal" aria-label="${esc(x.n)} กี่ขีด" style="width:58px;text-align:center;padding:6px 4px" value="${v || ''}" placeholder="0"><button class="btn sm ghost" data-act="mtCnt" data-k="${x.k}" data-v="1" aria-label="เพิ่ม ${esc(x.n)} ครึ่งขีด">+</button></div></div>`; }).join('')}
+    ${lb('3. ข้าวเหนียว · ถุงที่ซื้อมา')}
     <div class="chips">${bags.map(x => `<button class="chip" data-act="mpSet" data-k="riceG" data-v="${x.k}" aria-pressed="${bagOn?.k === x.k}">${esc(x.n)}</button>`).join('')}${left ? `<button class="chip" data-act="mpLeft" aria-pressed="${!!st.fromLeft}">ที่เหลือจาก${left.m ? 'มื้อ' + esc(left.m) : 'ครั้งก่อน'}${left.d && left.d !== ui.date ? ' ' + thDate(left.d) : ''} ~${n0(left.g)} g</button>` : ''}</div>
     ${+st.riceG ? `<label class="f">หรือใส่น้ำหนักทั้งถุงเอง (กรัม · ถ้าชั่งได้)<input class="in" id="mpRiceG" inputmode="numeric" value="${esc(st.riceG)}"></label>
-    ${lb('3. กินข้าวเหนียวไปเท่าไร')}${optChips(MOOPING.ate, ateOn ? ateOn.k : '', 'mpSet', 'ate')}
+    ${lb('4. กินข้าวเหนียวไปเท่าไร')}${optChips(MOOPING.ate, ateOn ? ateOn.k : '', 'mpSet', 'ate')}
     <label class="f">หรือใส่เป็น % ที่กิน<input class="in" id="mpAte" inputmode="numeric" value="${esc(st.ate)}"></label>
     <p class="xs muted" style="margin:0">กินจริง ≈ <b>${n0(r.g)} g</b>${r.left > 0 ? ` · เหลือ ≈ ${n0(r.left)} g (แอปจำไว้ ให้กดบันทึกส่วนที่เหลือได้ในมื้อถัดไป)` : ''}</p>` : ''}
     <section class="card gold-edge">${r.pork ? `<div><b>${esc(r.pork.name)}</b> <span class="small">${n0(r.pork.k)} kcal</span><div class="xs muted">${esc(r.pork.desc)}</div></div>` : ''}
+      ${r.fried.map(x => `<div style="margin-top:4px"><b>${esc(x.name)}</b> <span class="small">${n0(x.k)} kcal</span><div class="xs muted">${esc(x.desc)} · P ${x.p} · C ${x.c} · F ${x.f} g</div></div>`).join('')}
       ${r.rice ? `<div style="margin-top:4px"><b>${esc(r.rice.name)}</b> <span class="small">${n0(r.rice.k)} kcal</span><div class="xs muted">${esc(r.rice.desc)}</div></div>` : ''}
-      ${r.pork || r.rice ? '' : '<div class="small muted">ยังไม่ได้เลือกหมูปิ้งหรือข้าวเหนียว</div>'}
+      ${r.pork || r.fried.length || r.rice ? '' : '<div class="small muted">ยังไม่ได้เลือกหมูปิ้ง หมูทอด หรือข้าวเหนียว</div>'}
       <div style="margin-top:6px"><span class="big">${n0(r.tot.k)}</span> <span class="muted">kcal รวม</span></div>
       <div class="small">โปรตีน ${r.tot.p} g · คาร์บ ${r.tot.c} g · ไขมัน ${r.tot.f} g</div></section>
-    ${mealSel()}${photoPicker('รูปหมูปิ้ง/ข้าวเหนียว')}
-    <button class="btn pri block" data-act="saveMp" ${r.pork || r.rice ? '' : 'disabled'}>บันทึก${r.pork ? 'หมูปิ้ง' : ''}${r.pork && r.rice ? ' + ' : ''}${r.rice ? 'ข้าวเหนียว' : ''}</button>`;
+    ${mealSel()}${photoPicker('รูปหมูปิ้ง/หมูทอด/ข้าวเหนียว')}
+    <button class="btn pri block" data-act="saveMp" ${r.pork || r.fried.length || r.rice ? '' : 'disabled'}>บันทึก${[r.pork && 'หมูปิ้ง', r.fried.length && 'หมูทอด', r.rice && 'ข้าวเหนียว'].filter(Boolean).join(' + ')}</button>`;
 }
 function mpReadInputs() {
   const st = mpState(), g = $('#mpRiceG'), a = $('#mpAte');
   if (g) { const v = num(g.value); if (v != null && v >= 0 && v !== +st.riceG) { st.riceG = Math.min(1000, Math.round(v)); st.fromLeft = 0; } }
   if (a) { const v = num(a.value); if (v != null) st.ate = Math.min(100, Math.max(1, Math.round(v))); }
+  document.querySelectorAll('[data-mtk]').forEach(el => { const k = el.dataset.mtk, v = num(el.value); st.mt = { ...(st.mt || {}) }; if (v != null && v > 0) st.mt[k] = Math.min(30, Math.round(v * 100) / 100); else delete st.mt[k]; });
 }
 async function saveMp() {
   mpReadInputs();
   const s = sheet, st = mpState(), r = mpCalc(st), meal = $('#fMeal').value, items = [], now = Date.now();
   if (r.pork) items.push({ n: r.pork.name, q: r.pork.n, qs: r.pork.desc, k: r.pork.k, p: r.pork.p, c: r.pork.c, f: r.pork.f, src: 'mp', opt: { cnt: { ...st.cnt } } });
+  r.fried.forEach(x => items.push({ n: x.name, q: x.g, qs: x.desc, k: x.k, p: x.p, c: x.c, f: x.f, src: 'mp', opt: { mt: x.k, khid: x.kd } }));
   if (r.rice) items.push({ n: r.rice.name, q: r.rice.g, qs: r.rice.desc, k: r.rice.k, p: r.rice.p, c: r.rice.c, f: r.rice.f, src: 'mp', opt: { bag: +st.riceG, ate: +st.ate, fromLeft: +st.fromLeft || 0 } });
-  if (!items.length) return toast('เลือกหมูปิ้งหรือข้าวเหนียวก่อน');
+  if (!items.length) return toast('เลือกหมูปิ้ง หมูทอด หรือข้าวเหนียวก่อน');
   items.forEach((it, i) => { it.t = now + i; it.by = S.me.role; });
   if (s.ph?.length) items[0].ph = s.ph;
   // จำข้าวเหนียวที่เหลือ: กินไม่หมดก็จำส่วนที่เหลือ · กินส่วนที่เหลือหมดแล้วก็ล้างทิ้ง
   if (r.rice && r.left > 0) lsSet('oc_mp_left', { g: r.left, t: now, d: ui.date, m: meal });
   else if (r.rice && st.fromLeft) { try { localStorage.removeItem('oc_mp_left'); } catch (e) { } }
-  if (!st.fromLeft) lsSet('oc_mp', { cnt: st.cnt, riceG: st.riceG, ate: 100 });
+  if (!st.fromLeft) lsSet('oc_mp', { cnt: st.cnt, mt: st.mt || {}, riceG: st.riceG, ate: 100 });
   await mutateDay(S.view, ui.date, d => { (d.meals[meal] = d.meals[meal] || []).push(...items); });
   closeSheet(); toast(`บันทึก ${items.map(x => x.n).join(' + ')} · ${n0(r.tot.k)} kcal${r.left > 0 ? ` · จำข้าวเหนียวที่เหลือ ~${n0(r.left)} g ไว้แล้ว` : ''}`, 4000); render();
 }
@@ -2538,9 +2544,11 @@ const ACTS = {
   saveCafe: () => saveCafe(),
   mpCnt: el => { mpReadInputs(); const st = mpState(), k = el.dataset.k; st.cnt = { ...(st.cnt || {}) }; st.cnt[k] = Math.max(0, Math.min(20, (+st.cnt[k] || 0) + (+el.dataset.v))); if (!st.cnt[k]) delete st.cnt[k]; redrawFood(); },
   mpSet: el => { mpReadInputs(); const st = mpState(), k = el.dataset.k; st[k] = +el.dataset.v; if (k === 'riceG') { st.fromLeft = 0; if (+st.riceG && !+st.ate) st.ate = 100; } redrawFood(); },
-  mpLeft: () => { mpReadInputs(); const st = mpState(), l = mpLeft(); if (!l) return; if (st.fromLeft) { st.fromLeft = 0; st.riceG = 100; } else { st.fromLeft = 1; st.riceG = +l.g; st.ate = 100; st.cnt = {}; } redrawFood(); },
-  mpFrom: el => { const f = FOOD[el.dataset.id]; if (!f?.mp) return; const st = mpState(), q = num($('#fQty')?.value) ?? f.d;
-    if (f.mp === 'rice') { st.riceG = Math.round(f.u === 'g' ? q : q * 100); st.ate = 100; st.fromLeft = 0; st.cnt = {}; }
+  mtCnt: el => { mpReadInputs(); const st = mpState(), k = el.dataset.k; st.mt = { ...(st.mt || {}) }; st.mt[k] = Math.max(0, Math.min(30, Math.round(((+st.mt[k] || 0) + MOOPING.ftStep * (+el.dataset.v)) * 100) / 100)); if (!st.mt[k]) delete st.mt[k]; redrawFood(); },
+  mpLeft: () => { mpReadInputs(); const st = mpState(), l = mpLeft(); if (!l) return; if (st.fromLeft) { st.fromLeft = 0; st.riceG = 100; } else { st.fromLeft = 1; st.riceG = +l.g; st.ate = 100; st.cnt = {}; st.mt = {}; } redrawFood(); },
+  mpFrom: el => { const f = FOOD[el.dataset.id]; if (!f?.mp && !f?.mt) return; const st = mpState(), q = num($('#fQty')?.value) ?? f.d;
+    if (f.mt) { st.mt = { [f.mt]: Math.max(0.1, Math.round(q) / 100) }; st.cnt = {}; }
+    else if (f.mp === 'rice') { st.riceG = Math.round(f.u === 'g' ? q : q * 100); st.ate = 100; st.fromLeft = 0; st.cnt = {}; }
     else { st.cnt = { [f.mp]: Math.max(1, Math.round(q)) }; }
     sheet.mode = 'mp'; redrawFood(); },
   saveMp: () => saveMp(),
@@ -2784,7 +2792,7 @@ async function onChange(e) {
   if (el.dataset?.set && ui.log) { const m = ui.log.moves[+el.dataset.mi]; m.sets[+el.dataset.si][el.dataset.set] = el.value;
     if (el.dataset.set === 'w') convHint(el, m);
     return; }
-  if ((el.id === 'mpRiceG' || el.id === 'mpAte') && sheet) { mpReadInputs(); redrawFood(); return; }
+  if ((el.id === 'mpRiceG' || el.id === 'mpAte' || el.dataset?.mtk != null) && sheet) { mpReadInputs(); redrawFood(); return; }
   if ((el.id === 'bgG' || el.id === 'bgAte' || el.dataset?.bgq != null) && sheet?.bg) { bgRead(); redrawFood(); return; }
   if (el.dataset?.mxg != null && sheet?.mx) { mxRead(); redrawFood(); return; }
   if (el.id === 'fQty' && sheet) { sheet.qty = el.value; refreshSheet(foodSheetBody()); fillThumbs($('#sheetBody')); return; }

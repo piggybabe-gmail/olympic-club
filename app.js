@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261109a';
+const VER = '20261109b';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -369,6 +369,12 @@ function dayTotals(day) {
   }
   return t;
 }
+// ขาด/เกินเป้าวันนี้ ใช้ในคอมเมนต์อาหาร (ห่างเป้าเกิน 10% หรือ 5 g / 50 kcal ถึงนับ)
+function dayGaps(tot, G, kGoal) {
+  const out = []; const chk = (l, v, tg, u, min) => { if (tg == null || !(tg > 0)) return; const d = v - tg; if (Math.abs(d) < Math.max(min, tg * 0.1)) return; out.push({ l, d, u, txt: `${l}${d < 0 ? 'ขาด' : 'เกิน'} ${n0(Math.abs(d))} ${u}` }); };
+  chk('แคล', tot.k, kGoal, 'kcal', 50); chk('โปรตีน', tot.p, G.p, 'g', 5); chk('คาร์บ', tot.c, G.c, 'g', 5); chk('ไขมัน', tot.f, G.f, 'g', 5);
+  return out;
+}
 const burnOf = acts => acts.reduce((a, x) => a + (+x.kcal || 0), 0);
 function latestWeight(rows) { for (let i = rows.length - 1; i >= 0; i--) if (num(rows[i].weight)) return num(rows[i].weight); return null; }
 function foodCalc(f, q) { const x = f.u === 'g' ? q / 100 : q; return { k: Math.round(f.k * x), p: r1(f.p * x), c: r1(f.c * x), f: r1(f.f * x) }; }
@@ -542,10 +548,26 @@ async function renderToday(pid) {
     <section class="grid3" aria-label="สารอาหาร">${macro('โปรตีน', tot.p, G.p, '#1D3A5C')}${macro('คาร์บ', tot.c, G.c, '#B8862B')}${macro('ไขมัน', tot.f, G.f, '#7A6A58')}</section>
     <section class="card" aria-label="น้ำ"><div class="row"><div class="grow" style="flex:1"><b>น้ำ ${r1(water / 1000)}</b> <span class="muted">/ ${r1(wGoal / 1000)} ลิตร</span><div class="bar" style="margin-top:6px"><i style="width:${Math.min(100, Math.round(water / wGoal * 100))}%"></i></div></div><button class="btn sm ghost" data-act="water" data-v="-250" aria-label="ลดน้ำ 250 มล.">−</button><button class="btn sm" data-act="water" data-v="250">+250 มล.</button></div></section>
     <section aria-label="มื้ออาหาร" style="display:flex;flex-direction:column;gap:8px"><h2>มื้ออาหาร</h2><div class="list">${mealRows}</div></section>
+    ${noteCard(pid, day, tot, G, goal != null ? goal + (addBurn ? burn : 0) : null)}
     ${day.coachNote ? `<section class="card sand"><b class="xs" style="color:#5E440D">โน้ตจากโค้ช ${esc(p?.trainerName || '')}</b><span>${esc(day.coachNote)}</span></section>` : ''}
     ${isStaff() ? `<section class="card"><label class="f">โน้ตถึงลูกค้าสำหรับวันนี้<textarea class="in" id="coachNote">${esc(day.coachNote || '')}</textarea></label><button class="btn sm pri" data-act="saveCoachNote">บันทึกโน้ต</button></section>` : ''}
   `);
   fillThumbs();
+}
+function noteCard(pid, day, tot, G, kGoal) {
+  const mine = !isStaff() && pid === S.me?.pid; const saved = day.memberNote || '';
+  const at = day.memberNoteAt ? new Date(day.memberNoteAt).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : '';
+  const gaps = tot.k ? dayGaps(tot, G, kGoal) : [];
+  const gapChips = !tot.k ? '<span class="xs muted">ยังไม่มีรายการอาหารวันนี้</span>' : gaps.length
+    ? gaps.map(g => mine ? `<button class="chip" style="min-height:34px;padding:0 12px;font-size:13px;border-color:${g.d < 0 ? 'var(--navy)' : 'var(--alert)'};color:${g.d < 0 ? 'var(--navy)' : 'var(--alert)'}" data-act="noteAdd" data-v="${esc(g.txt)}">${g.d < 0 ? '▼' : '▲'} ${esc(g.txt)}</button>` : `<span class="tag ${g.d < 0 ? 'blue' : 'alert'}">${g.d < 0 ? '▼' : '▲'} ${esc(g.txt)}</span>`).join('')
+    : (G.p != null || kGoal != null) ? '<span class="tag blue">✓ ใกล้เป้าทุกตัว</span>' : '<span class="xs muted">โค้ชยังไม่ได้ตั้งเป้า</span>';
+  if (!mine) return saved || (isStaff() && tot.k) ? `<section class="card" aria-label="คอมเมนต์อาหารของลูกค้า"><b class="small">💬 คอมเมนต์อาหารของลูกค้า</b>${saved ? `<span style="white-space:pre-wrap">${esc(saved)}</span>${at ? `<span class="xs muted">บันทึกเมื่อ ${at} น.</span>` : ''}` : '<span class="xs muted">ลูกค้ายังไม่ได้คอมเมนต์วันนี้</span>'}<div class="row" style="gap:6px;flex-wrap:wrap">${gapChips}</div></section>` : '';
+  const dr = ui.noteDraft?.pid === pid && ui.noteDraft?.ds === ui.date ? ui.noteDraft.v : saved;
+  return `<section class="card" aria-label="คอมเมนต์อาหารวันนี้"><div class="between"><b>💬 คอมเมนต์อาหารวันนี้</b>${at && dr === saved ? `<span class="xs muted">บันทึกแล้ว ${at} น.</span>` : dr !== saved ? '<span class="xs alert">ยังไม่บันทึก</span>' : ''}</div>
+    <div class="xs muted">เทียบเป้าวันนี้ แตะเพื่อใส่ลงคอมเมนต์</div><div class="row" style="gap:6px;flex-wrap:wrap">${gapChips}</div>
+    <div class="xs muted">มื้อไหน</div><div class="row" style="gap:6px;flex-wrap:wrap">${MEALS.map(m => `<button class="chip" style="min-height:34px;padding:0 12px;font-size:13px" data-act="noteAdd" data-v="${m}: " data-nl="1">${m}</button>`).join('')}</div>
+    <textarea class="in" id="myNote" rows="3" maxlength="500" placeholder="เช่น เย็น: กินข้าวเยอะไป คาร์บเกิน · พรุ่งนี้เพิ่มไข่มื้อเช้าให้โปรตีนถึง">${esc(dr)}</textarea>
+    <div class="row" style="gap:8px"><button class="btn sm pri" data-act="saveMyNote">บันทึกคอมเมนต์</button>${saved ? '<button class="btn sm ghost" data-act="clearMyNote">ลบ</button>' : ''}<span class="xs muted grow" style="text-align:right">โค้ชเห็นในแอป</span></div></section>`;
 }
 async function mutateDay(pid, ds, fn) {
   const ref = D('people', pid, 'days', ds);
@@ -1923,7 +1945,7 @@ function bkSheets(bk) {
     for (const [k, l, u] of SCAN_FIELDS) { const v = num(r[k]); o[`${l} (${u === 'w' ? 'kg' : u})`] = v ?? ''; if (u === 'w') o[`${l} (lb)`] = v != null ? lbOf(v) : ''; }
     for (const [k, l] of CIRC) { const v = num(r[k]); o[`${l} (cm)`] = v != null ? r1(v) : ''; o[`${l} (นิ้ว)`] = v != null ? inchOf(v) : ''; }
     return o; }));
-  sh['อาหารรายวัน'] = ppl.flatMap(p => p.days.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.id)).sort((a, b) => a.id.localeCompare(b.id)).map(d => { const t = dayTotals(d); return { ชื่อ: p.name, วันที่: d.id, kcal: Math.round(t.k), 'โปรตีน g': r1(t.p), 'คาร์บ g': r1(t.c), 'ไขมัน g': r1(t.f), 'น้ำ มล.': d.water || 0, รายการ: mealItems(d).length }; }));
+  sh['อาหารรายวัน'] = ppl.flatMap(p => p.days.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.id)).sort((a, b) => a.id.localeCompare(b.id)).map(d => { const t = dayTotals(d); return { ชื่อ: p.name, วันที่: d.id, kcal: Math.round(t.k), 'โปรตีน g': r1(t.p), 'คาร์บ g': r1(t.c), 'ไขมัน g': r1(t.f), 'น้ำ มล.': d.water || 0, รายการ: mealItems(d).length, 'คอมเมนต์ลูกค้า': d.memberNote || '', 'โน้ตโค้ช': d.coachNote || '' }; }));
   sh['รายการอาหาร'] = ppl.flatMap(p => p.days.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.id)).sort((a, b) => a.id.localeCompare(b.id)).flatMap(d => mealItems(d).map(it => ({ ชื่อ: p.name, วันที่: d.id, มื้อ: it.meal, เมนู: it.n, ปริมาณ: it.qs || it.q || '', kcal: Math.round(+it.k || 0), 'โปรตีน g': r1(+it.p || 0), 'คาร์บ g': r1(+it.c || 0), 'ไขมัน g': r1(+it.f || 0) }))));
   sh['กิจกรรม'] = ppl.flatMap(p => [...p.activities].sort((a, b) => (a.date + (a.t || '')).localeCompare(b.date + (b.t || ''))).map(a => ({ ชื่อ: p.name, วันที่: a.date, ประเภท: a.type || '', กิจกรรม: a.name || '', นาที: a.min ?? '', kcal: a.kcal ?? '', บันทึกโดย: a.source === 'staff' ? 'โค้ช' : a.source === 'coach' ? 'ผลเทรนโค้ช' : 'ลูกค้า' })));
   sh['ผลเทรน'] = bk.sessions.filter(x => x.status === 'logged').sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).flatMap(x => (x.moves || []).flatMap(m => (m.sets || []).map((st, i) => ({ ลูกค้า: x.memberName || nameOf[x.memberPid] || '', โค้ช: x.trainerName || '', วันที่: x.date, เวลา: x.time, ประเภท: x.type || '', ท่า: m.name, เซ็ต: i + 1, ครั้ง: st.r ?? '', 'น้ำหนักที่กรอก': st.t ?? (m.u === 'lb' ? (st.lb ?? '') : (st.kg ?? '')), kg: st.kg ?? '', lb: st.lb ?? (num(st.kg) != null ? lbOf(num(st.kg)) : ''), 'หน่วยที่กรอก': m.u || 'kg' }))));
@@ -2244,6 +2266,7 @@ function digestText(ms, st, ds) {
       lines.push(MEALS.filter(x => s.tot.byMeal[x] != null || x !== 'ว่าง').map(x => `${x} ${s.tot.byMeal[x] != null ? n0(s.tot.byMeal[x]) : 'ยังไม่บันทึก'}`).join(' · '));
     }
     lines.push(s.acts.length ? `กิจกรรม: ${s.acts.map(a => `${a.name} ${n0(a.kcal)}`).join(' · ')} = เผาผลาญ ${n0(s.burn)} kcal` : 'กิจกรรม: ยังไม่มี');
+    if (s.day?.memberNote) lines.push(`💬 ${String(s.day.memberNote).replace(/\s*\n\s*/g, ' / ').slice(0, 200)}`);
     lines.push('');
   }
   return lines.join('\n').trim();
@@ -2256,7 +2279,7 @@ async function renderSummary() {
     <div class="list">${ms.map(m => { const s = st[m.id]; const goal = s.goal; const diff = goal ? s.tot.k - goal : 0;
       return `<div class="li" style="flex-direction:column;align-items:stretch;gap:4px"><div class="between"><b>${esc(m.name)}</b><b class="small ${!s.tot.k ? 'muted' : diff > 0 ? 'alert' : ''}">${s.tot.k ? n0(s.tot.k) + (goal ? ' / ' + n0(goal) : '') + ' kcal' + (diff > 0 ? ' (+' + n0(diff) + ')' : '') : 'ยังไม่บันทึกอาหาร'}</b></div>
         ${s.tot.k ? `<span class="small">P ${n0(s.tot.p)} · C ${n0(s.tot.c)} · F ${n0(s.tot.f)} g</span><span class="small muted">${MEALS.filter(x => s.tot.byMeal[x] != null || x !== 'ว่าง').map(x => `${x} ${s.tot.byMeal[x] != null ? n0(s.tot.byMeal[x]) : 'ยังไม่บันทึก'}`).join(' · ')}</span>` : ''}
-        <span class="small blue">${s.acts.length ? 'กิจกรรม: ' + s.acts.map(a => esc(a.name) + ' ' + n0(a.kcal)).join(' · ') + ' = เผาผลาญ ' + n0(s.burn) + ' kcal' : 'กิจกรรม: ยังไม่มี'}</span></div>`; }).join('')}</div>
+        <span class="small blue">${s.acts.length ? 'กิจกรรม: ' + s.acts.map(a => esc(a.name) + ' ' + n0(a.kcal)).join(' · ') + ' = เผาผลาญ ' + n0(s.burn) + ' kcal' : 'กิจกรรม: ยังไม่มี'}</span>${s.day?.memberNote ? `<span class="small" style="white-space:pre-wrap;background:var(--sand);border-radius:10px;padding:6px 10px">💬 ${esc(s.day.memberNote)}</span>` : ''}</div>`; }).join('')}</div>
     <button class="btn gold block" data-act="copyDigest">คัดลอกข้อความสรุป</button><p class="xs muted center" style="margin:0">${lineOn() ? 'ส่งให้คนอื่นเพิ่มได้ด้วยการคัดลอกไปวางใน LINE' : 'ระหว่างที่ยังไม่เปิด LINE อัตโนมัติ คัดลอกไปวางใน LINE เองได้'}</p>`);
 }
 
@@ -2603,6 +2626,9 @@ const ACTS = {
     await mutateDay(S.view, ui.date, d => { if (v === 'auto') delete d.train; else d.train = v === 'on'; });
     toast(v === 'auto' ? 'ใช้วันเทรนตามนัดอัตโนมัติ' : v === 'on' ? 'ตั้งเป็นวันเทรนแล้ว' : 'ตั้งเป็นวันพักแล้ว'); render();
   },
+  noteAdd: el => { const ta = $('#myNote'); if (!ta) return; const v = el.dataset.v; const cur = ta.value.replace(/\s+$/, ''); ta.value = !cur ? v : el.dataset.nl ? cur + '\n' + v : /:$/.test(cur) ? cur + ' ' + v : cur + ' · ' + v; ui.noteDraft = { pid: S.view, ds: ui.date, v: ta.value }; ta.focus(); try { ta.setSelectionRange(ta.value.length, ta.value.length); } catch (e) {} },
+  saveMyNote: async () => { const v = ($('#myNote')?.value || '').trim().slice(0, 500); await mutateDay(S.view, ui.date, d => { d.memberNote = v; d.memberNoteAt = Date.now(); }); ui.noteDraft = null; toast(v ? 'บันทึกคอมเมนต์แล้ว' : 'ล้างคอมเมนต์แล้ว'); render(); },
+  clearMyNote: async () => { if (!confirm('ลบคอมเมนต์วันนี้?')) return; await mutateDay(S.view, ui.date, d => { d.memberNote = ''; d.memberNoteAt = null; }); ui.noteDraft = null; toast('ลบคอมเมนต์แล้ว'); render(); },
   saveCoachNote: async () => { const v = $('#coachNote').value.trim(); await mutateDay(S.view, ui.date, d => { d.coachNote = v; }); toast('บันทึกโน้ตแล้ว'); render(); },
   editTargets: async () => {
     const p = await person(S.view, true); const t = p.targets || {};
@@ -2808,6 +2834,7 @@ async function onChange(e) {
 function onInput(e) {
   const el = e.target;
   if (el.dataset?.bf && sheet?.kind === 'body') { sheet.v[el.dataset.bf] = el.value; const sp = document.querySelector(`[data-bconv="${el.dataset.bf}"]`); if (sp) sp.innerHTML = bodyConv(sheet, el.dataset.bf, el.value) || '&nbsp;'; return; }
+  if (el.id === 'myNote') { ui.noteDraft = { pid: S.view, ds: ui.date, v: el.value }; return; }
   if (el.id === 'logCustom' && ui.log) { ui.log.q = el.value; refreshMovePick(); return; }
   if (el.id === 'mxSearch' && sheet) { mxRead(); mxState().q = el.value; const pos = el.selectionStart; redrawFood(); const n = $('#mxSearch'); n.focus(); try { n.setSelectionRange(pos, pos); } catch (err) { } return; }
   if (el.id === 'mxName' && sheet?.mx) { sheet.mx.name = el.value; return; }

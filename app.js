@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261109b';
+const VER = '20261109c';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -96,6 +96,8 @@ let sheet = null; // ข้อมูลของหน้าต่างที�
 /* ============ UI พื้นฐาน ============ */
 function toast(msg, ms = 2600) { const t = $('#toast'); t.textContent = msg; t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), ms); }
 function setMain(html) { $('#main').innerHTML = html; }
+const digAm = () => (S.config?.digestTime || '21:00') < '12:00';
+const digWhen = () => digAm() ? `ทุกเช้า ${S.config.digestTime} (สรุปของเมื่อวาน)` : `ทุกวันเวลา ${S.config?.digestTime || '21:00'}`;
 function isStaff() { return S.me && (S.me.role === 'owner' || S.me.role === 'trainer'); }
 // หัวหน้าเทรนเนอร์ = เทรนเนอร์ที่เจ้าของระบบให้สิทธิ์สร้าง/พักงาน/ลบเทรนเนอร์ และย้ายลูกค้าระหว่างเทรนเนอร์
 function isHead() { return S.me?.role === 'trainer' && S.me.person?.canManageTrainers === true; }
@@ -2275,7 +2277,7 @@ async function renderSummary() {
   const ms = (await myMembers()).filter(m => m.active); const ds = ui.sumDate; const st = await clientStats(ms, ds);
   const txt = digestText(ms, st, ds); ui.digest = txt;
   setMain(`${dateNav(ds, 'sumNav')}
-    <section class="card dark"><b class="xs gold">สรุปประจำวัน · ${thDate(ds)}</b><b style="font-size:16px">ลูกค้าของคุณ ${ms.length} คน</b><span class="xs muted">${lineOn() ? `ระบบส่งข้อความนี้เข้า LINE ของคุณทุกวันเวลา ${esc(S.config.digestTime || '21:00')} แก้ข้อมูลก่อนเวลานั้นได้ (เชื่อม LINE ที่แท็บเพิ่มเติม)` : `หน้านี้คือข้อความที่จะส่งเข้า LINE ตอน ${esc(S.config.digestTime || '21:00')} เมื่อเปิดใช้ LINE แล้ว`}</span></section>
+    <section class="card dark"><b class="xs gold">สรุปประจำวัน · ${thDate(ds)}</b><b style="font-size:16px">ลูกค้าของคุณ ${ms.length} คน</b><span class="xs muted">${lineOn() ? `ระบบส่งสรุปเข้า LINE ของคุณ${esc(digWhen())} แก้ข้อมูลก่อนเวลานั้นได้ (เชื่อม LINE ที่แท็บเพิ่มเติม)` : `หน้านี้คือข้อความที่จะส่งเข้า LINE ตอน ${esc(S.config.digestTime || '21:00')} เมื่อเปิดใช้ LINE แล้ว`}</span></section>
     <div class="list">${ms.map(m => { const s = st[m.id]; const goal = s.goal; const diff = goal ? s.tot.k - goal : 0;
       return `<div class="li" style="flex-direction:column;align-items:stretch;gap:4px"><div class="between"><b>${esc(m.name)}</b><b class="small ${!s.tot.k ? 'muted' : diff > 0 ? 'alert' : ''}">${s.tot.k ? n0(s.tot.k) + (goal ? ' / ' + n0(goal) : '') + ' kcal' + (diff > 0 ? ' (+' + n0(diff) + ')' : '') : 'ยังไม่บันทึกอาหาร'}</b></div>
         ${s.tot.k ? `<span class="small">P ${n0(s.tot.p)} · C ${n0(s.tot.c)} · F ${n0(s.tot.f)} g</span><span class="small muted">${MEALS.filter(x => s.tot.byMeal[x] != null || x !== 'ว่าง').map(x => `${x} ${s.tot.byMeal[x] != null ? n0(s.tot.byMeal[x]) : 'ยังไม่บันทึก'}`).join(' · ')}</span>` : ''}
@@ -2328,7 +2330,7 @@ async function renderSystem() {
     <section class="card"><label class="f">ชื่อแอป<input class="in" id="cfName" value="${esc(c.name || 'The Olympic Club by PT-Palm')}"></label>
       <label class="row small" style="min-height:44px"><input type="checkbox" id="cfAi" ${c.aiOn !== false ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> เปิดให้ AI อ่านรูป (ใบ InBody, หน้าจอนาฬิกา)</label>
       <label class="f">รุ่น AI<input class="in" id="cfModel" value="${esc(c.aiModel || 'gemini-3.5-flash')}"></label>
-      <div class="grid2"><label class="f">เวลาส่งสรุปรายวัน<input class="in" type="time" id="cfTime" value="${esc(c.digestTime || '21:00')}"></label><label class="f">หน่วงส่งผลเทรน (นาที)<input class="in" id="cfDelay" inputmode="numeric" value="${esc(c.workoutDelayMin || 60)}"></label></div>
+      <div class="grid2"><label class="f">เวลาส่งสรุปรายวัน<input class="in" type="time" id="cfTime" value="${esc(c.digestTime || '21:00')}"><span class="xs muted">ก่อน 12:00 (เช่น 05:45) = ส่งสรุปของเมื่อวาน</span></label><label class="f">หน่วงส่งผลเทรน (นาที)<input class="in" id="cfDelay" inputmode="numeric" value="${esc(c.workoutDelayMin || 60)}"></label></div>
       <button class="btn pri" data-act="saveConfig">บันทึกการตั้งค่า</button></section>
     ${lineAdminHtml(c)}
     ${whoGetsHtml(ms, trs)}
@@ -2346,7 +2348,7 @@ function lineAdminHtml(c) {
   const names = {}; S.cache.forEach((v, k) => { if (k.startsWith('p:') && v) names[k.slice(2)] = v.name; }); names.owner = 'เจ้าของระบบ';
   const links = i?.links ? Object.entries(i.links) : [];
   return `<section class="card"><div class="between"><b>แจ้งเตือน LINE</b><span class="tag ${on ? 'gold' : 'grey'}">${on ? 'เปิดอยู่' : c.lineUrl ? 'ปิดอยู่' : 'ยังไม่ตั้งค่า'}</span></div>
-    <p class="small muted" style="margin:0">ส่งผ่าน LINE OA ด้วย Apps Script (ไม่ต้องใช้แพ็กเกจ Blaze): <b>สรุปรายวัน ${esc(c.digestTime || '21:00')}</b> ถึงเทรนเนอร์แต่ละคน (เฉพาะลูกค้าของตัวเอง) และ <b>ผลเทรนถึงลูกค้า</b> หลังโค้ชบันทึก ${esc(c.workoutDelayMin || 60)} นาที ไม่บันทึกก็ไม่ส่ง · ทุกคนต้องกด “เชื่อม LINE” ที่แท็บเพิ่มเติมของตัวเอง 1 ครั้ง · เลือกว่าใครได้รับอะไรที่การ์ดถัดไป</p>
+    <p class="small muted" style="margin:0">ส่งผ่าน LINE OA ด้วย Apps Script (ไม่ต้องใช้แพ็กเกจ Blaze): <b>สรุปรายวัน ${esc(digWhen())}</b> ถึงเทรนเนอร์แต่ละคน (เฉพาะลูกค้าของตัวเอง) และ <b>ผลเทรนถึงลูกค้า</b> หลังโค้ชบันทึก ${esc(c.workoutDelayMin || 60)} นาที ไม่บันทึกก็ไม่ส่ง · ทุกคนต้องกด “เชื่อม LINE” ที่แท็บเพิ่มเติมของตัวเอง 1 ครั้ง · เลือกว่าใครได้รับอะไรที่การ์ดถัดไป</p>
     <label class="f">ลิงก์ระบบ LINE (Apps Script Web App)<input class="in" id="lnUrl" value="${esc(c.lineUrl || '')}" placeholder="https://script.google.com/macros/s/…/exec" autocapitalize="none" spellcheck="false"></label>
     <label class="row small" style="min-height:44px"><input type="checkbox" id="lnOn" ${c.lineOn !== false ? 'checked' : ''} style="width:22px;height:22px;accent-color:#14202E"> เปิดการส่งอัตโนมัติ</label>
     <div class="row"><button class="btn pri" data-act="saveLine">บันทึก</button>${c.lineUrl ? '<button class="btn" data-act="lineRefresh">ตรวจสถานะ</button>' : ''}</div>
@@ -2377,7 +2379,7 @@ function whoGetsHtml(ms, trs) {
     </div>`;
   };
   return `<section class="card"><div class="between"><b>ใครได้รับอะไร</b><span class="xs muted">กดหัวข้อเพื่อเปิด/ปิด · บันทึกทันที</span></div>
-    <p class="small muted" style="margin:0">ติ๊ก <b>อนุญาต/รับแจ้งเตือน</b> แล้วเลือกหัวข้อ (ปุ่มสีเข้ม = รับ) สรุปรายวันส่งเวลา ${esc(S.config.digestTime || '21:00')} ผลการเทรนส่งหลังโค้ชบันทึก ${esc(S.config.workoutDelayMin || 60)} นาที · ทุกข้อความใช้โควตา LINE OA เปิดเท่าที่จำเป็น</p>
+    <p class="small muted" style="margin:0">ติ๊ก <b>อนุญาต/รับแจ้งเตือน</b> แล้วเลือกหัวข้อ (ปุ่มสีเข้ม = รับ) สรุปรายวันส่ง${esc(digWhen())} ผลการเทรนส่งหลังโค้ชบันทึก ${esc(S.config.workoutDelayMin || 60)} นาที · ทุกข้อความใช้โควตา LINE OA เปิดเท่าที่จำเป็น</p>
     ${people.map(row).join('')}
     <p class="xs muted" style="margin:0">เทรนเนอร์และลูกค้าเปิดแอป → แท็บ <b>เพิ่มเติม</b> → <b>เชื่อม LINE</b> · ของคุณเองกดที่การ์ด LINE ของฉันด้านล่าง</p>
   </section>`;

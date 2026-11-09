@@ -236,7 +236,7 @@ function ocApi_(b) {
     if (!me) return { ok: false, error: 'ยืนยันตัวตนไม่ผ่าน ลองออกจากระบบแล้วเข้าใหม่' };
     const L = ocLinks_();
     if (b.oc === 'info') {
-      const out = { ok: true, me: me.k, link: L[me.k] ? { name: L[me.k].name, friend: L[me.k].friend, at: L[me.k].at } : null, hasToken: !!P.getProperty('LINE_TOKEN'), hasLogin: !!P.getProperty('LOGIN_CHANNEL_ID'), ticking: ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'ocTick'; }), lastDigest: P.getProperty('OC_DIGEST_DATE') || '', digestLog: me.role === 'owner' ? ocDigestLog_() : me.role === 'trainer' ? (function (g) { return { date: g.date, at: g.at, mine: (g.sent || {})[me.k] ? 'ส่งแล้ว' : (g.skip || {})[me.k] || '' }; })(ocDigestLog_()) : null };
+      const out = { ok: true, me: me.k, link: L[me.k] ? { name: L[me.k].name, friend: L[me.k].friend, at: L[me.k].at } : null, hasToken: !!P.getProperty('LINE_TOKEN'), hasLogin: !!P.getProperty('LOGIN_CHANNEL_ID'), ticking: ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === 'ocTick'; }), lastDigest: [P.getProperty('OC_DIGEST_DATE') || '', P.getProperty('OC_DIGEST_DATE_AM') || ''].sort().pop(), digestLog: me.role === 'owner' ? ocDigestLog_() : me.role === 'trainer' ? (function (g) { return { date: g.date, at: g.at, mine: (g.sent || {})[me.k] ? 'ส่งแล้ว' : (g.skip || {})[me.k] || '' }; })(ocDigestLog_()) : null };
       if (me.role === 'owner') { out.links = {}; Object.keys(L).forEach(function (k) { out.links[k] = { name: L[k].name, appName: L[k].appName, friend: L[k].friend, at: L[k].at, role: L[k].role, dup: ocDupOf_(L, k) }; }); }
       return out;
     }
@@ -260,7 +260,7 @@ function ocApi_(b) {
     if (b.oc === 'digestTest') {
       if (me.role !== 'owner' && me.role !== 'trainer') return { ok: false, error: 'เฉพาะเทรนเนอร์และเจ้าของ' };
       const t = L[me.k]; if (!t) return { ok: false, error: 'ยังไม่ได้เชื่อม LINE' };
-      const cfg = fsGet_('config/app') || {}; const ds = ocToday_();
+      const cfg = fsGet_('config/app') || {}; const ds = ocDigestAm_(cfg) ? ocYesterday_() : ocToday_();
       const all = ocMembers_(); const ms = me.role === 'owner' ? all : all.filter(function (m) { return m.trainerPid === me.k; });
       const code = push_(t.uid, ocDigestText_(ms, ds, me.role === 'owner'));
       return code === 200 ? { ok: true, n: ms.length } : { ok: false, error: 'ส่งไม่สำเร็จ (' + code + ')' };
@@ -310,6 +310,9 @@ function ocPage_(title, msg, back) {
 
 // ---------- ข้อมูลสำหรับสรุป ----------
 function ocToday_() { return Utilities.formatDate(new Date(), OC.tz, 'yyyy-MM-dd'); }
+function ocYesterday_() { return Utilities.formatDate(new Date(Date.now() - 86400000), OC.tz, 'yyyy-MM-dd'); }
+// เวลาส่งก่อนเที่ยง (เช่น 05:45) = รอบเช้า ส่งสรุปของ "เมื่อวาน" ทั้งวัน · ตั้งหลังเที่ยง (เช่น 21:00) = สรุปของวันนี้
+function ocDigestAm_(cfg) { return (cfg.digestTime || '21:00') < '12:00'; }
 function ocThDate_(ds) { const d = new Date(ds + 'T12:00:00+07:00'); return OC.days[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + OC.months[d.getUTCMonth()]; }
 function n0_(x) { return Math.round(+x || 0).toLocaleString('en-US'); }
 function ocMembers_() {
@@ -330,10 +333,10 @@ function ocMemberDay_(pid, ds) {
   try { auto = fsQuery_('', 'sessions', [['memberPid', pid], ['date', ds]]).some(function (x) { return x.status !== 'cancelled'; }); } catch (e) { }
   if (acts.some(function (a) { return a.type === 'pt' || a.type === 'coach'; })) auto = true;
   const train = day.train === true || (day.train !== false && auto);
-  return { tot: tot, acts: acts, train: train, burn: acts.reduce(function (a, x) { return a + (+x.kcal || 0); }, 0) };
+  return { note: String(day.memberNote || '').trim(), tot: tot, acts: acts, train: train, burn: acts.reduce(function (a, x) { return a + (+x.kcal || 0); }, 0) };
 }
 function ocDigestText_(ms, ds, showCoach) {
-  const lines = ['🏅 The Olympic Club · สรุปประจำวัน', ocThDate_(ds) + ' · ลูกค้า ' + ms.length + ' คน', ''];
+  const lines = ['🏅 The Olympic Club · สรุปประจำวัน', ocThDate_(ds) + (ds !== ocToday_() ? ' (ของเมื่อวาน)' : '') + ' · ลูกค้า ' + ms.length + ' คน', ''];
   ms.forEach(function (m) {
     const s = ocMemberDay_(m._id, ds); const xc = s.train ? (+(m.targets && m.targets.trainC) || 0) : 0;
     const base = (+(m.targets && m.targets.kcal) || 0) ? (+m.targets.kcal) + xc * 4 : 0;
@@ -350,6 +353,7 @@ function ocDigestText_(ms, ds, showCoach) {
       lines.push(OC.meals.filter(function (x) { return s.tot.byMeal[x] != null || x !== 'ว่าง'; }).map(function (x) { return x + ' ' + (s.tot.byMeal[x] != null ? n0_(s.tot.byMeal[x]) : 'ยังไม่บันทึก'); }).join(' · '));
     }
     lines.push(s.acts.length ? 'กิจกรรม: ' + s.acts.map(function (a) { return a.name + ' ' + n0_(a.kcal); }).join(' · ') + ' = เผาผลาญ ' + n0_(s.burn) + ' kcal' : 'กิจกรรม: ยังไม่มี');
+    if (s.note) lines.push('💬 ' + s.note.replace(/\s*\n\s*/g, ' / ').slice(0, 200));
     lines.push('');
   });
   lines.push(OC.appUrl);
@@ -383,16 +387,18 @@ function ocTick() {
       else { sent = push_(t.uid, ocWorkoutText_(s)) === 200; if (!sent) why = 'ส่งไม่สำเร็จ'; }
       fsPatch_(s._path, { notified: true, lineSent: sent, lineTo: sent ? s.memberPid : '', lineSkip: why, notifiedAt: new Date().toISOString() });
     });
-    // (2) สรุปรายวัน: วันละครั้ง เมื่อถึงเวลาที่ตั้งไว้ (ค่าเริ่มต้น 21:00)
+    // (2) สรุปรายวัน: วันละครั้ง เมื่อถึงเวลาที่ตั้งไว้ (ค่าเริ่มต้น 21:00 · ตั้งก่อนเที่ยง เช่น 05:45 = ส่งสรุปของเมื่อวาน)
     //     จดผลรายคนใน OC_DIGEST_LOG · ถ้าส่งไม่ครบ (เช่น Firestore/LINE ขัดข้อง) รอบถัดไป (10 นาที) ส่งเฉพาะคนที่ยังไม่ได้
     const hm = Utilities.formatDate(new Date(), OC.tz, 'HH:mm');
-    if (cfg.lineOn !== false && hm >= (cfg.digestTime || '21:00') && P.getProperty('OC_DIGEST_DATE') !== ds) ocSendDigest_(cfg, ds, L);
+    const am = ocDigestAm_(cfg); const dds = am ? ocYesterday_() : ds;
+    if (cfg.lineOn !== false && hm >= (cfg.digestTime || '21:00') && P.getProperty(am ? 'OC_DIGEST_DATE_AM' : 'OC_DIGEST_DATE') !== dds) ocSendDigest_(cfg, dds, L, am);
   } finally { lock.releaseLock(); }
 }
 
 function ocDigestLog_() { try { return JSON.parse(P.getProperty('OC_DIGEST_LOG') || '{}'); } catch (e) { return {}; } }
-function ocSendDigest_(cfg, ds, L) {
-  let log = ocDigestLog_(); if (log.date !== ds) log = { date: ds, sent: {}, skip: {} };
+function ocSendDigest_(cfg, ds, L, am) {
+  const mode = am ? 'am' : 'pm';
+  let log = ocDigestLog_(); if (log.date !== ds || (log.mode || 'pm') !== mode) log = { date: ds, mode: mode, sent: {}, skip: {} };
   log.sent = log.sent || {}; log.skip = {}; let failed = 0;
   const all = ocMembers_();
   fsQuery_('', 'people', [['role', 'trainer']]).forEach(function (tr) {
@@ -419,7 +425,7 @@ function ocSendDigest_(cfg, ds, L) {
   log.at = new Date().toISOString();
   P.setProperty('OC_DIGEST_LOG', JSON.stringify(log));
   // ส่งครบ (หรือเหลือแต่คนที่ส่งไม่ได้เพราะยังไม่เชื่อม/ไม่มีลูกค้า) → ปิดรอบของวันนี้ · ถ้า LINE ส่งพลาด ลองใหม่รอบหน้าได้ถึง 23:50
-  if (!failed || Utilities.formatDate(new Date(), OC.tz, 'HH:mm') >= '23:50') P.setProperty('OC_DIGEST_DATE', ds);
+  if (!failed || Utilities.formatDate(new Date(), OC.tz, 'HH:mm') >= '23:50') P.setProperty(am ? 'OC_DIGEST_DATE_AM' : 'OC_DIGEST_DATE', ds);
   return log;
 }
 

@@ -390,8 +390,10 @@ function ocTick() {
     // (2) สรุปรายวัน: วันละครั้ง เมื่อถึงเวลาที่ตั้งไว้ (ค่าเริ่มต้น 21:00 · ตั้งก่อนเที่ยง เช่น 05:45 = ส่งสรุปของเมื่อวาน)
     //     จดผลรายคนใน OC_DIGEST_LOG · ถ้าส่งไม่ครบ (เช่น Firestore/LINE ขัดข้อง) รอบถัดไป (10 นาที) ส่งเฉพาะคนที่ยังไม่ได้
     const hm = Utilities.formatDate(new Date(), OC.tz, 'HH:mm');
-    const am = ocDigestAm_(cfg); const dds = am ? ocYesterday_() : ds;
-    if (cfg.lineOn !== false && hm >= (cfg.digestTime || '21:00') && P.getProperty(am ? 'OC_DIGEST_DATE_AM' : 'OC_DIGEST_DATE') !== dds) ocSendDigest_(cfg, dds, L, am);
+    const am = ocDigestAm_(cfg); const dt = cfg.digestTime || '21:00'; const dds = am ? ocYesterday_() : ds;
+    if (cfg.lineOn !== false && hm >= dt && P.getProperty(am ? 'OC_DIGEST_DATE_AM' : 'OC_DIGEST_DATE') !== dds) ocSendDigest_(cfg, dds, L, am);
+    // ส่งตามหลัง: ตั้งเวลาดึก (หลัง 22:00 เช่น 23:45) แล้วรอบนั้นส่งไม่ทันก่อนเที่ยงคืน → ส่งสรุปของเมื่อวานให้ถึง 02:00
+    else if (cfg.lineOn !== false && !am && dt >= '22:00' && hm < '02:00' && P.getProperty('OC_DIGEST_DATE') !== ocYesterday_()) ocSendDigest_(cfg, ocYesterday_(), L, false);
   } finally { lock.releaseLock(); }
 }
 
@@ -425,7 +427,8 @@ function ocSendDigest_(cfg, ds, L, am) {
   log.at = new Date().toISOString();
   P.setProperty('OC_DIGEST_LOG', JSON.stringify(log));
   // ส่งครบ (หรือเหลือแต่คนที่ส่งไม่ได้เพราะยังไม่เชื่อม/ไม่มีลูกค้า) → ปิดรอบของวันนี้ · ถ้า LINE ส่งพลาด ลองใหม่รอบหน้าได้ถึง 23:50
-  if (!failed || Utilities.formatDate(new Date(), OC.tz, 'HH:mm') >= '23:50') P.setProperty(am ? 'OC_DIGEST_DATE_AM' : 'OC_DIGEST_DATE', ds);
+  // ส่งพลาดบางคน → รอบถัดไป (10 นาที) ลองเฉพาะคนที่ยังไม่ได้ จนหมดช่วงเวลาของรอบนั้น (ไม่ส่งซ้ำคนที่ได้แล้ว)
+  if (!failed) P.setProperty(am ? 'OC_DIGEST_DATE_AM' : 'OC_DIGEST_DATE', ds);
   return log;
 }
 

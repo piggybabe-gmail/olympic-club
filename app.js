@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261109c';
+const VER = '20261109d';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');

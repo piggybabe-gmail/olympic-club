@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261107a';
+const VER = '20261109a';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -13,9 +13,16 @@ const num = x => { const v = parseFloat(String(x ?? '').replace(/,/g, '')); retu
 /* น้ำหนักท่าเล่น: เก็บ kg เสมอ (ใช้คิดสถิติ/Volume) + lb + หน่วยที่โค้ชใส่ (m.u) */
 const LB = 0.45359237;
 const r2 = x => Math.round((Number(x) || 0) * 100) / 100;
-const setKg = (u, w) => u === 'lb' ? (num(w) || 0) * LB : (num(w) || 0);
-const wBoth = (x, u) => { const kg = +x.kg || 0; const lb = x.lb != null ? +x.lb : kg / LB; return u === 'lb' ? [`${r1(lb)} lb`, `${r1(kg)} kg`] : [`${r1(kg)} kg`, `${r1(lb)} lb`]; };
-const convHint = (el, m) => { const c = document.querySelector(`[data-conv="${el.dataset.mi}-${el.dataset.si}"]`); const w = num(el.value); if (c) c.innerHTML = w ? `≈ ${r1(m.u === 'lb' ? w * LB : w / LB)} ${m.u === 'lb' ? 'kg' : 'lb'}` : '&nbsp;'; };
+// ช่องน้ำหนักต่อเซ็ตรับข้อความได้ เช่น 10/12 · 12.5 · 20-22 · 10+10 — คำนวณ (สถิติ/วอลุ่ม/kg) ใช้ตัวเลขที่หนักที่สุดในช่อง แต่เก็บข้อความตามที่พิมพ์ไว้แสดง
+const W_RE = /\d+(?:\.\d+)?/g;
+const wNums = w => (String(w ?? '').match(W_RE) || []).map(Number).filter(Number.isFinite);
+const wMax = w => { const a = wNums(w); return a.length ? Math.max(...a) : null; };
+const wPlain = w => /^\s*\d+(?:\.\d+)?\s*$/.test(String(w ?? ''));
+const wConv = (w, toLb) => String(w ?? '').trim().replace(W_RE, n => r1(toLb ? n / LB : n * LB));
+const convTxt = (u, w) => { if (!wNums(w).length) return '&nbsp;'; const ou = u === 'lb' ? 'kg' : 'lb'; return wPlain(w) ? `≈ ${r1(u === 'lb' ? num(w) * LB : num(w) / LB)} ${ou}` : `≈ ${esc(wConv(w, u !== 'lb'))} ${ou}`; };
+const setKg = (u, w) => u === 'lb' ? (wMax(w) || 0) * LB : (wMax(w) || 0);
+const wBoth = (x, u) => { if (x.t) { const ou = u === 'lb' ? 'kg' : 'lb'; return [`${esc(x.t)} ${u === 'lb' ? 'lb' : 'kg'}`, `${esc(wConv(x.t, u !== 'lb'))} ${ou}`]; } const kg = +x.kg || 0; const lb = x.lb != null ? +x.lb : kg / LB; return u === 'lb' ? [`${r1(lb)} lb`, `${r1(kg)} kg`] : [`${r1(kg)} kg`, `${r1(lb)} lb`]; };
+const convHint = (el, m) => { const c = document.querySelector(`[data-conv="${el.dataset.mi}-${el.dataset.si}"]`); if (c) c.innerHTML = convTxt(m.u, el.value); };
 const wText = (kg, u) => u === 'lb' ? `${r1(kg / LB)} lb (${r1(kg)} kg)` : `${r1(kg)} kg (${r1(kg / LB)} lb)`;
 const TH_D = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส'];
 const TH_DL = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสบดี', 'ศุกร์', 'เสาร์'];
@@ -1919,7 +1926,7 @@ function bkSheets(bk) {
   sh['อาหารรายวัน'] = ppl.flatMap(p => p.days.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.id)).sort((a, b) => a.id.localeCompare(b.id)).map(d => { const t = dayTotals(d); return { ชื่อ: p.name, วันที่: d.id, kcal: Math.round(t.k), 'โปรตีน g': r1(t.p), 'คาร์บ g': r1(t.c), 'ไขมัน g': r1(t.f), 'น้ำ มล.': d.water || 0, รายการ: mealItems(d).length }; }));
   sh['รายการอาหาร'] = ppl.flatMap(p => p.days.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.id)).sort((a, b) => a.id.localeCompare(b.id)).flatMap(d => mealItems(d).map(it => ({ ชื่อ: p.name, วันที่: d.id, มื้อ: it.meal, เมนู: it.n, ปริมาณ: it.qs || it.q || '', kcal: Math.round(+it.k || 0), 'โปรตีน g': r1(+it.p || 0), 'คาร์บ g': r1(+it.c || 0), 'ไขมัน g': r1(+it.f || 0) }))));
   sh['กิจกรรม'] = ppl.flatMap(p => [...p.activities].sort((a, b) => (a.date + (a.t || '')).localeCompare(b.date + (b.t || ''))).map(a => ({ ชื่อ: p.name, วันที่: a.date, ประเภท: a.type || '', กิจกรรม: a.name || '', นาที: a.min ?? '', kcal: a.kcal ?? '', บันทึกโดย: a.source === 'staff' ? 'โค้ช' : a.source === 'coach' ? 'ผลเทรนโค้ช' : 'ลูกค้า' })));
-  sh['ผลเทรน'] = bk.sessions.filter(x => x.status === 'logged').sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).flatMap(x => (x.moves || []).flatMap(m => (m.sets || []).map((st, i) => ({ ลูกค้า: x.memberName || nameOf[x.memberPid] || '', โค้ช: x.trainerName || '', วันที่: x.date, เวลา: x.time, ประเภท: x.type || '', ท่า: m.name, เซ็ต: i + 1, ครั้ง: st.r ?? '', kg: st.kg ?? '', lb: st.lb ?? (num(st.kg) != null ? lbOf(num(st.kg)) : ''), 'หน่วยที่กรอก': m.u || 'kg' }))));
+  sh['ผลเทรน'] = bk.sessions.filter(x => x.status === 'logged').sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).flatMap(x => (x.moves || []).flatMap(m => (m.sets || []).map((st, i) => ({ ลูกค้า: x.memberName || nameOf[x.memberPid] || '', โค้ช: x.trainerName || '', วันที่: x.date, เวลา: x.time, ประเภท: x.type || '', ท่า: m.name, เซ็ต: i + 1, ครั้ง: st.r ?? '', 'น้ำหนักที่กรอก': st.t ?? (m.u === 'lb' ? (st.lb ?? '') : (st.kg ?? '')), kg: st.kg ?? '', lb: st.lb ?? (num(st.kg) != null ? lbOf(num(st.kg)) : ''), 'หน่วยที่กรอก': m.u || 'kg' }))));
   sh['นัดเทรน'] = bk.sessions.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).map(x => ({ ลูกค้า: x.memberName || nameOf[x.memberPid] || '', โค้ช: x.trainerName || '', วันที่: x.date, เวลา: x.time, สถานะ: x.status || '', นาที: x.min ?? '', kcal: x.kcal ?? '', โน้ต: x.note || '' }));
   return sh;
 }
@@ -2093,7 +2100,7 @@ async function renderLog() {
       return `<section class="card"><div class="between" style="align-items:center"><div><b>${mi + 1}. ${esc(m.name)}</b><div class="xs muted">${moveGroupOf(m.name) ? `<span class="tag" style="padding:1px 8px;margin-right:4px">${esc(moveGroupOf(m.name))}</span>` : ''}${m.sets.length} เซ็ต · หนักสุด ${wText(top, m.u)} · Volume ${n0(v)} kg</div></div><button class="iconbtn" data-act="logRmMove" data-i="${mi}" aria-label="ลบท่า ${esc(m.name)}">${svg('trash', 18)}</button></div>
         <div class="row" style="gap:6px;align-items:center"><span class="xs muted">หน่วยน้ำหนัก</span>${['kg', 'lb'].map(u => `<button class="chip" style="min-height:32px;padding:0 14px" data-act="logUnit" data-i="${mi}" data-v="${u}" aria-pressed="${(m.u || 'kg') === u}">${u === 'kg' ? 'kg กิโลกรัม' : 'lb ปอนด์'}</button>`).join('')}</div>
         <div class="sets xs muted"><span>เซ็ต</span><span>ครั้ง</span><span>น้ำหนัก (${m.u === 'lb' ? 'lb' : 'kg'})</span><span></span></div>
-        ${m.sets.map((x, si) => { const w = num(x.w); return `<div class="sets" style="align-items:start"><b class="small" style="line-height:44px">เซ็ต ${si + 1}</b><input inputmode="numeric" data-set="r" data-mi="${mi}" data-si="${si}" value="${esc(x.r)}" aria-label="${esc(m.name)} เซ็ต ${si + 1} ครั้ง"><div style="display:flex;flex-direction:column;gap:2px"><input inputmode="decimal" data-set="w" data-mi="${mi}" data-si="${si}" value="${esc(x.w)}" aria-label="${esc(m.name)} เซ็ต ${si + 1} น้ำหนัก (${m.u === 'lb' ? 'ปอนด์' : 'กิโลกรัม'})"><span class="xs muted" data-conv="${mi}-${si}" style="padding-left:4px">${w ? `≈ ${r1(m.u === 'lb' ? w * LB : w / LB)} ${ou}` : '&nbsp;'}</span></div><button class="iconbtn" style="width:36px" data-act="logRmSet" data-mi="${mi}" data-si="${si}" aria-label="ลบเซ็ต ${si + 1}">×</button></div>`; }).join('')}
+        ${m.sets.map((x, si) => { return `<div class="sets" style="align-items:start"><b class="small" style="line-height:44px">เซ็ต ${si + 1}</b><input inputmode="numeric" data-set="r" data-mi="${mi}" data-si="${si}" value="${esc(x.r)}" aria-label="${esc(m.name)} เซ็ต ${si + 1} ครั้ง"><div style="display:flex;flex-direction:column;gap:2px"><input type="text" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" maxlength="30" placeholder="เช่น 10/12" data-set="w" data-mi="${mi}" data-si="${si}" value="${esc(x.w)}" aria-label="${esc(m.name)} เซ็ต ${si + 1} น้ำหนัก (${m.u === 'lb' ? 'ปอนด์' : 'กิโลกรัม'}) พิมพ์ / หรือ . ได้"><span class="xs muted" data-conv="${mi}-${si}" style="padding-left:4px">${convTxt(m.u, x.w)}</span></div><button class="iconbtn" style="width:36px" data-act="logRmSet" data-mi="${mi}" data-si="${si}" aria-label="ลบเซ็ต ${si + 1}">×</button></div>`; }).join('')}
         <button class="btn sm ghost" style="border-style:dashed" data-act="logAddSet" data-i="${mi}">+ เพิ่มเซ็ต (ก๊อปค่าเซ็ตล่าสุด)</button></section>`; }).join('')}
     ${L.picking ? `<section class="card gold-edge"><div class="between"><b>เลือกท่า</b><span class="xs muted">แตะได้หลายท่า แล้วกดเพิ่มทีเดียว</span></div>
       <input class="in" id="logCustom" placeholder="ค้นหา หรือพิมพ์ชื่อท่าใหม่" value="${esc(L.q || '')}" autocomplete="off" autocapitalize="words" enterkeyhint="done">
@@ -2111,7 +2118,7 @@ async function startLog(s) {
   loadMoveLib().catch(() => {});
   const m = await person(s.memberPid); const rows = await bodyRows(s.memberPid).catch(() => []);
   const w = latestWeight(rows) || 65;
-  ui.log = { sid: s.id || null, memberPid: s.memberPid, memberName: s.memberName || m?.name || '', date: s.date, time: s.time, types: typeList(s).length ? typeList(s) : ['Full body'], moves: (s.moves || []).map(x => { const u = x.u === 'lb' ? 'lb' : 'kg'; return { name: x.name, u, sets: x.sets.map(y => ({ r: y.r, w: u === 'lb' ? (y.lb ?? r1((+y.kg || 0) / LB)) : y.kg })) }; }), min: s.min ?? 60, kcal: s.kcal ?? '', note: s.note || '', ph: [...(s.ph || [])], picking: false, sel: [], filt: 'day', weight: w, est: Math.round(5 * w) };
+  ui.log = { sid: s.id || null, memberPid: s.memberPid, memberName: s.memberName || m?.name || '', date: s.date, time: s.time, types: typeList(s).length ? typeList(s) : ['Full body'], moves: (s.moves || []).map(x => { const u = x.u === 'lb' ? 'lb' : 'kg'; return { name: x.name, u, sets: x.sets.map(y => ({ r: y.r, w: y.t ?? (u === 'lb' ? (y.lb ?? r1((+y.kg || 0) / LB)) : y.kg) })) }; }), min: s.min ?? 60, kcal: s.kcal ?? '', note: s.note || '', ph: [...(s.ph || [])], picking: false, sel: [], filt: 'day', weight: w, est: Math.round(5 * w) };
   ui.tab = 'log'; render();
 }
 /* ---------- คลังท่าของเทรนเนอร์: ชื่อท่าที่พิมพ์เองถูกจำไว้ เลือกใช้ซ้ำกับลูกค้าทุกคนได้ทันที ---------- */
@@ -2211,7 +2218,7 @@ function addSelectedMoves() {
 
 async function saveLog() {
   logForm(); const L = ui.log; const min = num(L.min) || 0; const kcal = num(L.kcal) ?? Math.round(5 * L.weight * (min / 60));
-  const moves = L.moves.map(m => { const u = m.u === 'lb' ? 'lb' : 'kg'; return { name: m.name, u, sets: m.sets.map(x => { const w = num(x.w) || 0; return u === 'lb' ? { r: num(x.r) || 0, kg: r2(w * LB), lb: w } : { r: num(x.r) || 0, kg: w, lb: r1(w / LB) }; }) }; }).filter(m => m.sets.length);
+  const moves = L.moves.map(m => { const u = m.u === 'lb' ? 'lb' : 'kg'; return { name: m.name, u, sets: m.sets.map(x => { const w = wMax(x.w) || 0; const t = String(x.w ?? '').trim(); const o = u === 'lb' ? { r: num(x.r) || 0, kg: r2(w * LB), lb: w } : { r: num(x.r) || 0, kg: w, lb: r1(w / LB) }; if (t && !wPlain(t)) o.t = t.slice(0, 30); return o; }) }; }).filter(m => m.sets.length);
   const ref = L.sid ? D('sessions', L.sid) : fb.doc(C('sessions'));
   const prev = L.sid ? await get(ref) : null;
   // แก้ผลก่อนถึงเวลาส่ง: ใช้เวลาส่งเดิม (ระบบส่งฉบับล่าสุด) · ส่งไปแล้ว: ไม่ส่งซ้ำ
@@ -2706,7 +2713,7 @@ const ACTS = {
   logFilt: el => { ui.log.filt = el.dataset.v; refreshMovePick(); },
   logAddSel: () => addSelectedMoves(),
   logSelClear: () => { ui.log.sel = []; refreshMovePick(); },
-  logUnit: el => { logForm(); const m = ui.log.moves[+el.dataset.i]; const to = el.dataset.v; if ((m.u || 'kg') === to) return; m.sets.forEach(x => { const w = num(x.w); if (w) x.w = r1(to === 'lb' ? w / LB : w * LB); }); m.u = to; ui.log.unit = to; render(); },
+  logUnit: el => { logForm(); const m = ui.log.moves[+el.dataset.i]; const to = el.dataset.v; if ((m.u || 'kg') === to) return; m.sets.forEach(x => { if (wPlain(x.w)) { const w = num(x.w); if (w) x.w = r1(to === 'lb' ? w / LB : w * LB); } else if (wNums(x.w).length) x.w = wConv(x.w, to === 'lb'); }); m.u = to; ui.log.unit = to; render(); },
   logPick: el => toggleMove(el.dataset.v),
   logCustom: () => addCustomMove($('#logCustom')?.value || ui.log.q),
   moveForget: el => {

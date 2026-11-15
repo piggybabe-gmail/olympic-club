@@ -1,10 +1,10 @@
 // The Olympic Club by PT-Palm — แอปติดตามอาหารและการเทรน (ลูกค้า / เทรนเนอร์ / เจ้าของระบบ)
 import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN, RECAPTCHA_SITE_KEY } from './firebase-config.js?v=20260929b';
-import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX_SUM, MIX_ATE, CLEAN_MENUS, CLEAN_GROUPS, BAG, NAMPRIK, NP_SETS, quickCalc, noodleCalc, mpCalc, ktCalc, mixCalc, bagCalc, npCalc, frac, normTh } from './foods.js?v=20261107a';
-import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20260929c';
+import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX_SUM, MIX_ATE, CLEAN_MENUS, CLEAN_GROUPS, BAG, NAMPRIK, NP_SETS, quickCalc, noodleCalc, mpCalc, ktCalc, mixCalc, bagCalc, npCalc, frac, normTh } from './foods.js?v=20261115a';
+import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20261115a';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261109d';
+const VER = '20261115a';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');

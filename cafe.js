@@ -26,6 +26,7 @@ export const CAFE = {
   { k: 'thaitea', g: 'tea', n: 'ชาไทย', al: 'ชาเย็น ชานม thai tea', nm: { hot: 'ชาไทยร้อน', iced: 'ชาเย็น (ชาไทย)', frappe: 'ชาเย็นปั่น' }, base: { k2: 110, p: 2.7, c: 11, f: 6.5 }, milk: 0, sw: { k2: 190, p: 3.2, c: 37, f: 3.5 }, sw0: 100 },
   { k: 'greenthai', g: 'tea', n: 'ชาเขียวนม', al: 'ชาเขียวนมเย็น green tea', base: { k2: 110, p: 2.7, c: 11, f: 6.5 }, milk: 0, sw: { k2: 190, p: 3.2, c: 37, f: 3.5 }, sw0: 100 },
   { k: 'matcha', g: 'tea', n: 'มัทฉะลาเต้', al: 'matcha มัจฉะ ชาเขียว', base: { k2: 10, p: 0.9, c: 1, f: 0.2 }, milk: 200, sw: SY(20), sw0: 50 },
+  { k: 'matchacoco', g: 'tea', n: 'มัทฉะน้ำมะพร้าว', al: 'matcha coconut water มัจฉะมะพร้าว ชาเขียวมะพร้าว', base: { k2: 50, p: 1.6, c: 10, f: 0.5 }, milk: 0, sw: SY(10), sw0: 0, temps: ['iced', 'frappe'] },
   { k: 'milktea', g: 'tea', n: 'ชานมไต้หวัน', al: 'ชานมไข่มุก บราวน์ชูการ์ bubble tea', base: { k2: 100, p: 1, c: 12, f: 5 }, milk: 0, sw: SY(30), sw0: 100 },
   { k: 'lemontea', g: 'tea', n: 'ชามะนาว', al: 'ชาดำ ชาดำเย็น lemon tea', base: { k2: 6, p: 0, c: 1.5, f: 0 }, milk: 0, sw: SY(30), sw0: 100 },
   { k: 'fruittea', g: 'tea', n: 'ชาผลไม้', al: 'ชาพีช ลิ้นจี่ ยูซุ peach', base: { k2: 40, p: 0.3, c: 10, f: 0 }, milk: 0, sw: SY(25), sw0: 100, temps: ['iced', 'frappe'] },

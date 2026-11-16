@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20261115a';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261116a';
+const VER = '20261116b';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -40,6 +40,20 @@ const ACT = {
   swim: ['ว่ายน้ำ', 7], pt: ['เทรนกับ PT', 5], coach: ['เทรนกับโค้ช', 5], class: ['เข้าคลาส', 7], walk: ['เดิน / วิ่ง', 5],
   bike: ['ปั่นจักรยาน', 6], yoga: ['โยคะ / พิลาทิส', 3], weights: ['เวทเทรนนิ่งเอง', 5], other: ['อื่นๆ', 5]
 };
+// รายงานหลังออกกำลังกาย (ลูกค้าเล่าให้โค้ช): เก็บในเอกสารกิจกรรม feel/memo/pain/painTxt/feelTxt · โค้ชตอบ coachReply
+const FEEL = [[5, '💪', 'ดีมาก'], [4, '🙂', 'ดี'], [3, '😐', 'พอไหว'], [2, '😮‍💨', 'เหนื่อยมาก'], [1, '😣', 'ไม่ไหว']];
+const feelOf = v => FEEL.find(f => f[0] === +v);
+const PAIN_AREAS = ['คอ', 'ไหล่', 'สะบัก / หลังบน', 'ศอก', 'ข้อมือ / มือ', 'อก', 'หลังล่าง / เอว', 'สะโพก', 'ก้น', 'ต้นขาหน้า', 'ต้นขาหลัง', 'เข่า', 'น่อง', 'ข้อเท้า / เท้า'];
+const PAIN_SIDE = [['L', 'ซ้าย'], ['R', 'ขวา'], ['B', 'ทั้งสองข้าง']];
+const PAIN_WHEN = [['during', 'ระหว่างเล่น'], ['after', 'หลังเล่น'], ['next', 'วันถัดมา']];
+const PAIN_KIND = ['ปวดตึง', 'ปวดแปลบ', 'ปวดตื้อ', 'บวม', 'ชา / เสียว', 'ตะคริว', 'ขยับไม่สุด', 'มีเสียงในข้อ'];
+const painLvTxt = lv => lv >= 7 ? 'มาก' : lv >= 4 ? 'ปานกลาง' : 'เล็กน้อย';
+function painText(pn) {
+  if (!pn) return '';
+  const areas = [...(pn.areas || []), ...(pn.other ? [pn.other] : [])].join(', ') || 'ไม่ระบุตำแหน่ง';
+  const side = PAIN_SIDE.find(x => x[0] === pn.side)?.[1]; const when = PAIN_WHEN.find(x => x[0] === pn.when)?.[1];
+  return [areas + (side ? ` (${side})` : ''), pn.lv ? `${pn.lv}/10 ${painLvTxt(pn.lv)}` : '', when || '', (pn.kinds || []).join(', ')].filter(Boolean).join(' · ');
+}
 // ประเภทการเทรน: 1 วันเลือกได้หลายอย่าง (เช่น Push + Pull + Legs) เก็บเป็น types[] และ type = 'Push + Pull + Legs' (ข้อความเดิมยังใช้ได้ทุกที่)
 const SESSION_TYPES = ['Full body', 'Push', 'Pull', 'Legs', 'Shoulders', 'Arms', 'Core', 'คาร์ดิโอ'];
 const TYPE_TH = { 'Full body': 'ทั้งตัว', Push: 'ดัน · อก', Pull: 'ดึง · หลัง', Legs: 'ขา · ก้น', Shoulders: 'ไหล่', Arms: 'แขน', Core: 'แกนกลาง', 'คาร์ดิโอ': '' };
@@ -208,21 +222,28 @@ function renderConsent() {
 /* ============ LINE (ผ่าน Apps Script relay ยืนยันตัวตนด้วย Firebase ID token) ============ */
 const line = { info: null, busy: false };
 // ใครได้รับอะไร: config/app.alerts[k] = { on, types } · k = 'owner' หรือ pid · ถ้ายังไม่ตั้ง ใช้ค่าเริ่มต้นตามบทบาท (ตรงกับ ocWants_ ใน Apps Script)
-const ALERT_TYPES = [['digest', 'สรุปรายวัน'], ['workout', 'ผลการเทรน']];
+const ALERT_TYPES = [['digest', 'สรุปรายวัน'], ['workout', 'ผลการเทรน'], ['pain', 'ลูกค้าแจ้งอาการเจ็บ']];
+const ALERT_LABEL = Object.fromEntries(ALERT_TYPES);
 const ALERT_HINT = {
-  owner: 'สรุปรายวัน = ลูกค้าทุกคน · ผลการเทรนไม่ส่งสำเนามาที่เจ้าของ (ดูในแอปได้)',
-  trainer: 'สรุปรายวัน = ลูกค้าของตัวเอง · ผลการเทรนไม่ส่งกลับมาที่โค้ช (ส่งถึงลูกค้าคนนั้นคนเดียว)',
+  owner: 'สรุปรายวัน = ลูกค้าทุกคน · แจ้งอาการเจ็บ = ทุกคน ส่งทันที · ผลการเทรนไม่ส่งสำเนามาที่เจ้าของ (ดูในแอปได้)',
+  trainer: 'สรุปรายวัน = ลูกค้าของตัวเอง · แจ้งอาการเจ็บ = ส่งทันทีเมื่อลูกค้าของตัวเองแจ้ง (เปิดไว้เป็นค่าเริ่มต้น) · ผลการเทรนไม่ส่งกลับมาที่โค้ช',
   member: 'สรุปรายวัน = ของตัวเองคนเดียว · ผลการเทรน = เฉพาะผลของตัวเอง หลังโค้ชบันทึก'
 };
 // ผลการเทรนส่งถึงลูกค้าเจ้าของผลคนเดียว: เทรนเนอร์/เจ้าของเลือกได้แค่สรุปรายวัน
-const alertTypesFor = role => role === 'member' ? ALERT_TYPES : ALERT_TYPES.filter(([t]) => t !== 'workout');
+// อาการเจ็บส่งถึงโค้ช/เจ้าของเท่านั้น
+const alertTypesFor = role => ALERT_TYPES.filter(([t]) => role === 'member' ? t !== 'pain' : t !== 'workout');
 function alertOf(k, role) {
   const a = (S.config.alerts || {})[k];
-  if (a) return { on: a.on !== false, types: (Array.isArray(a.types) ? a.types : []).filter(t => role === 'member' || t !== 'workout') };
+  if (a) { // ตั้งไว้ก่อนมีหัวข้ออาการเจ็บ (ไม่มี painSet) → โค้ชได้รับอาการเจ็บเป็นค่าเริ่มต้น
+    const types = (Array.isArray(a.types) ? a.types : []).filter(t => role === 'member' ? t !== 'pain' : t !== 'workout');
+    if (role === 'trainer' && !a.painSet && !types.includes('pain')) types.push('pain');
+    return { on: a.on !== false, types };
+  }
   if (role === 'owner') return { on: !!S.config.digestToOwner, types: S.config.digestToOwner ? ['digest'] : [] };
-  return { on: true, types: role === 'trainer' ? ['digest'] : ['workout'] };
+  return { on: true, types: role === 'trainer' ? ['digest', 'pain'] : ['workout'] };
 }
 async function saveAlert(k, a) {
+  a = { ...a, painSet: true };
   const alerts = { ...(S.config.alerts || {}), [k]: a };
   await fb.setDoc(D('config', 'app'), { alerts: { [k]: a } }, { merge: true }); S.config.alerts = alerts;
 }
@@ -249,7 +270,7 @@ function lineCardHtml() {
   if (!S.config.lineUrl) return '';
   const i = line.info; const L = i?.link;
   const myA = alertOf(S.me.role === 'owner' ? 'owner' : S.me.pid, S.me.role);
-  const what = myA.on && myA.types.length ? myA.types.map(t => t === 'digest' ? `สรุปรายวัน (${esc(S.config.digestTime || '21:00')})` : 'ผลการเทรน').join(' และ ') : 'ยังไม่มีหัวข้อที่เปิดรับ (เจ้าของระบบเป็นคนเลือก)';
+  const what = myA.on && myA.types.length ? myA.types.map(t => t === 'digest' ? `สรุปรายวัน (${esc(S.config.digestTime || '21:00')})` : ALERT_LABEL[t]).join(' และ ') : 'ยังไม่มีหัวข้อที่เปิดรับ (เจ้าของระบบเป็นคนเลือก)';
   return `<section class="card"><div class="between"><b>LINE ของฉัน</b>${!i ? '<span class="tag grey">กำลังตรวจ…</span>' : L ? `<span class="tag blue">เชื่อมแล้ว · ${esc(L.name || '')}</span>` : '<span class="tag alert">ยังไม่เชื่อม</span>'}</div>
     <div class="pill-note">บัญชีในแอปที่จะผูก: <b>${esc(S.me.name)}</b> · ${S.me.role === 'owner' ? 'เจ้าของระบบ' : S.me.role === 'trainer' ? 'เทรนเนอร์' : 'ลูกค้า'}${S.me.person?.username ? ' (@' + esc(S.me.person.username) + ')' : ''}</div>
     <span class="small muted">เชื่อมครั้งเดียว แล้วจะได้รับ ${what} เป็นแชต 1:1 จาก LINE OA</span>
@@ -1458,9 +1479,11 @@ async function renderExercise(pid) {
     <nav class="week" aria-label="เลือกวัน">${days.map(d => { const has = acts.some(a => a.date === d); const ap = planned.some(s => s.date === d);
       return `<button class="day ${ap ? 'appt' : ''}" data-act="exDay" data-v="${d}" aria-pressed="${d === ui.exDate}"><small>${TH_D[dowOf(d)]}</small><b>${+d.slice(8)}</b><em>${ap ? 'นัด' : has ? 'ทำแล้ว' : ''}</em></button>`; }).join('')}</nav>
     <section class="card"><div class="small muted">เผาผลาญ${thDate(ui.exDate, true)}</div><div><span class="big blue">${n0(burn)}</span> <span class="muted">kcal</span></div><div class="small muted">${dayActs.length} กิจกรรม · ${n0(mins)} นาที · นำไปคำนวณในหน้าแรกให้อัตโนมัติ</div></section>
+    ${painWeek(acts)}
     <section style="display:flex;flex-direction:column;gap:8px"><h2>กิจกรรม</h2>
       ${dayActs.length ? `<div class="list">${dayActs.map(a => `<div class="li"><div class="grow"><b>${esc(a.name || ACT[a.type]?.[0] || 'กิจกรรม')}</b><div class="small muted">${n0(a.min)} นาที · ${a.source === 'coach' ? 'บันทึกโดยโค้ช' : 'บันทึกเอง'}${clipTag(a.ph)}</div>
-        ${a.ph?.length ? `<div class="thumbs" style="margin-top:6px">${thumbsHtml(a.ph)}</div>` : ''}${a.source === 'coach' ? `<button class="btn sm ghost" style="margin-top:6px" data-act="tab" data-v="workouts">ดูผลการเทรน</button>` : ''}</div>
+        ${a.ph?.length ? `<div class="thumbs" style="margin-top:6px">${thumbsHtml(a.ph)}</div>` : ''}${rptHtml(a)}
+        <div class="row" style="gap:6px;flex-wrap:wrap;margin-top:6px">${a.source === 'coach' ? `<button class="btn sm ghost" data-act="tab" data-v="workouts">ดูผลการเทรน</button>` : ''}${rptButtons(a)}</div></div>
         <b class="blue">${n0(a.kcal)}</b>${(a.source !== 'coach' || isStaff()) ? `<button class="iconbtn" data-act="rmAct" data-id="${a.id}" aria-label="ลบกิจกรรม">${svg('trash', 18)}</button>` : ''}</div>`).join('')}</div>` : '<p class="small muted" style="margin:0">ยังไม่มีกิจกรรมในวันนี้</p>'}
     </section>
     ${next ? `<section class="card dark"><div class="between"><div><div class="xs muted">นัดเทรนถัดไป</div><b>${thDate(next.date)} · ${esc(next.time)} · ${esc(next.type)}</b></div><span class="tag gold">${esc(next.trainerName || 'โค้ช')}</span></div></section>` : ''}
@@ -1472,7 +1495,7 @@ async function renderExercise(pid) {
 async function openAddAct() {
   const rows = await bodyRows(S.view); const p = await person(S.view);
   sheet = null;
-  openSheet('เพิ่มกิจกรรม', '', { kind: 'act', type: 'swim', date: ui.exDate, min: 30, kcal: '', mode: 'manual', name: '', ph: [], lastImg: null, weight: latestWeight(rows) || num(p?.weight) || 65 });
+  openSheet('เพิ่มกิจกรรม', '', { kind: 'act', type: 'swim', date: ui.exDate, min: 30, kcal: '', mode: 'manual', name: '', ph: [], lastImg: null, rpt: newRpt(), weight: latestWeight(rows) || num(p?.weight) || 65 });
   refreshSheet(actSheetBody());
 }
 function actSheetBody() {
@@ -1490,11 +1513,13 @@ function actSheetBody() {
     <div><div class="small" style="font-weight:600;margin-bottom:8px">รูปหลักฐาน <span class="muted" style="font-weight:400">(ไม่บังคับ)</span></div>${photoPicker()}
       <p class="xs muted" style="margin:6px 0 0">รูปหน้าจอนาฬิกา แอปออกกำลังกาย หรือหน้าจอเครื่องในคลาส</p>
       ${s.lastImg ? `<button class="btn gold block" style="margin-top:8px" data-act="aiWatch">${svg('spark', 18)} ${s.aiMsg || 'ให้ AI อ่านเวลาและแคลจากรูป'}</button>` : ''}</div>
+    ${isStaff() ? '' : `<div class="hr"></div>${rptFields(s.rpt, s.type)}`}
     <button class="btn pri block" data-act="saveAct">บันทึกกิจกรรม</button>`;
 }
 function readActForm() {
   const s = sheet; s.date = $('#aDate')?.value || s.date; s.min = $('#aMin')?.value ?? s.min;
   if ($('#aKcal')) s.kcal = $('#aKcal').value; if ($('#aName')) s.name = $('#aName').value;
+  readRpt();
 }
 async function saveAct() {
   readActForm(); const s = sheet;
@@ -1502,9 +1527,118 @@ async function saveAct() {
   const kcal = s.mode === 'manual' ? num(s.kcal) : est;
   if (kcal == null) return toast('กรอกแคลอรี หรือเลือก “ให้แอปประมาณ”');
   const name = (s.type === 'class' || s.type === 'other' || s.type === 'pt') && s.name.trim() ? `${ACT[s.type][0]} · ${s.name.trim()}` : ACT[s.type][0];
-  await fb.addDoc(C('people', S.view, 'activities'), { date: s.date, type: s.type, name, min, kcal: Math.round(kcal), source: isStaff() ? 'staff' : 'self', ph: s.ph || [], t: Date.now(), byUid: auth.currentUser.uid });
-  ui.exDate = s.date; closeSheet(); toast('บันทึกกิจกรรมแล้ว'); render();
+  const rp = rptData(s.rpt); if (rp === false) return;
+  await fb.addDoc(C('people', S.view, 'activities'), { date: s.date, type: s.type, name, min, kcal: Math.round(kcal), source: isStaff() ? 'staff' : 'self', ph: s.ph || [], t: Date.now(), byUid: auth.currentUser.uid, ...(rp || {}) });
+  ui.exDate = s.date; closeSheet(); toast(rp?.painAlert ? 'บันทึกแล้ว · แจ้งอาการให้โค้ชแล้ว' : 'บันทึกกิจกรรมแล้ว'); render();
 }
+
+/* ---------- เล่าให้โค้ช / แจ้งอาการเจ็บ (ต่อกิจกรรม) ---------- */
+function newRpt(a) {
+  const pn = a?.pain || null;
+  return { feel: a?.feel || 0, memo: a?.memo || '', painOn: !!pn, pain: { areas: [...(pn?.areas || [])], side: pn?.side || '', lv: pn?.lv || 0, when: pn?.when || '', kinds: [...(pn?.kinds || [])], other: pn?.other || '' } };
+}
+function rptFields(r, type) {
+  const hint = type === 'swim' ? 'เช่น ว่าย 1,500 ม. ฟรีสไตล์ 30 รอบ · ช่วงท้ายไหล่ขวาเริ่มตึง' : type === 'weights' ? 'เช่น Squat 3×10 @20 kg ทำครบ · Lat Pulldown ข้อศอกซ้ายเสียวตอนดึงสุด' : 'เช่น ทำได้ครบตามแผน เหนื่อยกว่าปกติเพราะนอนน้อย';
+  const p = r.pain; const lvC = lv => lv >= 7 ? 'var(--alert)' : lv >= 4 ? 'var(--gold-text)' : 'var(--navy)';
+  return `<div style="display:flex;flex-direction:column;gap:10px">
+    <div><b>เล่าให้โค้ชฟัง</b> <span class="xs muted">(ไม่บังคับ · โค้ชเห็นในแอปและในสรุปรายวัน)</span></div>
+    <div><div class="small" style="font-weight:600;margin-bottom:8px">วันนี้รู้สึกยังไง</div><div class="chips">${FEEL.map(([v, e, l]) => `<button type="button" class="chip" data-act="rptFeel" data-v="${v}" aria-pressed="${r.feel === v}">${e} ${l}</button>`).join('')}</div></div>
+    <label class="f">เป็นยังไงบ้าง<textarea class="in" id="rMemo" rows="3" maxlength="500" placeholder="${hint}">${esc(r.memo)}</textarea></label>
+    <button type="button" class="chip" style="align-self:flex-start;${r.painOn ? 'background:var(--alert);border-color:var(--alert);color:#fff' : 'border-color:var(--alert);color:var(--alert)'}" data-act="rptPainOn" aria-pressed="${r.painOn}">${r.painOn ? '✓ ' : ''}⚠️ มีอาการเจ็บ / ผิดปกติ</button>
+    ${r.painOn ? `<div class="card" style="background:#FBF3EE;border:1px solid #F1D3C2;gap:10px">
+      <div><div class="small" style="font-weight:600;margin-bottom:8px">เจ็บตรงไหน <span class="muted" style="font-weight:400">(เลือกได้หลายจุด)</span></div><div class="chips">${PAIN_AREAS.map(x => `<button type="button" class="chip" style="min-height:36px;font-size:13px" data-act="rptArea" data-v="${esc(x)}" aria-pressed="${p.areas.includes(x)}">${esc(x)}</button>`).join('')}</div>
+        <input class="in" id="rOther" style="margin-top:8px" maxlength="60" value="${esc(p.other)}" placeholder="จุดอื่น ระบุเอง เช่น นิ้วโป้งเท้าขวา"></div>
+      <div><div class="small" style="font-weight:600;margin-bottom:8px">ข้างไหน</div><div class="chips">${PAIN_SIDE.map(([k, l]) => `<button type="button" class="chip" data-act="rptSide" data-v="${k}" aria-pressed="${p.side === k}">${l}</button>`).join('')}</div></div>
+      <div><div class="small" style="font-weight:600;margin-bottom:8px">ระดับความเจ็บ ${p.lv ? `<b style="color:${lvC(p.lv)}">${p.lv}/10 · ${painLvTxt(p.lv)}</b>` : '<span class="muted" style="font-weight:400">(1 = นิดเดียว · 10 = เจ็บที่สุด)</span>'}</div>
+        <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:4px">${[...Array(10)].map((_, i) => { const v = i + 1; const on = p.lv === v; return `<button type="button" class="chip" style="min-height:40px;padding:0;border-radius:10px;font-weight:700;${on ? `background:${lvC(v)};border-color:${lvC(v)};color:#fff` : `color:${lvC(v)}`}" data-act="rptLv" data-v="${v}" aria-pressed="${on}" aria-label="ระดับ ${v}">${v}</button>`; }).join('')}</div></div>
+      <div><div class="small" style="font-weight:600;margin-bottom:8px">เริ่มเจ็บตอนไหน</div><div class="chips">${PAIN_WHEN.map(([k, l]) => `<button type="button" class="chip" data-act="rptWhen" data-v="${k}" aria-pressed="${p.when === k}">${l}</button>`).join('')}</div></div>
+      <div><div class="small" style="font-weight:600;margin-bottom:8px">ลักษณะอาการ</div><div class="chips">${PAIN_KIND.map(x => `<button type="button" class="chip" style="min-height:36px;font-size:13px" data-act="rptKind" data-v="${esc(x)}" aria-pressed="${p.kinds.includes(x)}">${esc(x)}</button>`).join('')}</div></div>
+      <p class="xs muted" style="margin:0">ระบบแจ้งโค้ชทาง LINE ทันทีที่บันทึก (ถ้าโค้ชเปิดรับ) · ถ้าเจ็บมาก บวมมาก ชา หรือขยับไม่ได้ ให้หยุดออกกำลังกายและไปพบแพทย์</p>
+    </div>` : ''}
+  </div>`;
+}
+function readRpt() { const r = sheet?.rpt; if (!r) return; if ($('#rMemo')) r.memo = $('#rMemo').value; if ($('#rOther')) r.pain.other = $('#rOther').value; }
+// แปลงฟอร์มเป็นฟิลด์ที่เก็บ · คืน null = ไม่ได้กรอกอะไร · false = กรอกไม่ครบ (แจ้งแล้ว)
+function rptData(r, prev) {
+  if (!r) return null;
+  const memo = String(r.memo || '').trim().slice(0, 500);
+  let pain = null;
+  if (r.painOn) {
+    const p = r.pain; pain = { areas: p.areas, side: p.side || '', lv: +p.lv || 0, when: p.when || '', kinds: p.kinds, other: String(p.other || '').trim().slice(0, 60) };
+    if (!pain.areas.length && !pain.other) { toast('เลือกจุดที่เจ็บก่อน (หรือพิมพ์ในช่อง จุดอื่น)'); return false; }
+    if (!pain.lv) { toast('เลือกระดับความเจ็บ 1–10'); return false; }
+  }
+  if (!r.feel && !memo && !pain && !prev) return null;
+  const painTxt = painText(pain); const f = feelOf(r.feel);
+  const out = { feel: r.feel || 0, feelTxt: f ? `${f[1]} ${f[2]}` : '', memo, pain, painTxt, rptAt: Date.now() };
+  // แจ้ง LINE โค้ชเมื่อเพิ่งแจ้งอาการ หรืออาการเปลี่ยน (ไม่ส่งซ้ำถ้าแก้แค่ข้อความเล่า)
+  out.painAlert = !!pain && painTxt !== (prev?.painTxt || '');
+  if (!out.painAlert && prev?.painAlert && pain) out.painAlert = true; // ยังไม่ทันส่ง ให้คงสถานะรอส่ง
+  return out;
+}
+function rptHtml(a) {
+  const rows = [];
+  if (a.feelTxt || a.memo) rows.push(`<div class="small" style="background:var(--soft);border-radius:10px;padding:6px 10px;white-space:pre-wrap">${a.feelTxt ? `<b>${esc(a.feelTxt)}</b>${a.memo ? ' · ' : ''}` : ''}${esc(a.memo || '')}</div>`);
+  if (a.painTxt) rows.push(`<div class="small" style="background:#FBE9DD;color:#7A2E0B;border-radius:10px;padding:6px 10px"><b>⚠️ เจ็บ:</b> ${esc(a.painTxt)}</div>`);
+  if (a.coachReply) rows.push(`<div class="small" style="background:var(--sand);border-radius:10px;padding:6px 10px;white-space:pre-wrap"><b class="goldt">💬 ${esc(a.coachReplyBy || 'โค้ช')}:</b> ${esc(a.coachReply)}</div>`);
+  else if (a.painTxt) rows.push(`<span class="xs ${isStaff() ? 'alert' : 'muted'}">${isStaff() ? 'ลูกค้ารอโค้ชตอบกลับ' : 'แจ้งโค้ชแล้ว · รอโค้ชตอบกลับ'}</span>`);
+  return rows.length ? `<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px">${rows.join('')}</div>` : '';
+}
+function rptButtons(a) {
+  const mine = !isStaff() && S.view === S.me?.pid;
+  const has = a.feelTxt || a.memo || a.painTxt;
+  if (mine) return `<button class="btn sm ${a.painTxt ? '' : 'ghost'}" data-act="openRpt" data-id="${a.id}">📝 ${has ? 'แก้ที่เล่า / อาการ' : 'เล่าให้โค้ช / แจ้งอาการ'}</button>`;
+  if (isStaff() && (has || a.coachReply)) return `<button class="btn sm ${a.painTxt && !a.coachReply ? 'gold' : 'ghost'}" data-act="openReply" data-id="${a.id}">💬 ${a.coachReply ? 'แก้คำตอบ' : 'ตอบกลับลูกค้า'}</button>`;
+  return '';
+}
+// การ์ดสรุปอาการเจ็บของสัปดาห์ที่เลือก (ให้โค้ชเห็นภาพรวม / ลูกค้าเห็นว่าโค้ชตอบหรือยัง)
+function painWeek(acts) {
+  const ps = acts.filter(a => a.painTxt);
+  if (!ps.length) return '';
+  return `<section class="card" style="background:#FBF3EE;border:1px solid #F1D3C2"><b class="alert">⚠️ อาการเจ็บในสัปดาห์นี้ (${ps.length})</b>
+    ${ps.map(a => `<button class="li" style="width:100%;border:none;background:transparent;text-align:left;cursor:pointer;padding:6px 0;min-height:0;flex-direction:column;align-items:stretch;gap:2px" data-act="exDay" data-v="${a.date}"><span class="small"><b>${thDate(a.date)}</b> · ${esc(a.name || '')}</span><span class="small">${esc(a.painTxt)}</span><span class="xs ${a.coachReply ? 'blue' : 'alert'}">${a.coachReply ? '✓ โค้ชตอบแล้ว' : 'ยังไม่ได้ตอบ'}</span></button>`).join('')}</section>`;
+}
+async function openRpt(id) {
+  const a = await get(D('people', S.view, 'activities', id)); if (!a) return toast('ไม่พบกิจกรรมนี้');
+  sheet = null;
+  openSheet('เล่าให้โค้ช / แจ้งอาการ', '', { kind: 'rpt', id, prev: a, rpt: newRpt(a) });
+  refreshSheet(rptSheetBody());
+}
+function rptSheetBody() {
+  const a = sheet.prev;
+  return `<div class="pill-note"><b>${esc(a.name || ACT[a.type]?.[0] || 'กิจกรรม')}</b> · ${thDate(a.date)} · ${n0(a.min)} นาที · ${n0(a.kcal)} kcal</div>
+    ${rptFields(sheet.rpt, a.type)}
+    ${a.coachReply ? `<div class="small" style="background:var(--sand);border-radius:10px;padding:8px 10px;white-space:pre-wrap"><b class="goldt">💬 ${esc(a.coachReplyBy || 'โค้ช')} ตอบ:</b> ${esc(a.coachReply)}</div>` : ''}
+    <button class="btn pri block" data-act="saveRpt">บันทึก</button>
+    ${a.feelTxt || a.memo || a.painTxt ? '<button class="btn ghost danger" data-act="clearRpt">ลบที่เล่าทั้งหมด</button>' : ''}`;
+}
+async function saveRpt() {
+  readRpt(); const s = sheet; const rp = rptData(s.rpt, s.prev); if (rp === false) return;
+  const data = rp || { feel: 0, feelTxt: '', memo: '', pain: null, painTxt: '', painAlert: false, rptAt: Date.now() };
+  await fb.updateDoc(D('people', S.view, 'activities', s.id), data);
+  closeSheet(); toast(data.painAlert ? 'บันทึกแล้ว · แจ้งอาการให้โค้ชแล้ว' : 'บันทึกแล้ว'); render();
+}
+async function clearRpt() {
+  if (!confirm('ลบที่เล่าและอาการของกิจกรรมนี้?')) return;
+  await fb.updateDoc(D('people', S.view, 'activities', sheet.id), { feel: 0, feelTxt: '', memo: '', pain: null, painTxt: '', painAlert: false, rptAt: Date.now() });
+  closeSheet(); toast('ลบแล้ว'); render();
+}
+// โค้ชตอบกลับ (ลูกค้าเห็นใต้กิจกรรมนั้น)
+const REPLY_QUICK = ['รับทราบครับ เดี๋ยวคุยกันตอนเทรนครั้งถัดไป', 'พักส่วนนั้น 2–3 วัน งดท่าที่ทำให้เจ็บ', 'ประคบเย็น 15–20 นาที วันละ 2–3 ครั้ง', 'ครั้งหน้าลดน้ำหนัก/ระยะลงก่อน แล้วค่อยเพิ่ม', 'ยืดเหยียดเบาๆ ได้ ถ้าไม่เจ็บเพิ่ม', 'ถ้า 2–3 วันไม่ดีขึ้น หรือบวม/ชา ให้ไปพบแพทย์'];
+async function openReply(id) {
+  const a = await get(D('people', S.view, 'activities', id)); if (!a) return toast('ไม่พบกิจกรรมนี้');
+  openSheet('ตอบกลับลูกค้า', `<div class="pill-note"><b>${esc(a.name || 'กิจกรรม')}</b> · ${thDate(a.date)} · ${n0(a.min)} นาที</div>
+    ${rptHtml({ ...a, coachReply: '' }).replace('ลูกค้ารอโค้ชตอบกลับ', '')}
+    <div class="xs muted">แตะเพื่อเติมข้อความ</div><div class="chips">${REPLY_QUICK.map(q => `<button type="button" class="chip" style="min-height:34px;font-size:13px" data-act="replyAdd" data-v="${esc(q)}">${esc(q)}</button>`).join('')}</div>
+    <textarea class="in" id="rReply" rows="4" maxlength="500" placeholder="คำแนะนำถึงลูกค้า">${esc(a.coachReply || '')}</textarea>
+    <button class="btn pri block" data-act="saveReply">ส่งคำตอบ</button><p class="xs muted center" style="margin:0">ลูกค้าเห็นใต้กิจกรรมนี้ในแท็บออกกำลังกาย</p>`, { kind: 'reply', id });
+}
+async function saveReply() {
+  const v = ($('#rReply')?.value || '').trim().slice(0, 500);
+  await fb.updateDoc(D('people', S.view, 'activities', sheet.id), { coachReply: v, coachReplyBy: v ? S.me.name : '', coachReplyAt: v ? Date.now() : null });
+  closeSheet(); toast(v ? 'ส่งคำตอบแล้ว' : 'ลบคำตอบแล้ว'); render();
+}
+function rptRefresh() { if (sheet?.kind === 'rpt') refreshSheet(rptSheetBody()); else { refreshSheet(actSheetBody()); fillThumbs($('#sheetBody')); } }
 
 /* ---------- ลูกค้า: ผลการเทรนกับโค้ช ---------- */
 async function renderWorkouts(pid) {
@@ -2163,7 +2297,7 @@ function bkSheets(bk) {
     return o; }));
   sh['อาหารรายวัน'] = ppl.flatMap(p => p.days.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.id)).sort((a, b) => a.id.localeCompare(b.id)).map(d => { const t = dayTotals(d); return { ชื่อ: p.name, วันที่: d.id, kcal: Math.round(t.k), 'โปรตีน g': r1(t.p), 'คาร์บ g': r1(t.c), 'ไขมัน g': r1(t.f), 'น้ำ มล.': d.water || 0, รายการ: mealItems(d).length, 'คอมเมนต์ลูกค้า': d.memberNote || '', 'โน้ตโค้ช': d.coachNote || '' }; }));
   sh['รายการอาหาร'] = ppl.flatMap(p => p.days.filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d.id)).sort((a, b) => a.id.localeCompare(b.id)).flatMap(d => mealItems(d).map(it => ({ ชื่อ: p.name, วันที่: d.id, มื้อ: it.meal, เมนู: it.n, ปริมาณ: it.qs || it.q || '', kcal: Math.round(+it.k || 0), 'โปรตีน g': r1(+it.p || 0), 'คาร์บ g': r1(+it.c || 0), 'ไขมัน g': r1(+it.f || 0) }))));
-  sh['กิจกรรม'] = ppl.flatMap(p => [...p.activities].sort((a, b) => (a.date + (a.t || '')).localeCompare(b.date + (b.t || ''))).map(a => ({ ชื่อ: p.name, วันที่: a.date, ประเภท: a.type || '', กิจกรรม: a.name || '', นาที: a.min ?? '', kcal: a.kcal ?? '', บันทึกโดย: a.source === 'staff' ? 'โค้ช' : a.source === 'coach' ? 'ผลเทรนโค้ช' : 'ลูกค้า' })));
+  sh['กิจกรรม'] = ppl.flatMap(p => [...p.activities].sort((a, b) => (a.date + (a.t || '')).localeCompare(b.date + (b.t || ''))).map(a => ({ ชื่อ: p.name, วันที่: a.date, ประเภท: a.type || '', กิจกรรม: a.name || '', นาที: a.min ?? '', kcal: a.kcal ?? '', ความรู้สึก: a.feelTxt || '', 'ลูกค้าเล่า': a.memo || '', อาการเจ็บ: a.painTxt || '', 'โค้ชตอบ': a.coachReply || '', บันทึกโดย: a.source === 'staff' ? 'โค้ช' : a.source === 'coach' ? 'ผลเทรนโค้ช' : 'ลูกค้า' })));
   sh['ผลเทรน'] = bk.sessions.filter(x => x.status === 'logged').sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).flatMap(x => (x.moves || []).flatMap(m => (m.sets || []).map((st, i) => ({ ลูกค้า: x.memberName || nameOf[x.memberPid] || '', โค้ช: x.trainerName || '', วันที่: x.date, เวลา: x.time, ประเภท: x.type || '', ท่า: m.name, เซ็ต: i + 1, ครั้ง: st.r ?? '', 'น้ำหนักที่กรอก': st.t ?? (m.u === 'lb' ? (st.lb ?? '') : (st.kg ?? '')), kg: st.kg ?? '', lb: st.lb ?? (num(st.kg) != null ? lbOf(num(st.kg)) : ''), 'หน่วยที่กรอก': m.u || 'kg' }))));
   sh['นัดเทรน'] = bk.sessions.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time)).map(x => ({ ลูกค้า: x.memberName || nameOf[x.memberPid] || '', โค้ช: x.trainerName || '', วันที่: x.date, เวลา: x.time, สถานะ: x.status || '', นาที: x.min ?? '', kcal: x.kcal ?? '', โน้ต: x.note || '' }));
   return sh;
@@ -2263,17 +2397,23 @@ async function clientStats(ms, ds) {
 async function renderClients() {
   const ms = (await myMembers()).filter(m => m.active);
   const ds = todayStr();
-  const [st, sess] = await Promise.all([clientStats(ms, ds), S.me.role === 'trainer' ? list(fb.query(C('sessions'), fb.where('trainerPid', '==', S.me.pid), fb.where('date', '==', ds))) : Promise.resolve([])]);
+  // อาการเจ็บที่ลูกค้าแจ้งใน 3 วันล่าสุด และโค้ชยังไม่ได้ตอบ
+  const painP = Promise.all(ms.map(m => actsRange(m.id, addDays(ds, -3), ds).then(a => [m.id, a.filter(x => x.painTxt && !x.coachReply)]).catch(() => [m.id, []]))).then(Object.fromEntries);
+  const [st, sess, pains] = await Promise.all([clientStats(ms, ds), S.me.role === 'trainer' ? list(fb.query(C('sessions'), fb.where('trainerPid', '==', S.me.pid), fb.where('date', '==', ds))) : Promise.resolve([]), painP]);
   const rows = ms.map(m => {
+    const pain = (pains[m.id] || []).slice(-1)[0];
     const s = st[m.id]; const goal = s.goal; const logged = s.tot.k > 0; const over = goal && s.tot.k > goal + (m.targets?.addBurn === false ? 0 : s.burn);
     const appt = sess.filter(x => x.memberPid === m.id && x.status === 'planned').map(x => x.time).sort()[0];
-    const badge = appt ? ['gold', 'นัด ' + appt] : over ? ['alert', 'เกินเป้า ' + n0(s.tot.k - goal - (m.targets?.addBurn === false ? 0 : s.burn))] : !logged ? ['grey', 'ยังไม่บันทึกวันนี้'] : ['blue', 'ตามแผน'];
-    return { m, s, goal, logged, over, appt, badge };
+    const badge = pain ? ['alert', '⚠️ แจ้งเจ็บ ' + (pain.pain?.lv ? pain.pain.lv + '/10' : '')] : appt ? ['gold', 'นัด ' + appt] : over ? ['alert', 'เกินเป้า ' + n0(s.tot.k - goal - (m.targets?.addBurn === false ? 0 : s.burn))] : !logged ? ['grey', 'ยังไม่บันทึกวันนี้'] : ['blue', 'ตามแผน'];
+    return { m, s, goal, logged, over, appt, badge, pain };
   });
+  const painRows = rows.filter(r => r.pain);
   const f = ui.filter;
-  const shown = rows.filter(r => f === 'all' || (f === 'care' && (!r.logged || r.over)) || (f === 'appt' && r.appt));
+  const shown = rows.filter(r => f === 'all' || (f === 'care' && (!r.logged || r.over || r.pain)) || (f === 'appt' && r.appt));
   setMain(`<h1>ลูกค้า${S.me.role === 'owner' ? 'ทั้งหมด' : 'ของฉัน'}</h1><div class="small muted">${thDate(ds, true)} · ${ms.length} คน</div>
     <section class="grid3"><div class="stat dark"><b>${rows.filter(r => r.appt).length}</b><span>นัดเทรนวันนี้</span></div><div class="stat"><b>${rows.filter(r => !r.logged).length}</b><span>ยังไม่บันทึกอาหาร</span></div><div class="stat"><b class="alert">${rows.filter(r => r.over).length}</b><span>กินเกินเป้า</span></div></section>
+    ${painRows.length ? `<section class="card" style="background:#FBF3EE;border:1px solid #F1D3C2"><b class="alert">⚠️ ลูกค้าแจ้งอาการเจ็บ รอโค้ชตอบ (${painRows.length})</b>
+      ${painRows.map(r => `<button class="li" style="width:100%;border:none;background:transparent;text-align:left;cursor:pointer;padding:6px 0;min-height:0;flex-direction:column;align-items:stretch;gap:2px" data-act="openClientEx" data-id="${r.m.id}" data-d="${r.pain.date}"><span class="small"><b>${esc(r.m.name)}</b> · ${thDate(r.pain.date)} · ${esc(r.pain.name || '')}</span><span class="small">${esc(r.pain.painTxt)}</span>${r.pain.memo ? `<span class="xs muted">“${esc(String(r.pain.memo).slice(0, 120))}”</span>` : ''}<span class="xs goldt">แตะเพื่อดูและตอบกลับ ›</span></button>`).join('')}</section>` : ''}
     <div class="chips">${[['all', 'ทั้งหมด'], ['care', 'ต้องดูแล'], ['appt', 'นัดวันนี้']].map(([k, l]) => `<button class="chip" data-act="filter" data-v="${k}" aria-pressed="${f === k}">${l}</button>`).join('')}</div>
     ${shown.length ? `<div class="list">${shown.map(r => `<button class="li" style="width:100%;border:none;border-bottom:1px solid var(--soft);background:#fff;text-align:left;cursor:pointer;flex-direction:column;align-items:stretch;gap:6px" data-act="openClient" data-id="${r.m.id}">
       <div class="between"><b>${esc(r.m.name)}</b><span class="tag ${r.badge[0]}">${esc(r.badge[1])}</span></div>
@@ -2282,6 +2422,7 @@ async function renderClients() {
     ${ms.length ? '' : `<button class="btn gold" data-act="newAccount" data-v="member">+ สร้างบัญชีลูกค้า</button>`}`);
 }
 async function openClient(pid) { await person(pid, true); S.view = pid; ui.tab = 'today'; ui.date = todayStr(); ui.exDate = todayStr(); ui.wkSel = 0; render(); }
+async function openClientEx(pid, ds) { await person(pid, true); S.view = pid; ui.tab = 'exercise'; ui.date = todayStr(); ui.exDate = ds || todayStr(); ui.wkSel = 0; render(); }
 
 /* ---------- เทรนเนอร์: ตารางงาน ---------- */
 async function trainerSessions() { return (await list(fb.query(C('sessions'), fb.where('trainerPid', '==', S.me.pid)))); }
@@ -2464,11 +2605,20 @@ async function saveLog() {
   const data = { trainerPid: S.me.pid, trainerName: S.me.name, memberPid: L.memberPid, memberName: L.memberName, date: L.date, time: L.time, type: typeText(L.types), types: L.types.length ? L.types : ['Full body'], status: 'logged', moves, min, kcal: Math.round(kcal), note: L.note.trim(), ph: L.ph, loggedAt: fb.serverTimestamp(), notifyAfter: keepNotify ? prev.notifyAfter : Date.now() + (S.config.workoutDelayMin || 60) * 60000, notified: keepNotify ? !!prev.notified : false };
   const b = fb.writeBatch(db);
   b.set(ref, data, { merge: true });
-  b.set(D('people', L.memberPid, 'activities', 's_' + ref.id), { date: L.date, type: 'coach', name: `เทรนกับ ${S.me.name} · ${typeText(L.types)}`, min, kcal: Math.round(kcal), source: 'coach', sid: ref.id, ph: L.ph, t: Date.now(), byUid: auth.currentUser.uid });
+  b.set(D('people', L.memberPid, 'activities', 's_' + ref.id), { date: L.date, type: 'coach', name: `เทรนกับ ${S.me.name} · ${typeText(L.types)}`, min, kcal: Math.round(kcal), source: 'coach', sid: ref.id, ph: L.ph, t: Date.now(), byUid: auth.currentUser.uid }, { merge: true }); // merge: เก็บที่ลูกค้าเล่า/แจ้งอาการไว้ตอนโค้ชแก้ผล
   const who = L.memberName; await b.commit(); ui.log = null; toast(`บันทึกผลของ ${who} แล้ว · LINE ส่งถึง ${who} คนเดียว`, 3500); ui.tab = 'schedule'; render();
 }
 
 /* ---------- เทรนเนอร์: สรุปวันนี้ ---------- */
+// บรรทัดที่ลูกค้าเล่า/แจ้งอาการ ต่อกิจกรรม (ตรงกับ ocRptLines_ ใน Apps Script)
+function rptLines(acts) {
+  const out = [];
+  for (const a of acts) {
+    if (a.feelTxt || a.memo) out.push(`📝 ${a.name}: ${[a.feelTxt, String(a.memo || '').replace(/\s*\n\s*/g, ' / ').slice(0, 160)].filter(Boolean).join(' · ')}`);
+    if (a.painTxt) out.push(`⚠️ เจ็บ (${a.name}): ${a.painTxt}${a.coachReply ? ' · โค้ชตอบแล้ว' : ''}`);
+  }
+  return out;
+}
 function digestText(ms, st, ds) {
   const lines = [`สรุปประจำวัน · ${thDate(ds)}`, `ลูกค้าของคุณ ${ms.length} คน`, ''];
   for (const m of ms) {
@@ -2482,6 +2632,7 @@ function digestText(ms, st, ds) {
       lines.push(MEALS.filter(x => s.tot.byMeal[x] != null || x !== 'ว่าง').map(x => `${x} ${s.tot.byMeal[x] != null ? n0(s.tot.byMeal[x]) : 'ยังไม่บันทึก'}`).join(' · '));
     }
     lines.push(s.acts.length ? `กิจกรรม: ${s.acts.map(a => `${a.name} ${n0(a.kcal)}`).join(' · ')} = เผาผลาญ ${n0(s.burn)} kcal` : 'กิจกรรม: ยังไม่มี');
+    lines.push(...rptLines(s.acts));
     if (s.day?.memberNote) lines.push(`💬 ${String(s.day.memberNote).replace(/\s*\n\s*/g, ' / ').slice(0, 200)}`);
     lines.push('');
   }
@@ -2495,7 +2646,7 @@ async function renderSummary() {
     <div class="list">${ms.map(m => { const s = st[m.id]; const goal = s.goal; const diff = goal ? s.tot.k - goal : 0;
       return `<div class="li" style="flex-direction:column;align-items:stretch;gap:4px"><div class="between"><b>${esc(m.name)}</b><b class="small ${!s.tot.k ? 'muted' : diff > 0 ? 'alert' : ''}">${s.tot.k ? n0(s.tot.k) + (goal ? ' / ' + n0(goal) : '') + ' kcal' + (diff > 0 ? ' (+' + n0(diff) + ')' : '') : 'ยังไม่บันทึกอาหาร'}</b></div>
         ${s.tot.k ? `<span class="small">P ${n0(s.tot.p)} · C ${n0(s.tot.c)} · F ${n0(s.tot.f)} g</span><span class="small muted">${MEALS.filter(x => s.tot.byMeal[x] != null || x !== 'ว่าง').map(x => `${x} ${s.tot.byMeal[x] != null ? n0(s.tot.byMeal[x]) : 'ยังไม่บันทึก'}`).join(' · ')}</span>` : ''}
-        <span class="small blue">${s.acts.length ? 'กิจกรรม: ' + s.acts.map(a => esc(a.name) + ' ' + n0(a.kcal)).join(' · ') + ' = เผาผลาญ ' + n0(s.burn) + ' kcal' : 'กิจกรรม: ยังไม่มี'}</span>${s.day?.memberNote ? `<span class="small" style="white-space:pre-wrap;background:var(--sand);border-radius:10px;padding:6px 10px">💬 ${esc(s.day.memberNote)}</span>` : ''}</div>`; }).join('')}</div>
+        <span class="small blue">${s.acts.length ? 'กิจกรรม: ' + s.acts.map(a => esc(a.name) + ' ' + n0(a.kcal)).join(' · ') + ' = เผาผลาญ ' + n0(s.burn) + ' kcal' : 'กิจกรรม: ยังไม่มี'}</span>${rptLines(s.acts).map(l => `<span class="small" style="${l.startsWith('⚠️') ? 'background:#FBE9DD;color:#7A2E0B;' : 'background:var(--soft);'}border-radius:10px;padding:6px 10px">${esc(l)}</span>`).join('')}${s.day?.memberNote ? `<span class="small" style="white-space:pre-wrap;background:var(--sand);border-radius:10px;padding:6px 10px">💬 ${esc(s.day.memberNote)}</span>` : ''}</div>`; }).join('')}</div>
     <button class="btn gold block" data-act="copyDigest">คัดลอกข้อความสรุป</button><p class="xs muted center" style="margin:0">${lineOn() ? 'ส่งให้คนอื่นเพิ่มได้ด้วยการคัดลอกไปวางใน LINE' : 'ระหว่างที่ยังไม่เปิด LINE อัตโนมัติ คัดลอกไปวางใน LINE เองได้'}</p>`);
 }
 
@@ -2741,6 +2892,7 @@ const ACTS = {
   schedDay: el => { ui.schedDate = el.dataset.v; render(); },
   filter: el => { ui.filter = el.dataset.v; render(); },
   openClient: el => { closeSheet(); return openClient(el.dataset.id); },
+  openClientEx: el => { closeSheet(); return openClientEx(el.dataset.id, el.dataset.d); },
   water: async el => { const v = +el.dataset.v; await mutateDay(S.view, ui.date, d => { d.water = Math.max(0, (+d.water || 0) + v); }); render(); },
   rmFood: async el => { if (!confirm('ลบรายการนี้?')) return; const m = el.dataset.m, i = +el.dataset.i; await mutateDay(S.view, ui.date, d => { (d.meals[m] || []).splice(i, 1); }); render(); },
   addFood: el => { openSheet('เพิ่มอาหาร', '', { kind: 'food', meal: el.dataset.m, mode: 'db', q: '', pick: null, qty: null, mf: {}, ph: [], imgMap: {} }); refreshSheet(foodSheetBody()); loadLabLib(); },
@@ -2861,6 +3013,15 @@ const ACTS = {
     await fb.updateDoc(D('people', S.view), { targets: t }); S.cache.delete('p:' + S.view); closeSheet(); toast('บันทึกเป้าหมายแล้ว'); render();
   },
   addAct: openAddAct,
+  openRpt: el => openRpt(el.dataset.id), saveRpt, clearRpt, openReply: el => openReply(el.dataset.id), saveReply,
+  replyAdd: el => { const t = $('#rReply'); if (!t) return; t.value = (t.value.trim() ? t.value.trim() + '\n' : '') + el.dataset.v; t.focus(); },
+  rptFeel: el => { if (sheet.kind === 'act') readActForm(); else readRpt(); const v = +el.dataset.v; sheet.rpt.feel = sheet.rpt.feel === v ? 0 : v; rptRefresh(); },
+  rptPainOn: () => { if (sheet.kind === 'act') readActForm(); else readRpt(); sheet.rpt.painOn = !sheet.rpt.painOn; rptRefresh(); },
+  rptArea: el => { if (sheet.kind === 'act') readActForm(); else readRpt(); const a = sheet.rpt.pain.areas, v = el.dataset.v; sheet.rpt.pain.areas = a.includes(v) ? a.filter(x => x !== v) : [...a, v]; rptRefresh(); },
+  rptKind: el => { if (sheet.kind === 'act') readActForm(); else readRpt(); const a = sheet.rpt.pain.kinds, v = el.dataset.v; sheet.rpt.pain.kinds = a.includes(v) ? a.filter(x => x !== v) : [...a, v]; rptRefresh(); },
+  rptSide: el => { if (sheet.kind === 'act') readActForm(); else readRpt(); sheet.rpt.pain.side = sheet.rpt.pain.side === el.dataset.v ? '' : el.dataset.v; rptRefresh(); },
+  rptWhen: el => { if (sheet.kind === 'act') readActForm(); else readRpt(); sheet.rpt.pain.when = sheet.rpt.pain.when === el.dataset.v ? '' : el.dataset.v; rptRefresh(); },
+  rptLv: el => { if (sheet.kind === 'act') readActForm(); else readRpt(); sheet.rpt.pain.lv = +el.dataset.v; rptRefresh(); },
   actType: el => { readActForm(); sheet.type = el.dataset.v; refreshSheet(actSheetBody()); fillThumbs($('#sheetBody')); },
   actMode: el => { readActForm(); sheet.mode = el.dataset.v; refreshSheet(actSheetBody()); fillThumbs($('#sheetBody')); },
   saveAct,

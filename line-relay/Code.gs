@@ -142,7 +142,7 @@ function checkSetup() {
 /* =====================================================================
  * OLYMPIC CLUB by PT-Palm
  * - คนในแอปกด "เชื่อม LINE" → แอปส่ง Firebase ID token มาที่นี่ → ตรวจกับ Firebase ว่าเป็นใคร → ผูก LINE กับคนนั้น
- * - ocTick (ทุก 10 นาที): ส่งผลเทรนถึงลูกค้าหลังโค้ชบันทึกตามเวลาหน่วง และส่งสรุปรายวันถึงเทรนเนอร์ตามเวลาที่ตั้ง
+ * - ocTick (ทุก 10 นาที): ส่งผลเทรนถึงลูกค้าหลังโค้ชบันทึกตามเวลาหน่วง ส่งสรุปรายวันถึงเทรนเนอร์ตามเวลาที่ตั้ง และส่งแจ้งอาการเจ็บของลูกค้าถึงโค้ช
  * - อ่าน/เขียน Firestore ด้วยสิทธิ์ของเจ้าของสคริปต์ (เจ้าของโปรเจกต์ Firebase)
  * ===================================================================== */
 const OC = {
@@ -158,8 +158,10 @@ const OC = {
 // ใครได้รับอะไร (ตั้งในแอป แท็บระบบ → config/app.alerts[k] = { on, types }) · ยังไม่ตั้ง = ค่าเริ่มต้นตามบทบาท
 function ocWants_(cfg, k, role, t) {
   if (t === 'workout' && role !== 'member') return false; // ผลการเทรนส่งถึงลูกค้าเจ้าของผลคนเดียว ไม่ส่งสำเนา
+  if (t === 'pain' && role === 'member') return false;     // อาการเจ็บส่งถึงโค้ช/เจ้าของเท่านั้น
   const a = (cfg.alerts || {})[k];
-  if (!a) return role === 'owner' ? (t === 'digest' && !!cfg.digestToOwner) : role === 'trainer' ? t === 'digest' : t === 'workout';
+  if (!a) return role === 'owner' ? (t === 'digest' && !!cfg.digestToOwner) : role === 'trainer' ? (t === 'digest' || t === 'pain') : t === 'workout';
+  if (t === 'pain' && role === 'trainer' && !a.painSet) return a.on !== false; // ตั้งไว้ก่อนมีหัวข้อนี้ → โค้ชได้รับเป็นค่าเริ่มต้น
   return a.on !== false && (a.types || []).indexOf(t) >= 0;
 }
 // LINE uid นี้ผูกกับบัญชีเทรนเนอร์อยู่ไหม
@@ -353,11 +355,45 @@ function ocDigestText_(ms, ds, showCoach) {
       lines.push(OC.meals.filter(function (x) { return s.tot.byMeal[x] != null || x !== 'ว่าง'; }).map(function (x) { return x + ' ' + (s.tot.byMeal[x] != null ? n0_(s.tot.byMeal[x]) : 'ยังไม่บันทึก'); }).join(' · '));
     }
     lines.push(s.acts.length ? 'กิจกรรม: ' + s.acts.map(function (a) { return a.name + ' ' + n0_(a.kcal); }).join(' · ') + ' = เผาผลาญ ' + n0_(s.burn) + ' kcal' : 'กิจกรรม: ยังไม่มี');
+    ocRptLines_(s.acts).forEach(function (l) { lines.push(l); });
     if (s.note) lines.push('💬 ' + s.note.replace(/\s*\n\s*/g, ' / ').slice(0, 200));
     lines.push('');
   });
   lines.push(OC.appUrl);
   return lines.join('\n').trim().slice(0, 4900);
+}
+// ที่ลูกค้าเล่า/แจ้งอาการต่อกิจกรรม (ตรงกับ rptLines ในแอป)
+function ocRptLines_(acts) {
+  const out = [];
+  (acts || []).forEach(function (a) {
+    const memo = String(a.memo || '').replace(/\s*\n\s*/g, ' / ').slice(0, 160);
+    if (a.feelTxt || memo) out.push('📝 ' + a.name + ': ' + [a.feelTxt, memo].filter(function (x) { return x; }).join(' · '));
+    if (a.painTxt) out.push('⚠️ เจ็บ (' + a.name + '): ' + a.painTxt + (a.coachReply ? ' · โค้ชตอบแล้ว' : ''));
+  });
+  return out;
+}
+function ocPainText_(m, a) {
+  const L = ['⚠️ ลูกค้าแจ้งอาการเจ็บ', m.name + ' · ' + ocThDate_(a.date), (a.name || 'กิจกรรม') + ' · ' + n0_(a.min) + ' นาที', '', 'อาการ: ' + a.painTxt];
+  if (a.feelTxt) L.push('ความรู้สึก: ' + a.feelTxt);
+  if (a.memo) L.push('เล่าให้โค้ช: ' + String(a.memo).slice(0, 400));
+  L.push(''); L.push('เปิดดูและตอบกลับในแอป (แท็บลูกค้า): ' + OC.appUrl);
+  return L.join('\n').slice(0, 4900);
+}
+// ส่งแจ้งอาการเจ็บที่ค้างอยู่ (painAlert = true) ถึงโค้ชของลูกค้า + เจ้าของ (ถ้าเปิดรับ) · ส่งครั้งเดียวต่อการแจ้ง
+function ocSendPain_(cfg, L) {
+  ocMembers_().forEach(function (m) {
+    let rows = [];
+    try { rows = fsQuery_('people/' + m._id, 'activities', [['painAlert', true]]); } catch (e) { return; }
+    rows.forEach(function (a) {
+      if (!a.painTxt) { fsPatch_(a._path, { painAlert: false }); return; }
+      const to = []; const uids = {};
+      if (m.trainerPid && L[m.trainerPid] && ocWants_(cfg, m.trainerPid, 'trainer', 'pain')) to.push(m.trainerPid);
+      if (L.owner && ocWants_(cfg, 'owner', 'owner', 'pain')) to.push('owner');
+      const ok = []; const text = ocPainText_(m, a);
+      to.forEach(function (k) { if (uids[L[k].uid]) return; uids[L[k].uid] = 1; if (push_(L[k].uid, text) === 200) ok.push(k); });
+      fsPatch_(a._path, { painAlert: false, painSentTo: ok.join(','), painSentAt: new Date().toISOString() });
+    });
+  });
 }
 function ocWorkoutText_(s) {
   const L = ['🏋️ ผลการเทรน · ' + ocThDate_(s.date), (s.type || '') + ' กับ ' + (s.trainerName || 'โค้ช') + ' · ' + n0_(s.min) + ' นาที · ' + n0_(s.kcal) + ' kcal', ''];
@@ -394,6 +430,8 @@ function ocTick() {
     if (cfg.lineOn !== false && hm >= dt && P.getProperty(am ? 'OC_DIGEST_DATE_AM' : 'OC_DIGEST_DATE') !== dds) ocSendDigest_(cfg, dds, L, am);
     // ส่งตามหลัง: ตั้งเวลาดึก (หลัง 22:00 เช่น 23:45) แล้วรอบนั้นส่งไม่ทันก่อนเที่ยงคืน → ส่งสรุปของเมื่อวานให้ถึง 02:00
     else if (cfg.lineOn !== false && !am && dt >= '22:00' && hm < '02:00' && P.getProperty('OC_DIGEST_DATE') !== ocYesterday_()) ocSendDigest_(cfg, ocYesterday_(), L, false);
+    // (3) ลูกค้าแจ้งอาการเจ็บ → ส่งถึงโค้ชของลูกค้าคนนั้นทันที (รอบ 10 นาทีถัดไป)
+    if (cfg.lineOn !== false) { try { ocSendPain_(cfg, L); } catch (e) { Logger.log('pain: ' + e); } }
   } finally { lock.releaseLock(); }
 }
 

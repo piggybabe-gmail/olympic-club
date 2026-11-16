@@ -4,7 +4,7 @@ import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20261115a';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
-const VER = '20261115a';
+const VER = '20261116a';
 const $ = (s, r = document) => r.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const n0 = x => Math.round(Number(x) || 0).toLocaleString('en-US');
@@ -70,6 +70,7 @@ const P = {
   person: 'M12 12a4 4 0 1 0 0-8a4 4 0 1 0 0 8 M5 21a7 7 0 0 1 14 0',
   sliders: 'M4 7h10 M18 7h2 M16 5v4 M4 17h4 M12 17h8 M10 15v4',
   cam: 'M4 7h3l2-3h6l2 3h3v13H4z M12 17a4 4 0 1 0 0-8a4 4 0 1 0 0 8',
+  video: 'M3 6h12v12H3z M15 10l6-3.5v11L15 14',
   clip: 'M21 11l-8.5 8.5a5 5 0 0 1-7-7L14 4a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 7',
   trash: 'M4 7h16 M9 7V4h6v3 M6 7l1 13h10l1-13',
   spark: 'M12 3l2 5 5 2-5 2-2 5-2-5-5-2 5-2z M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z'
@@ -89,7 +90,7 @@ const CONSENT_TEXT = [
 
 /* ============ สถานะ ============ */
 let fb = null, app = null, auth = null, db = null, auth2 = null;
-const S = { me: null, config: {}, view: null, cache: new Map(), photoCache: new Map() };
+const S = { me: null, config: {}, view: null, cache: new Map(), photoCache: new Map(), vidMeta: new Map(), vidUrl: new Map() };
 const ui = { pgA: null, pgB: null, pgK: 'waist', tab: null, date: todayStr(), exDate: todayStr(), schedDate: todayStr(), log: null, wkSel: 0, wkMove: null, filter: 'all', sumDate: todayStr() };
 let sheet = null; // ข้อมูลของหน้าต่างที่เปิดอยู่
 
@@ -123,7 +124,7 @@ function openSheet(title, body, ctx = {}) {
   $('#sheetRoot').innerHTML = `<div class="sheet-bg" data-act="sheetBg"><div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="head"><h2>${esc(title)}</h2><button class="iconbtn" data-act="closeSheet" aria-label="ปิด" style="font-size:24px">×</button></div><div id="sheetBody" style="display:flex;flex-direction:column;gap:12px">${body}</div></div></div>`;
 }
 function refreshSheet(body) { const b = $('#sheetBody'); if (b) b.innerHTML = body; }
-function closeSheet() { sheet = null; $('#sheetRoot').innerHTML = ''; }
+function closeSheet() { if (vidJob) vidJob.cancel = true; if (sheet?.kind === 'vid' && sheet.url) URL.revokeObjectURL(sheet.url); sheet = null; $('#sheetRoot').innerHTML = ''; }
 
 /* ============ Firebase ============ */
 async function boot() {
@@ -403,10 +404,17 @@ async function savePhoto(pid, dataUrl) {
 }
 async function photoData(id) {
   if (S.photoCache.has(id)) return S.photoCache.get(id);
-  const p = await get(D('photos', id)); const d = p?.data || ''; S.photoCache.set(id, d); return d;
+  const p = await get(D('photos', id)); const d = p?.data || ''; S.photoCache.set(id, d); if (p?.kind === 'video') S.vidMeta.set(id, p); return d;
 }
 async function fillThumbs(root = document) {
-  for (const img of root.querySelectorAll('img[data-photo]')) { if (img.src) continue; try { img.src = await photoData(img.dataset.photo); } catch (e) { } }
+  for (const img of root.querySelectorAll('img[data-photo]')) { if (img.src) { markVid(img); continue; } try { img.src = await photoData(img.dataset.photo); markVid(img); } catch (e) { } }
+}
+// ภาพย่อของคลิป: รูปปก + ปุ่มเล่น + ความยาว
+function markVid(img) {
+  const m = S.vidMeta.get(img.dataset.photo); const t = img.closest('.thumb');
+  if (!m || !t || t.classList.contains('vid')) return;
+  t.classList.add('vid'); t.querySelector('button[data-act="viewPhoto"]')?.setAttribute('aria-label', 'เล่นคลิป ' + fmtDur(m.dur));
+  t.insertAdjacentHTML('beforeend', `<span class="vplay" aria-hidden="true"></span><span class="vbadge" aria-hidden="true">${fmtDur(m.dur)}</span>`);
 }
 const clipTag = ph => (ph && ph.length) ? ` <span class="clip">${svg('clip', 13)} ${ph.length} รูป</span>` : '';
 function thumbsHtml(ids, editable) {
@@ -422,7 +430,7 @@ function openViewer(ids, i = 0) {
     el = document.createElement('div'); el.id = 'viewer'; el.className = 'lb'; el.dataset.act = 'lbBg';
     el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true'); el.setAttribute('aria-label', 'ดูรูป');
     el.addEventListener('click', e => { if (e.target === el || e.target.classList.contains('lb-stage')) closeViewer(); });
-    el.addEventListener('touchstart', e => { lb.x = e.touches.length === 1 ? e.touches[0].clientX : null; }, { passive: true });
+    el.addEventListener('touchstart', e => { lb.x = e.touches.length === 1 && e.target.tagName !== 'VIDEO' ? e.touches[0].clientX : null; }, { passive: true });
     el.addEventListener('touchend', e => {
       if (lb.x == null || el.querySelector('img.zoom')) return; const dx = e.changedTouches[0].clientX - lb.x; lb.x = null;
       if (Math.abs(dx) > 50) navViewer(dx < 0 ? 1 : -1);
@@ -441,13 +449,214 @@ async function drawViewer() {
   let d = ''; try { d = await photoData(id); } catch (e) { console.error(e); }
   if (lb.ids[lb.i] !== id || !document.getElementById('viewer')) return;
   const st = el.querySelector('.lb-stage');
-  st.innerHTML = d ? `<img src="${d}" alt="รูปที่ ${i + 1}" data-act="lbZoom" title="แตะเพื่อซูม">` : '<div class="lb-load">เปิดรูปนี้ไม่ได้ (อาจถูกลบไปแล้ว)</div>';
+  const vm = S.vidMeta.get(id);
+  if (d && vm) { // คลิปวิดีโอ: โชว์รูปปกระหว่างโหลดชิ้นส่วนคลิป
+    st.innerHTML = `<div class="lb-vwait"><img src="${d}" alt=""><div class="lb-load">กำลังโหลดคลิป ${fmtDur(vm.dur)}…</div></div>`;
+    try {
+      const u = await videoUrl(id);
+      if (lb.ids[lb.i] !== id || !document.getElementById('viewer')) return;
+      st.innerHTML = `<video src="${u}" poster="${d}" controls playsinline preload="auto" aria-label="คลิปที่ ${i + 1}"></video>`;
+      st.querySelector('video')?.play().catch(() => {});
+    } catch (e) { console.error(e); if (lb.ids[lb.i] === id) st.innerHTML = '<div class="lb-load">เปิดคลิปนี้ไม่ได้ (อาจถูกลบไปแล้ว)</div>'; }
+    lb.ids.forEach(x => { if (x !== id) photoData(x).catch(() => {}); });
+    return;
+  }
+  st.innerHTML = d ?`<img src="${d}" alt="รูปที่ ${i + 1}" data-act="lbZoom" title="แตะเพื่อซูม">` : '<div class="lb-load">เปิดรูปนี้ไม่ได้ (อาจถูกลบไปแล้ว)</div>';
   lb.ids.forEach(x => { if (x !== id) photoData(x).catch(() => {}); });
 }
 function navViewer(d) { const j = lb.i + d; if (j < 0 || j >= lb.ids.length) return; lb.i = j; drawViewer(); }
 function closeViewer() { document.getElementById('viewer')?.remove(); document.body.style.overflow = ''; }
 function photoPicker(label = 'แนบรูป') {
   return `<div class="thumbs" id="thumbs">${thumbsHtml(sheet?.ph, true)}<label class="addthumb">${svg('cam', 22)}${label}<input type="file" accept="image/*" multiple hidden data-act="pickPhoto"></label></div>`;
+}
+
+/* ============ คลิปวิดีโอสั้น (เทรนเนอร์แนบตอนบันทึกเทรน) ============
+   ไม่ต้องเปิด Firebase Storage: ย่อคลิปในเครื่อง (สูงสุด 30 วินาที ด้านยาว 720px) แล้วแบ่งเก็บเป็นหลายเอกสารใน photos
+   ใช้ Firestore Rules เดิมของรูป (เอกสารละไม่เกิน 400,000 ตัวอักษร · คนที่เห็นคลิป = คนที่เห็นรูปของลูกค้าคนนั้น)
+   - เอกสารหลัก { pid, data: รูปปก JPEG, kind: 'video', mime, dur, w, h, size, parts: [id…] } → id นี้ใส่ใน ph[] เหมือนรูป
+     ทุกจุดที่โชว์รูป (ผลเทรน กิจกรรม) จึงเห็นรูปปก + ปุ่มเล่น แตะแล้วเล่นในตัวดูเต็มจอ
+   - เอกสารย่อย { pid, data: base64 ช่วงหนึ่งของไฟล์, kind: 'vpart', i, n } */
+const VID = { maxSec: 30, keepBytes: 3_000_000, maxBytes: 7_000_000, part: 390_000, abps: 64_000, q: [{ dim: 720, vbps: 1_000_000 }, { dim: 480, vbps: 450_000 }] };
+let vidJob = null; // งานย่อคลิปที่กำลังทำ (ปิดหน้าต่าง = ยกเลิก)
+const fmtDur = s => { const t = Math.max(0, Math.round(+s || 0)); return Math.floor(t / 60) + ':' + String(t % 60).padStart(2, '0'); };
+const uErr = m => Object.assign(new Error(m), { userMsg: m });
+const wait = ms => new Promise(r => setTimeout(r, ms));
+function recMime() {
+  if (typeof MediaRecorder === 'undefined' || !HTMLCanvasElement.prototype.captureStream) return null;
+  // เลือก H.264 ก่อน (เล่นได้ทั้ง iPhone / Android / คอม)
+  return ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1.42E01E,opus', 'video/mp4;codecs=avc1,opus', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
+    .find(t => { try { return MediaRecorder.isTypeSupported(t); } catch (e) { return false; } }) || null;
+}
+// ตัวเล่นที่ซ่อนไว้ (iPhone ต้องอยู่ในหน้าเว็บ + playsinline ถึงจะถอดภาพได้)
+function mkVid(url) {
+  const v = document.createElement('video');
+  v.muted = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', ''); v.preload = 'auto';
+  v.style.cssText = 'position:fixed;left:0;top:0;width:2px;height:2px;opacity:0;pointer-events:none;z-index:-1';
+  document.body.appendChild(v); v.src = url; return v;
+}
+function vidReady(v, ms = 20000) {
+  if (v.readyState >= 1 && v.videoWidth) return Promise.resolve(v);
+  return new Promise((res, rej) => {
+    const to = setTimeout(() => rej(uErr('เปิดไฟล์วิดีโอนี้ไม่ได้')), ms);
+    v.addEventListener('loadedmetadata', () => { clearTimeout(to); res(v); }, { once: true });
+    v.addEventListener('error', () => { clearTimeout(to); rej(uErr('เครื่องนี้เปิดไฟล์วิดีโอนี้ไม่ได้ ลองไฟล์ .mp4 หรืออัดคลิปใหม่จากกล้อง')); }, { once: true });
+    try { v.load(); } catch (e) { }
+  });
+}
+function vidSeek(v, t) {
+  return new Promise(res => {
+    const to = setTimeout(res, 4000);
+    v.addEventListener('seeked', () => { clearTimeout(to); res(); }, { once: true });
+    v.currentTime = Math.max(0, t);
+  });
+}
+async function vidProbe(url) {
+  const v = mkVid(url);
+  try { await vidReady(v); return { dur: Number.isFinite(v.duration) ? v.duration : null, w: v.videoWidth, h: v.videoHeight }; } finally { v.removeAttribute('src'); v.remove(); }
+}
+async function vidPoster(v, t) {
+  await vidSeek(v, t); await wait(60);
+  let max = 480, q = 0.72, out = '';
+  for (let k = 0; k < 5; k++) {
+    const sc = Math.min(1, max / Math.max(v.videoWidth, v.videoHeight));
+    const c = document.createElement('canvas'); c.width = Math.max(2, Math.round(v.videoWidth * sc)); c.height = Math.max(2, Math.round(v.videoHeight * sc));
+    c.getContext('2d').drawImage(v, 0, 0, c.width, c.height);
+    out = c.toDataURL('image/jpeg', q);
+    if (out.length < 150000) break;
+    max = Math.round(max * 0.8); q = Math.max(0.5, q - 0.08);
+  }
+  return out;
+}
+// ย่อคลิป: เล่นคลิปในเครื่อง วาดลงผืนผ้าใบขนาดเล็ก แล้วอัดใหม่ (ใช้เวลาเท่าความยาวคลิปที่เก็บ)
+async function vidRecord(pre, url, start, dur, mime, q, job, onP) {
+  let v = pre?.v, actx = pre?.actx || null, dst = pre?.dst || null, stream = null, rec = null;
+  if (!v) v = mkVid(url);
+  try {
+    await vidReady(v);
+    if (actx) { await Promise.race([actx.resume().catch(() => {}), wait(800)]); if (actx.state !== 'running') { // เสียงใช้ไม่ได้: เปลี่ยนไปใช้ตัวเล่นใหม่ที่ไม่มีเสียง
+      actx.close().catch(() => {}); actx = null; dst = null; v.remove(); v = mkVid(url); await vidReady(v); } }
+    const sc = Math.min(1, q.dim / Math.max(v.videoWidth, v.videoHeight));
+    const c = document.createElement('canvas'); c.width = Math.max(2, Math.round(v.videoWidth * sc / 2) * 2); c.height = Math.max(2, Math.round(v.videoHeight * sc / 2) * 2);
+    const g = c.getContext('2d');
+    await vidSeek(v, start); g.drawImage(v, 0, 0, c.width, c.height);
+    stream = c.captureStream(30);
+    if (dst) { v.muted = false; dst.stream.getAudioTracks().forEach(t => stream.addTrack(t)); }
+    rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: q.vbps, audioBitsPerSecond: VID.abps });
+    const chunks = []; rec.ondataavailable = e => { if (e.data?.size) chunks.push(e.data); };
+    const stopped = new Promise(r => { rec.onstop = r; });
+    await new Promise((res, rej) => {
+      let fin = false, lastT = -1, lastAt = performance.now();
+      const end = () => { if (fin) return; fin = true; clearInterval(dog); v.pause(); res(); };
+      const fail = m => { if (fin) return; fin = true; clearInterval(dog); v.pause(); rej(uErr(m)); };
+      const frame = () => { if (fin) return; g.drawImage(v, 0, 0, c.width, c.height); const t = v.currentTime - start; onP(Math.min(1, t / dur)); if (t >= dur || v.ended) return end(); tick(); };
+      const tick = () => v.requestVideoFrameCallback ? v.requestVideoFrameCallback(frame) : requestAnimationFrame(frame);
+      const dog = setInterval(() => {
+        if (job.cancel) return fail('ยกเลิกแล้ว');
+        if (v.ended || v.currentTime - start >= dur) return end();
+        if (v.currentTime !== lastT) { lastT = v.currentTime; lastAt = performance.now(); }
+        else if (performance.now() - lastAt > 7000) fail('คลิปหยุดเล่นระหว่างย่อ (อย่าสลับแอปหรือปิดจอ) กดลองใหม่อีกครั้ง');
+      }, 400);
+      v.addEventListener('ended', end, { once: true });
+      rec.start(1000);
+      v.play().then(tick).catch(async () => { v.muted = true; try { await v.play(); tick(); } catch (e) { fail('เล่นคลิปเพื่อย่อไม่ได้ ลองใหม่อีกครั้ง'); } });
+    });
+    rec.stop(); await stopped;
+    return new Blob(chunks, { type: (rec.mimeType || mime).split(';')[0] });
+  } finally {
+    if (rec && rec.state !== 'inactive') try { rec.stop(); } catch (e) { }
+    stream?.getTracks().forEach(t => t.stop()); actx?.close().catch(() => {}); v.removeAttribute('src'); v.remove();
+  }
+}
+async function saveVideo(pid, blob, meta, onP) {
+  const b64 = (await readFile(blob)).split(',')[1] || '';
+  const n = Math.ceil(b64.length / VID.part), ids = new Array(n), uid = auth.currentUser.uid; let done = 0;
+  for (let k = 0; k < n; k += 3) await Promise.all(Array.from({ length: Math.min(3, n - k) }, async (_, j) => {
+    const i = k + j; const r = await fb.addDoc(C('photos'), { pid, data: b64.slice(i * VID.part, (i + 1) * VID.part), kind: 'vpart', i, n, byUid: uid, at: fb.serverTimestamp() });
+    ids[i] = r.id; onP(++done / (n + 1));
+  }));
+  const doc = { pid, data: meta.poster, kind: 'video', mime: meta.mime, dur: meta.dur, w: meta.w, h: meta.h, size: blob.size, parts: ids, byUid: uid, at: fb.serverTimestamp() };
+  const ref = await fb.addDoc(C('photos'), doc); onP(1);
+  S.photoCache.set(ref.id, meta.poster); S.vidMeta.set(ref.id, doc); S.vidUrl.set(ref.id, URL.createObjectURL(blob));
+  return ref.id;
+}
+async function videoUrl(id) {
+  if (S.vidUrl.has(id)) return S.vidUrl.get(id);
+  let m = S.vidMeta.get(id); if (!m) { m = await get(D('photos', id)); if (m?.kind === 'video') { S.vidMeta.set(id, m); S.photoCache.set(id, m.data || ''); } }
+  if (!m?.parts?.length) throw new Error('ไม่มีข้อมูลคลิป');
+  const parts = await Promise.all(m.parts.map(p => get(D('photos', p))));
+  if (parts.some(x => !x)) throw new Error('ชิ้นส่วนคลิปหาย');
+  const bin = atob(parts.map(x => x.data).join('')); const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([u8], { type: m.mime || 'video/mp4' })); S.vidUrl.set(id, url); return url;
+}
+// ลบคลิปที่เพิ่งแนบแต่ไม่ได้ใช้ (กด × หรือยกเลิกการบันทึก) ไม่ให้กินพื้นที่ฐานข้อมูล
+async function dropVideo(id) {
+  try { const m = S.vidMeta.get(id) || await get(D('photos', id)); await Promise.all([...(m?.parts || []), id].map(x => fb.deleteDoc(D('photos', x)).catch(() => {}))); } catch (e) { console.warn('dropVideo', e); }
+  S.vidMeta.delete(id); S.photoCache.delete(id); const u = S.vidUrl.get(id); if (u) URL.revokeObjectURL(u); S.vidUrl.delete(id);
+}
+async function openVidSheet(file) {
+  if (!/^video\//.test(file.type || '') && !/\.(mp4|m4v|mov|webm|3gp)$/i.test(file.name || '')) return toast('เลือกไฟล์วิดีโอ');
+  const url = URL.createObjectURL(file);
+  let info; try { info = await vidProbe(url); } catch (e) { URL.revokeObjectURL(url); return toast(e.userMsg || 'เปิดไฟล์วิดีโอนี้ไม่ได้', 4000); }
+  openSheet('แนบคลิปวิดีโอ', '', { kind: 'vid', file, url, dur: info.dur, w: info.w, h: info.h, size: file.size });
+  refreshSheet(vidSheetHtml());
+}
+function vidSheetHtml() {
+  const s = sheet; const long = !s.dur || s.dur > VID.maxSec + 0.5; const maxStart = s.dur ? Math.max(0, Math.floor(s.dur - VID.maxSec)) : 0;
+  const fast = !long && s.size <= VID.keepBytes && /^video\/mp4$/i.test(s.file.type);
+  return `<video id="vidPrev" src="${s.url}" controls playsinline muted preload="metadata" style="width:100%;max-height:44vh;border-radius:12px;background:#000"></video>
+    <div class="small muted">ความยาว ${s.dur ? fmtDur(s.dur) : 'ไม่ทราบ'} · ไฟล์ ${r1(s.size / 1e6)} MB${long ? ` · <b style="color:var(--ink)">เก็บได้ไม่เกิน ${VID.maxSec} วินาที</b>` : ''}</div>
+    ${long && maxStart ? `<div class="card sand" style="gap:8px"><label class="f">เริ่มเก็บตั้งแต่วินาทีที่ (0–${maxStart})<input class="in" id="vidStart" inputmode="decimal" value="0"></label>
+      <button type="button" class="btn sm ghost" data-act="vidUseNow">ใช้ตำแหน่งที่หยุดคลิปไว้ด้านบน</button>
+      <span class="xs muted">เลื่อนคลิปด้านบนไปจุดที่ต้องการ กดหยุด แล้วกดปุ่มนี้ แอปจะเก็บ ${VID.maxSec} วินาทีนับจากจุดนั้น</span></div>` : ''}
+    <div id="vidProg" class="small" role="status" style="font-weight:600;min-height:20px"></div>
+    <button class="btn gold block" id="vidGo" data-act="vidGo">${fast ? 'แนบคลิป' : 'ย่อและแนบคลิป'}</button>
+    <p class="xs muted" style="margin:0">${fast ? 'คลิปเล็กพออยู่แล้ว แนบได้ทันที' : `แอปย่อคลิปให้เล็กลงก่อนเก็บ ใช้เวลาประมาณเท่าความยาวคลิป (ไม่เกิน ${VID.maxSec} วินาที) ระหว่างนั้นเปิดหน้านี้ค้างไว้ อย่าสลับแอปหรือปิดจอ`}</p>`;
+}
+async function vidGo() {
+  const s = sheet; if (!s || s.kind !== 'vid' || s.busy || !ui.log) return;
+  const long = !s.dur || s.dur > VID.maxSec + 0.5; const maxStart = s.dur ? Math.max(0, s.dur - VID.maxSec) : 0;
+  const start = long ? Math.min(maxStart, Math.max(0, num($('#vidStart')?.value) || 0)) : 0;
+  const dur = Math.min(VID.maxSec, s.dur ? s.dur - start : VID.maxSec);
+  const fast = !long && s.size <= VID.keepBytes && /^video\/mp4$/i.test(s.file.type);
+  const btn = $('#vidGo'); const prog = t => { const p = $('#vidProg'); if (p) p.textContent = t; };
+  // เตรียมตัวเล่น + เสียงทันทีตอนกดปุ่ม (iPhone อนุญาตให้เล่นมีเสียงเฉพาะตอนที่ผู้ใช้แตะ)
+  let pre = null;
+  if (!fast) {
+    const v = mkVid(s.url); pre = { v };
+    try { const AC = window.AudioContext || window.webkitAudioContext; if (AC) { const actx = new AC(); const src = actx.createMediaElementSource(v); const dst = actx.createMediaStreamDestination(); src.connect(dst); actx.resume().catch(() => {}); v.muted = false; Object.assign(pre, { actx, dst }); } } catch (e) { console.warn('ไม่มีเสียง', e); v.muted = true; }
+    v.play().then(() => v.pause()).catch(() => {});
+  }
+  const job = vidJob = { cancel: false }; s.busy = true; if (btn) btn.disabled = true;
+  const memberPid = ui.log.memberPid;
+  try {
+    let blob, mime, pv = pre?.v;
+    const tmp = pv ? null : mkVid(s.url);
+    prog('กำลังทำรูปปก…'); await vidReady(pv || tmp);
+    const poster = await vidPoster(pv || tmp, start + Math.min(0.5, dur / 2)); const w = (pv || tmp).videoWidth, h = (pv || tmp).videoHeight;
+    if (tmp) { tmp.removeAttribute('src'); tmp.remove(); }
+    if (fast) { blob = s.file; mime = 'video/mp4'; }
+    else {
+      const rm = recMime(); if (!rm) throw uErr('เครื่อง/เบราว์เซอร์นี้ย่อวิดีโอไม่ได้ ลองเปิดแอปด้วย Safari หรือ Chrome รุ่นใหม่ หรือตัดคลิปให้ไม่เกิน 3 MB');
+      blob = await vidRecord(pre, s.url, start, dur, rm, VID.q[0], job, p => prog(`กำลังย่อคลิป ${Math.round(p * 100)}%`));
+      if (blob.size > VID.maxBytes && !job.cancel) blob = await vidRecord(null, s.url, start, dur, rm, VID.q[1], job, p => prog(`คลิปยังใหญ่ไป ย่ออีกรอบ ${Math.round(p * 100)}%`));
+      if (blob.size > VID.maxBytes) throw uErr('คลิปใหญ่เกินไป ลองเลือกช่วงที่สั้นลง');
+      if (blob.size < 2000) throw uErr('ย่อคลิปไม่สำเร็จ (ไฟล์ว่าง) ลองใหม่อีกครั้ง');
+      mime = blob.type || rm.split(';')[0];
+    }
+    if (job.cancel) return;
+    const id = await saveVideo(memberPid, blob, { poster, mime, dur: Math.round(dur * 10) / 10, w, h }, p => prog(`กำลังอัปโหลด ${Math.round(p * 100)}%`));
+    if (job.cancel || !ui.log || ui.log.memberPid !== memberPid) { dropVideo(id); return; }
+    ui.log.ph.push(id); (ui.log.newVids = ui.log.newVids || []).push(id);
+    URL.revokeObjectURL(s.url); closeSheet(); toast(`แนบคลิปแล้ว (${r1(blob.size / 1e6)} MB)`); render();
+  } catch (e) {
+    if (job.cancel) return; console.error(e);
+    prog('❌ ' + (e.userMsg || 'แนบคลิปไม่สำเร็จ: ' + (e.code || e.message || e)));
+    if (btn) { btn.disabled = false; btn.textContent = 'ลองใหม่'; } s.busy = false;
+  } finally {
+    if (vidJob === job) vidJob = null;
+    if (pre?.v?.isConnected) { pre.v.removeAttribute('src'); pre.v.remove(); } pre?.actx?.close().catch(() => {});
+  }
 }
 
 /* ============ AI อ่านรูป ============ */
@@ -1934,6 +2143,11 @@ async function collectBackup(withPhotos, prog) {
       const got = await Promise.all(arr.slice(k, k + 10).map(id => get(D('photos', id)).catch(() => null)));
       got.filter(Boolean).forEach(x => { out.photos.push(x); j++; });
     }
+    const parts = out.photos.flatMap(x => Array.isArray(x.parts) ? x.parts : []); // ชิ้นส่วนคลิปวิดีโอ
+    for (let k = 0; k < parts.length; k += 10) {
+      prog?.(`กำลังอ่านคลิป ${Math.min(k + 10, parts.length)}/${parts.length} ชิ้น`);
+      (await Promise.all(parts.slice(k, k + 10).map(id => get(D('photos', id)).catch(() => null)))).filter(Boolean).forEach(x => out.photos.push(x));
+    }
   }
   return out;
 }
@@ -1993,7 +2207,7 @@ function backupCardHtml() {
   return `<section class="card"><div class="between"><b>สำรองข้อมูล (Backup)</b>${age != null ? `<span class="xs ${age > 30 ? 'alert' : 'muted'}">ล่าสุด ${age === 0 ? 'วันนี้' : age + ' วันก่อน'}</span>` : '<span class="xs alert">ยังไม่เคยสำรอง</span>'}</div>
     <p class="xs muted" style="margin:0">ดาวน์โหลด${scope} เก็บไว้ในเครื่องหรือ Google Drive ข้อมูลในแอปไม่ถูกลบหรือเปลี่ยน</p>
     <div class="grid2"><button class="btn pri" data-act="backup" data-v="xlsx">Excel อ่านง่าย</button><button class="btn" data-act="backup" data-v="json">ไฟล์สำรองเต็ม (JSON)</button></div>
-    <label class="row small" style="min-height:40px"><input type="checkbox" id="bkPh" style="width:22px;height:22px;accent-color:#14202E"> รวมรูปหลักฐานในไฟล์ JSON (ไฟล์ใหญ่ขึ้น)</label>
+    <label class="row small" style="min-height:40px"><input type="checkbox" id="bkPh" style="width:22px;height:22px;accent-color:#14202E"> รวมรูปหลักฐานและคลิปในไฟล์ JSON (ไฟล์ใหญ่ขึ้น)</label>
     <p class="xs muted" id="bkMsg" style="margin:0" role="status"></p></section>`;
 }
 
@@ -2131,7 +2345,7 @@ async function renderLog() {
       <div id="movePick" style="display:flex;flex-direction:column;gap:8px">${movePickHtml()}</div></section>` : ''}
     <button class="btn" data-act="logPicking">${L.picking ? 'ปิดรายการท่า' : '+ เพิ่มท่า (เลือกได้หลายท่า)'}</button>
     <div class="grid2"><label class="f">ระยะเวลา (นาที)<input class="in" id="lgMin" inputmode="numeric" value="${esc(L.min)}"></label><label class="f">เผาผลาญ kcal<input class="in" id="lgKcal" inputmode="numeric" value="${esc(L.kcal)}" placeholder="${n0(L.est)}"></label></div>
-    <div><div class="small" style="font-weight:600;margin-bottom:8px">รูป / วิดีโอท่า <span class="muted" style="font-weight:400">(ไม่บังคับ · รูปเท่านั้นในรอบนี้)</span></div><div class="thumbs" id="logThumbs">${thumbsHtml(L.ph, true)}<label class="addthumb">${svg('cam', 22)}แนบรูป<input type="file" accept="image/*" multiple hidden data-act="pickLogPhoto"></label></div></div>
+    <div><div class="small" style="font-weight:600;margin-bottom:8px">รูป / คลิปวิดีโอท่า <span class="muted" style="font-weight:400">(ไม่บังคับ · คลิปละไม่เกิน ${VID.maxSec} วินาที)</span></div><div class="thumbs" id="logThumbs">${thumbsHtml(L.ph, true)}<label class="addthumb">${svg('cam', 22)}แนบรูป<input type="file" accept="image/*" multiple hidden data-act="pickLogPhoto"></label><label class="addthumb">${svg('video', 22)}แนบคลิป<input type="file" accept="video/*" hidden data-act="pickLogVideo"></label></div></div>
     <label class="f">โน้ตถึงลูกค้า<textarea class="in" id="lgNote">${esc(L.note)}</textarea></label>
     <button class="btn gold block" data-act="logSave">บันทึกผลการเทรน</button>
     <p class="xs muted center" style="margin:0">ลูกค้าเห็นในแอปทันที ส่วน LINE จะส่งหลังบันทึก ${S.config.workoutDelayMin || 60} นาที (เมื่อเปิดใช้ LINE แล้ว)</p>`);
@@ -2507,7 +2721,8 @@ async function resetPw(pid) {
 async function onClick(e) {
   const el = e.target.closest('[data-act]'); if (!el) return;
   const a = el.dataset.act;
-  if (a === 'sheetBg') { if (e.target === el) closeSheet(); return; }
+  if (a === 'sheetBg') { if (e.target === el && !sheet?.busy) closeSheet(); return; }
+  if (a === 'closeSheet' && sheet?.busy && sheet.kind === 'vid' && !confirm('กำลังย่อ/อัปโหลดคลิปอยู่ ปิดตอนนี้คลิปจะไม่ถูกแนบ ต้องการปิดไหม?')) return;
   if (el.tagName === 'INPUT' || el.tagName === 'SELECT') return;
   e.preventDefault();
   try { await (ACTS[a] ? ACTS[a](el) : null); } catch (err) { console.error(err); toast('ทำรายการไม่สำเร็จ: ' + (err.code || err.message)); }
@@ -2724,7 +2939,7 @@ const ACTS = {
   },
   backup: el => runBackup(el.dataset.v),
   rmBody: async el => { if (!confirm('ลบรายการนี้?')) return; await fb.deleteDoc(D('people', S.view, 'body', el.dataset.id)); render(); },
-  rmPhoto: el => { const i = +el.dataset.i; if (sheet?.ph && sheet.kind === 'food' && sheet.mode === 'label') { labRead(); sheet.ph.splice(i, 1); redrawFood(); } else if (sheet?.ph) { sheet.ph.splice(i, 1); $('#thumbs').outerHTML = photoPickerKeep(); fillThumbs($('#sheetBody')); } else if (ui.log) { logForm(); ui.log.ph.splice(i, 1); render(); } },
+  rmPhoto: el => { const i = +el.dataset.i; if (sheet?.ph && sheet.kind === 'food' && sheet.mode === 'label') { labRead(); sheet.ph.splice(i, 1); redrawFood(); } else if (sheet?.ph) { sheet.ph.splice(i, 1); $('#thumbs').outerHTML = photoPickerKeep(); fillThumbs($('#sheetBody')); } else if (ui.log) { logForm(); const [gone] = ui.log.ph.splice(i, 1); if (ui.log.newVids?.includes(gone)) { ui.log.newVids = ui.log.newVids.filter(x => x !== gone); dropVideo(gone); } render(); } },
   viewPhoto: el => openViewer((el.dataset.set || el.dataset.id).split(',').filter(Boolean), +el.dataset.i || 0),
   lbBg: () => {},
   lbClose: () => closeViewer(),
@@ -2734,7 +2949,9 @@ const ACTS = {
   cancelSession: async el => { if (!confirm('ยกเลิกนัดนี้?')) return; await fb.updateDoc(D('sessions', el.dataset.id), { status: 'cancelled', trainerPid: S.me.pid }); render(); },
   logSession: async el => { const s = await get(D('sessions', el.dataset.id)); await startLog(s); },
   logAdhoc: async () => { const mid = $('#lgMember').value; const m = await person(mid); await startLog({ memberPid: mid, memberName: m.name, date: $('#lgDate').value, time: $('#lgTime').value || nowHM(), type: 'Full body' }); },
-  logCancel: () => { if (confirm('ยกเลิกการบันทึกนี้?')) { ui.log = null; render(); } },
+  logCancel: () => { if (confirm('ยกเลิกการบันทึกนี้?')) { (ui.log?.newVids || []).forEach(dropVideo); ui.log = null; render(); } },
+  vidGo: () => vidGo(),
+  vidUseNow: () => { const v = $('#vidPrev'), inp = $('#vidStart'); if (!v || !inp || !sheet) return; const mx = Math.max(0, Math.floor((sheet.dur || 0) - VID.maxSec)); inp.value = Math.min(mx, Math.floor(v.currentTime || 0)); toast(`เริ่มที่วินาทีที่ ${inp.value}`, 1500); },
   logType: el => { logForm(); const L = ui.log, t = el.dataset.v; L.types = L.types.includes(t) ? L.types.filter(x => x !== t) : [...L.types, t]; render(); },
   nsType: el => { const t = el.dataset.v; sheet.types = sheet.types.includes(t) ? sheet.types.filter(x => x !== t) : [...sheet.types, t]; const b = $('#nsTypes'); if (b) b.innerHTML = SESSION_TYPES.map(x => typeChip(x, sheet.types.includes(x), 'nsType')).join(''); },
   logPicking: async () => { logForm(); ui.log.picking = !ui.log.picking; ui.log.q = ''; if (ui.log.picking) { ui.log.filt = 'day'; await loadMoveLib(); } render(); if (ui.log?.picking) $('#logCustom')?.focus(); },
@@ -2816,6 +3033,9 @@ async function onChange(e) {
     else if (sheet.kind === 'food') { $('#thumbs').outerHTML = photoPickerKeep(); }
     fillThumbs($('#sheetBody')); return;
   }
+  if (el.dataset?.act === 'pickLogVideo' && el.files?.length) {
+    logForm(); const f = el.files[0]; el.value = ''; await openVidSheet(f); return;
+  }
   if (el.dataset?.act === 'pickLogPhoto' && el.files?.length) {
     logForm(); toast('กำลังแนบรูป…', 8000);
     for (const f of [...el.files]) { try { const d = await compress(f); ui.log.ph.push(await savePhoto(ui.log.memberPid, d)); } catch (err) { console.error(err); toast('แนบรูปไม่สำเร็จ'); } }
@@ -2853,7 +3073,7 @@ function onKey(e) {
   if (e.key === 'Enter' && e.target.id === 'logCustom' && ui.log && !e.isComposing) { e.preventDefault(); const q = moveKey(e.target.value); if (!q) return; const hit = [...(S.moveLib?.names || []), ...MOVES].find(n => moveKey(n) === q); if (hit) { if (!ui.log.moves.some(m => moveKey(m.name) === q) && !(ui.log.sel || []).some(x => moveKey(x) === q)) ui.log.sel = [...(ui.log.sel || []), hit]; ui.log.q = ''; e.target.value = ''; refreshMovePick(); } else addCustomMove(e.target.value); }
   if (e.key === 'Enter' && ['cpOld', 'cpNew', 'cpNew2'].includes(e.target.id)) { e.preventDefault(); if (e.target.id === 'cpNew2') savePw(); else $(e.target.id === 'cpOld' ? '#cpNew' : '#cpNew2')?.focus(); } if (e.key === 'Escape' && sheet) closeSheet(); }
 
-export const __test = { S, ui, dayTotals, foodCalc, labApply, labPack, labState, ACTS, onClick, setSheet: x => { sheet = x; }, getSheet: () => sheet, foodSheetBody, digestText, addDays, weekStart, thDate, lineChart, render, ACTS, onInput, onChange, setFb: (f, d, a) => { fb = f; db = d; auth = a; } };
+export const __test = { vid: { VID, vidRecord, saveVideo, videoUrl, recMime, vidProbe, openVidSheet, vidGo, dropVideo, markVid, openViewer }, S, ui, dayTotals, foodCalc, labApply, labPack, labState, ACTS, onClick, setSheet: x => { sheet = x; }, getSheet: () => sheet, foodSheetBody, digestText, addDays, weekStart, thDate, lineChart, render, ACTS, onInput, onChange, setFb: (f, d, a) => { fb = f; db = d; auth = a; } };
 if (typeof window !== 'undefined' && !window.__NO_BOOT__) {
   document.addEventListener('click', onClick); document.addEventListener('change', onChange); document.addEventListener('input', onInput); document.addEventListener('keydown', onKey);
   boot();

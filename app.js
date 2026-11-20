@@ -1,6 +1,6 @@
 // The Olympic Club by PT-Palm — แอปติดตามอาหารและการเทรน (ลูกค้า / เทรนเนอร์ / เจ้าของระบบ)
 import { firebaseConfig, OWNER_EMAIL, LOGIN_DOMAIN, RECAPTCHA_SITE_KEY } from './firebase-config.js?v=20260929b';
-import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX_SUM, MIX_ATE, CLEAN_MENUS, CLEAN_GROUPS, BAG, NAMPRIK, NP_SETS, quickCalc, noodleCalc, mpCalc, ktCalc, mixCalc, bagCalc, npCalc, frac, normTh } from './foods.js?v=20261115a';
+import { FOODS, FOOD, MEALS, TH_M, QUICK, NOODLE, MOOPING, KTOD, MIX_GROUPS, MIX_SUM, MIX_ATE, CLEAN_MENUS, CLEAN_GROUPS, BAG, NAMPRIK, NP_SETS, quickCalc, noodleCalc, mpCalc, ktCalc, mixCalc, bagCalc, npCalc, frac, normTh } from './foods.js?v=20261120a';
 import { CAFE, cafeCalc, bakeryCalc, cafeTemps } from './cafe.js?v=20261115a';
 
 const FBV = 'https://www.gstatic.com/firebasejs/11.10.0/';
@@ -1150,7 +1150,7 @@ function mixSumHtml(r) {
 function cmCalc(m) { return mixCalc(m.items, 100, FOOD); }
 function cleanMenusHtml(st) {
   const g = sheet.cmG || 'all', list = CLEAN_MENUS.filter(m => g === 'all' || m.g === g), open = sheet.cmOpen ?? (st.items.length ? 0 : 1);
-  return `<details class="card" style="padding:10px 12px"${open ? ' open' : ''} data-cmopen><summary class="small"><b>🥗 เมนูคลีนทำเอง (ไก่ ปลา กุ้ง) · ${CLEAN_MENUS.length} เมนู</b></summary>
+  return `<details class="card" style="padding:10px 12px"${open ? ' open' : ''} data-cmopen><summary class="small"><b>🥗 เมนูคลีนทำเอง (ไก่ ปลา กุ้ง · ของว่าง) · ${CLEAN_MENUS.length} เมนู</b></summary>
     <p class="xs muted" style="margin:6px 0">แตะเมนู แอปใส่วัตถุดิบทั้งหมดลงจานให้ แล้วกด × เอาอันที่ไม่กินออก หรือแก้กรัมตามที่ชั่งจริง · ถูกใจแล้วกด “จำเป็นสูตรของฉัน” ครั้งหน้าแตะเดียว</p>
     <div class="chips">${CLEAN_GROUPS.map(x => `<button class="chip" data-act="cmGrp" data-v="${x.k}" aria-pressed="${g === x.k}">${esc(x.n)}</button>`).join('')}</div>
     <div class="chips">${list.map(m => { const r = cmCalc(m); return `<button class="chip" data-act="cmLoad" data-k="${m.k}" aria-pressed="${st.cm === m.k}">${esc(m.n)} <span class="xs muted">${n0(r.k)} kcal · P ${Math.round(r.p)}</span></button>`; }).join('')}</div></details>`;
